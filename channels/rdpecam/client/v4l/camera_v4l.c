@@ -92,7 +92,7 @@ static UINT32 ecamToV4L2PixFormat(CAM_MEDIA_FORMAT ecamFormat)
 		case CAM_MEDIA_FORMAT_RGB32:
 			return V4L2_PIX_FMT_RGB32;
 		default:
-			WLog_ERR(TAG, "Unsupported CAM_MEDIA_FORMAT %d", ecamFormat);
+			WLog_ERR(TAG, "Unsupported CAM_MEDIA_FORMAT %u", ecamFormat);
 			return 0;
 	}
 }
@@ -152,6 +152,24 @@ static int cam_v4l_open_device(const char* deviceId, int flags)
 	}
 
 	return fd;
+}
+
+static BOOL cam_v4l_activate(ICamHal* ihal, const char* deviceId, UINT32* errorCode)
+{
+	WINPR_UNUSED(ihal);
+	WINPR_UNUSED(deviceId);
+
+	*errorCode = 0;
+	return TRUE;
+}
+
+static BOOL cam_v4l_deactivate(ICamHal* ihal, const char* deviceId, UINT32* errorCode)
+{
+	WINPR_UNUSED(ihal);
+	WINPR_UNUSED(deviceId);
+
+	*errorCode = 0;
+	return TRUE;
 }
 
 /**
@@ -261,7 +279,7 @@ static INT16 cam_v4l_get_media_type_descriptions(ICamHal* ihal, const char* devi
 
 			if (nTypes == maxMediaTypes)
 			{
-				WLog_ERR(TAG, "Media types reached buffer maximum %" PRIu32 "", maxMediaTypes);
+				WLog_ERR(TAG, "Media types reached buffer maximum %" PRIuz "", maxMediaTypes);
 				goto error;
 			}
 		}
@@ -357,7 +375,7 @@ static size_t cam_v4l_stream_alloc_buffers(CamV4lStream* stream)
 	if (ioctl(stream->fd, VIDIOC_REQBUFS, &rbuffer) < 0 || rbuffer.count == 0)
 	{
 		char buffer[64] = { 0 };
-		WLog_ERR(TAG, "Failure in VIDIOC_REQBUFS, errno  %s [%d], count %d",
+		WLog_ERR(TAG, "Failure in VIDIOC_REQBUFS, errno  %s [%d], count %u",
 		         winpr_strerror(errno, buffer, sizeof(buffer)), errno, rbuffer.count);
 		return 0;
 	}
@@ -402,7 +420,7 @@ static size_t cam_v4l_stream_alloc_buffers(CamV4lStream* stream)
 
 		stream->buffers[i].length = vbuffer.length;
 
-		WLog_DBG(TAG, "Buffer %d mapped, size: %d", i, vbuffer.length);
+		WLog_DBG(TAG, "Buffer %u mapped, size: %u", i, vbuffer.length);
 
 		if (ioctl(stream->fd, VIDIOC_QBUF, &vbuffer) < 0)
 		{
@@ -422,9 +440,10 @@ static size_t cam_v4l_stream_alloc_buffers(CamV4lStream* stream)
  *
  * @return 0 on success, otherwise a Win32 error code
  */
-static UINT cam_v4l_stream_capture_thread(void* param)
+static DWORD WINAPI cam_v4l_stream_capture_thread(LPVOID param)
 {
 	CamV4lStream* stream = (CamV4lStream*)param;
+	WINPR_ASSERT(stream);
 
 	int fd = stream->fd;
 
@@ -781,6 +800,8 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE v4l_freerdp_rdpecam_client_subsystem_entry(
 
 	hal->iHal.Enumerate = cam_v4l_enumerate;
 	hal->iHal.GetMediaTypeDescriptions = cam_v4l_get_media_type_descriptions;
+	hal->iHal.Activate = cam_v4l_activate;
+	hal->iHal.Deactivate = cam_v4l_deactivate;
 	hal->iHal.StartStream = cam_v4l_stream_start;
 	hal->iHal.StopStream = cam_v4l_stream_stop_by_device_id;
 	hal->iHal.Free = cam_v4l_free;

@@ -33,19 +33,17 @@ static const BYTE BB[] = { 'B', 'B' };
 static const BYTE CCC[] = { 'C', 'C', 'C' };
 
 /* 0x36 repeated 40 times */
-static const BYTE pad1[40] = { "\x36\x36\x36\x36\x36\x36\x36\x36"
-	                           "\x36\x36\x36\x36\x36\x36\x36\x36"
-	                           "\x36\x36\x36\x36\x36\x36\x36\x36"
-	                           "\x36\x36\x36\x36\x36\x36\x36\x36"
-	                           "\x36\x36\x36\x36\x36\x36\x36\x36" };
+static const BYTE pad1[40] = { 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36,
+	                           0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36,
+	                           0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36,
+	                           0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36, 0x36 };
 
 /* 0x5C repeated 48 times */
-static const BYTE pad2[48] = { "\x5C\x5C\x5C\x5C\x5C\x5C\x5C\x5C"
-	                           "\x5C\x5C\x5C\x5C\x5C\x5C\x5C\x5C"
-	                           "\x5C\x5C\x5C\x5C\x5C\x5C\x5C\x5C"
-	                           "\x5C\x5C\x5C\x5C\x5C\x5C\x5C\x5C"
-	                           "\x5C\x5C\x5C\x5C\x5C\x5C\x5C\x5C"
-	                           "\x5C\x5C\x5C\x5C\x5C\x5C\x5C\x5C" };
+static const BYTE pad2[48] = { 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C,
+	                           0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C,
+	                           0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C,
+	                           0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C,
+	                           0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C, 0x5C };
 
 static const BYTE fips_reverse_table[256] = {
 	0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0, 0x10, 0x90, 0x50, 0xd0, 0x30, 0xb0, 0x70, 0xf0,
@@ -833,7 +831,7 @@ BOOL security_encrypt(BYTE* data, size_t length, rdpRdp* rdp)
 	WINPR_ASSERT(rdp);
 	if (!rdp->rc4_encrypt_key)
 	{
-		WLog_ERR(TAG, "rdp->rc4_encrypt_key=%p", rdp->rc4_encrypt_key);
+		WLog_ERR(TAG, "rdp->rc4_encrypt_key=NULL");
 		goto fail;
 	}
 
@@ -865,7 +863,7 @@ BOOL security_decrypt(BYTE* data, size_t length, rdpRdp* rdp)
 
 	if (!rdp->rc4_decrypt_key)
 	{
-		WLog_ERR(TAG, "rdp->rc4_decrypt_key=%p", rdp->rc4_decrypt_key);
+		WLog_ERR(TAG, "rdp->rc4_decrypt_key=NULL");
 		goto fail;
 	}
 
@@ -947,7 +945,8 @@ BOOL security_fips_decrypt(BYTE* data, size_t length, rdpRdp* rdp)
 
 	if (!rdp || !rdp->fips_decrypt)
 	{
-		WLog_ERR(TAG, "rdp=%p, rdp->fips_decrypt=%p", rdp, rdp ? rdp->fips_decrypt : NULL);
+		WLog_ERR(TAG, "rdp=%p, rdp->fips_decrypt=%p", WINPR_CXX_COMPAT_CAST(const void*, rdp),
+		         WINPR_CXX_COMPAT_CAST(const void*, rdp ? rdp->fips_decrypt : NULL));
 		return FALSE;
 	}
 

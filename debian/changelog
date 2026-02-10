@@ -1,3 +1,171 @@
+freerdp3 (3.22.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream major bugfix release, with overhaul of SDL3 client and
+    multiple security fixes for the following client-side vulnerabilities:
+    CVE-2026-23948
+    CVE-2026-24682
+    CVE-2026-24683
+    CVE-2026-24676
+    CVE-2026-24677
+    CVE-2026-24678
+    CVE-2026-24684
+    CVE-2026-24679
+    CVE-2026-24681
+    CVE-2026-24675
+    CVE-2026-24491
+    CVE-2026-24680
+  * update libfreerdp symbols file (add new symbols)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Thu, 29 Jan 2026 11:22:26 +0300
+
+freerdp3 (3.21.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release, with multiple security fixes for the following
+    client-side vulnerabilities (medium):
+    CVE-2026-23530: Heap buffer overflow in planar_decompress_plane_rle
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-r4hv-852m-fq7p
+    CVE-2026-23531: Heap buffer overflow in clear_decompress
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-xj5h-9cr5-23c5
+    CVE-2026-23532: Heap buffer overflow in gdi_SurfaceToSurface
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-fq8c-87hj-7gvr
+    CVE-2026-23533: Heap buffer overflow in clear_decompress_residual_data
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-32q9-m5qr-9j2v
+    CVE-2026-23534: Heap buffer overflow in clear_decompress_bands_data
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3frr-mp8w-4599
+    CVE-2026-23732: Heap buffer overflow in Glyph_Alloc
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-7qxp-j2fj-c3pp
+    CVE-2026-23883: Heap use after free in update_pointer_new
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-qcrr-85qx-4p6x
+    CVE-2026-23884: Heap use after free in gdi_set_bounds
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-cfgj-vc84-f3pp
+  * d/libfreerdp3-3.symbols: add 3 new symbols
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Mon, 19 Jan 2026 22:46:38 +0300
+
+freerdp3 (3.20.2+dfsg-1) unstable; urgency=medium
+
+  * new upstream release, with multiple security fixes for the following
+    client-side vulnerabilities (medium):
+    CVE-2026-22851: RDPGFX ResetGraphics race leads to use after free
+      in SDL client (sdl->primary)
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8g87-6pvc-wh99
+    CVE-2026-22852: Heap buffer overflow in audin_process_formats
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-9chc-g79v-4qq4
+    CVE-2026-22853: Heap buffer overflow in ndr_read_uint8Array
+     https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-47v9-p4gp-w5ch
+    CVE-2026-22854: Heap buffer overflow in drive_process_irp_read
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-47vj-g3c3-3rmf
+    CVE-2026-22855: Heap buffer overflow in smartcard_unpack_set_attrib_call
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-rwp3-g84r-6mx9
+    CVE-2026-22856: Heap use after free in create_irp_thread
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-w842-c386-fxhv
+    CVE-2026-22857: Heap use after free in irp_thread_func
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4gxq-jhq6-4cr8
+    CVE-2026-22858 Global buffer overflow in crypto_base64_decode
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-qmqf-m84q-x896
+      (this also affects freerdp proxy, not just client)
+    CVE-2026-22859: Heap buffer overflow in urb_select_configuration
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-56f5-76qv-2r36
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 14 Jan 2026 16:36:18 +0300
+
+freerdp3 (3.20.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Thu, 18 Dec 2025 07:55:19 +0300
+
+freerdp3 (3.19.1+dfsg-1) unstable; urgency=medium
+
+  * new upstream release
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Fri, 12 Dec 2025 15:54:04 +0300
+
+freerdp3 (3.19.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release
+  * d/copyright: remove .github from Files-Excluded
+    (not shipped in tarball anymore)
+  * remove patches
+  * d/libfreerdp3-3.symbols: add new symbol
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Fri, 05 Dec 2025 16:35:16 +0300
+freerdp3 (3.18.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release
+  * removed all patches
+  * d/libfreerdp3-3.symbols,d/libwinpr3-3.symbols add new symbols
+  * +client-common-fix-retry-counter.patch (upstream patch)
+  * d/copyright: remove removed file
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sat, 15 Nov 2025 02:57:23 +0300
+
+freerdp3 (3.17.2+dfsg-3) unstable; urgency=medium
+
+  * cmake-pkg-config-properly-set-requires-fields.patch
+  * codec-planar-fix-datatypes-in-plane-encode.patch
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Tue, 23 Sep 2025 11:50:02 +0300
+
+freerdp3 (3.17.2+dfsg-2) unstable; urgency=medium
+
+  * winpr-path-fix-endianness-issues.patch: fix tests failure on various
+    architectures
+  * core-arm-extract-redirected-username.patch
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sat, 20 Sep 2025 00:54:08 +0300
+
+freerdp3 (3.17.2+dfsg-1) unstable; urgency=medium
+
+  * new upstream release
+  * d/rules: build rdp2tcp channels (Closes: #1106607)
+  * remove drop-TestFileFindFirstFile.diff
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Fri, 19 Sep 2025 22:14:07 +0300
+
+freerdp3 (3.17.1+dfsg-2) unstable; urgency=medium
+
+  * d/control: add explicit versioned deps on libwinpr3 for freerdp-dev and
+    freerdp-wayland (to ensure the right library is used, and for doc links)
+  * d/lib*.install: s|/usr/lib/*/|/usr/lib/${DEB_HOST_MULTIARCH}/|
+  * d/*-dev.install: reduce/fixup
+  * d/rules: stop running dh* in verbose mode
+  * drop TestFileFindFirstFile test for now (falis on s390x ppc & sparc64)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sat, 06 Sep 2025 11:11:19 +0300
+
+freerdp3 (3.17.1+dfsg-1) unstable; urgency=medium
+
+  * new upstream release
+  * d/watch: use pub.freerdp.com/releases/ as the base URL for upstream
+    tarballs, not the github autogenerated tarballs
+  * add upstream gpg signing key
+  * d/freerdp3-proxy-modules.install: accomodate for modules rename,
+    and use ${DEB_HOST_MULTIARCH}
+  * d/rules: link /usr/share/doc/* for all packages to libwinpr3-3,
+    since all packages depends on exact same version of it
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Mon, 01 Sep 2025 12:04:40 +0300
+
+freerdp3 (3.17.0+dfsg-1) unstable; urgency=medium
+
+  [ Michael Tokarev ]
+  * new upstream release
+  * d/patches/*: remove
+  * d/libfreerdp-client3-3.symbols,d/libwinpr3-3.symbols: add new symbols
+
+  [ Bernhard Miklautz ]
+  * d/copyright: regenerate and update copyright
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Fri, 22 Aug 2025 12:02:00 +0300
+
+freerdp3 (3.16.0+dfsg-2) unstable; urgency=medium
+
+  * common-settings-fix-int-casts.patch (fix test failure on BE hosts)
+  * 4 more fixes from upstream
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Mon, 14 Jul 2025 10:05:25 +0300
+
 freerdp3 (3.16.0+dfsg-1) unstable; urgency=medium
 
   * new upstream bugfix release with (again) much improved SDL3 and X11 client

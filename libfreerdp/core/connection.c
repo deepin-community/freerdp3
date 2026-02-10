@@ -724,7 +724,6 @@ static const BYTE fips_ivec[8] = { 0x12, 0x34, 0x56, 0x78, 0x90, 0xAB, 0xCD, 0xE
 static BOOL rdp_client_establish_keys(rdpRdp* rdp)
 {
 	wStream* s = NULL;
-	int status = 0;
 	BOOL ret = FALSE;
 
 	WINPR_ASSERT(rdp);
@@ -779,20 +778,26 @@ static BOOL rdp_client_establish_keys(rdpRdp* rdp)
 		goto end;
 	}
 
-	UINT16 sec_flags = SEC_EXCHANGE_PKT | SEC_LICENSE_ENCRYPT_SC;
-	if (!rdp_write_header(rdp, s, length, MCS_GLOBAL_CHANNEL_ID, sec_flags))
-		goto end;
-	if (!rdp_write_security_header(rdp, s, sec_flags))
-		goto end;
+	{
+		const UINT16 sec_flags = SEC_EXCHANGE_PKT | SEC_LICENSE_ENCRYPT_SC;
+		if (!rdp_write_header(rdp, s, length, MCS_GLOBAL_CHANNEL_ID, sec_flags))
+			goto end;
+		if (!rdp_write_security_header(rdp, s, sec_flags))
+			goto end;
+	}
 
 	Stream_Write_UINT32(s, info->ModulusLength + 8);
 	Stream_Write(s, crypt_client_random, info->ModulusLength);
 	Stream_Zero(s, 8);
 	Stream_SealLength(s);
-	status = transport_write(rdp->mcs->transport, s);
 
-	if (status < 0)
-		goto end;
+	{
+		rdpTransport* transport = freerdp_get_transport(rdp->context);
+		const int status = transport_write(transport, s);
+
+		if (status < 0)
+			goto end;
+	}
 
 	rdp->do_crypt_license = TRUE;
 
@@ -1061,7 +1066,7 @@ BOOL rdp_client_connect_mcs_channel_join_confirm(rdpRdp* rdp, wStream* s)
 	{
 		if (channelId != MCS_GLOBAL_CHANNEL_ID)
 		{
-			WLog_ERR(TAG, "expected uglobalser channel id %" PRIu16 ", but received %" PRIu16,
+			WLog_ERR(TAG, "expected uglobalser channel id %d, but received %" PRIu16,
 			         MCS_GLOBAL_CHANNEL_ID, channelId);
 			return FALSE;
 		}
@@ -1114,7 +1119,7 @@ BOOL rdp_client_connect_mcs_channel_join_confirm(rdpRdp* rdp, wStream* s)
 
 			if (cur->ChannelId != channelId)
 			{
-				WLog_ERR(TAG, "expected channel id %" PRIu16 ", but received %" PRIu16,
+				WLog_ERR(TAG, "expected channel id %d, but received %" PRIu16,
 				         MCS_GLOBAL_CHANNEL_ID, channelId);
 				return FALSE;
 			}
@@ -1184,7 +1189,7 @@ state_run_t rdp_handle_message_channel(rdpRdp* rdp, wStream* s, UINT16 channelId
 	return rc;
 }
 
-BOOL rdp_client_connect_auto_detect(rdpRdp* rdp, wStream* s)
+BOOL rdp_client_connect_auto_detect(rdpRdp* rdp, wStream* s, DWORD logLevel)
 {
 	WINPR_ASSERT(rdp);
 	WINPR_ASSERT(rdp->mcs);
@@ -1206,8 +1211,9 @@ BOOL rdp_client_connect_auto_detect(rdpRdp* rdp, wStream* s)
 		}
 		else
 		{
-			WLog_WARN(TAG, "expected messageChannelId=%" PRIu16 ", got %" PRIu16, messageChannelId,
-			          channelId);
+			wLog* log = WLog_Get(TAG);
+			WLog_Print(log, logLevel, "expected messageChannelId=%" PRIu16 ", got %" PRIu16,
+			           messageChannelId, channelId);
 		}
 	}
 
@@ -1246,7 +1252,7 @@ state_run_t rdp_client_connect_license(rdpRdp* rdp, wStream* s)
 	}
 
 	if (channelId != MCS_GLOBAL_CHANNEL_ID)
-		WLog_WARN(TAG, "unexpected message for channel %u, expected %u", channelId,
+		WLog_WARN(TAG, "unexpected message for channel %u, expected %d", channelId,
 		          MCS_GLOBAL_CHANNEL_ID);
 
 	if ((securityFlags & SEC_LICENSE_PKT) == 0)

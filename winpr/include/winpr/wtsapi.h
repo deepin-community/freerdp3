@@ -485,6 +485,7 @@ typedef struct
 	LARGE_INTEGER DisconnectTime;
 	LARGE_INTEGER LastInputTime;
 	LARGE_INTEGER LogonTime;
+	// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 	LARGE_INTEGER _CurrentTime; /* Conflicts with X11 headers */
 } WTSINFOW, *PWTSINFOW;
 
@@ -505,6 +506,7 @@ typedef struct
 	LARGE_INTEGER DisconnectTime;
 	LARGE_INTEGER LastInputTime;
 	LARGE_INTEGER LogonTime;
+	// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 	LARGE_INTEGER _CurrentTime; /* Conflicts with X11 headers */
 } WTSINFOA, *PWTSINFOA;
 
@@ -524,6 +526,7 @@ typedef struct
 	LARGE_INTEGER ConnectTime;
 	LARGE_INTEGER DisconnectTime;
 	LARGE_INTEGER LastInputTime;
+	// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 	LARGE_INTEGER _CurrentTime; /* Conflicts with X11 headers */
 	DWORD IncomingBytes;
 	DWORD OutgoingBytes;
@@ -545,6 +548,7 @@ typedef struct
 	LARGE_INTEGER ConnectTime;
 	LARGE_INTEGER DisconnectTime;
 	LARGE_INTEGER LastInputTime;
+	// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 	LARGE_INTEGER _CurrentTime; /* Conflicts with X11 headers */
 	DWORD IncomingBytes;
 	DWORD OutgoingBytes;
@@ -1008,15 +1012,19 @@ extern "C"
 	WINPR_API VOID WINAPI WTSCloseServer(HANDLE hServer);
 
 	WINPR_ATTR_MALLOC(WTSCloseServer, 1)
+	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSOpenServerW(LPWSTR pServerName);
 
 	WINPR_ATTR_MALLOC(WTSCloseServer, 1)
+	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSOpenServerA(LPSTR pServerName);
 
 	WINPR_ATTR_MALLOC(WTSCloseServer, 1)
+	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSOpenServerExW(LPWSTR pServerName);
 
 	WINPR_ATTR_MALLOC(WTSCloseServer, 1)
+	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSOpenServerExA(LPSTR pServerName);
 
 	WINPR_API BOOL WINAPI WTSEnumerateSessionsW(HANDLE hServer, DWORD Reserved, DWORD Version,
@@ -1077,10 +1085,12 @@ extern "C"
 	WINPR_API BOOL WINAPI WTSVirtualChannelClose(HANDLE hChannelHandle);
 
 	WINPR_ATTR_MALLOC(WTSVirtualChannelClose, 1)
+	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSVirtualChannelOpen(HANDLE hServer, DWORD SessionId,
 	                                              LPSTR pVirtualName);
 
 	WINPR_ATTR_MALLOC(WTSVirtualChannelClose, 1)
+	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSVirtualChannelOpenEx(DWORD SessionId, LPSTR pVirtualName,
 	                                                DWORD flags);
 

@@ -1,1 +1,1 @@
-usr/lib/*/freerdp3/proxy/*.so
+usr/lib/${DEB_HOST_MULTIARCH}/freerdp3/proxy/libproxy-*-plugin.so*

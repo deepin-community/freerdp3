@@ -391,6 +391,7 @@ extern "C"
 	 * RegisterHandleCreator().
 	 */
 	WINPR_ATTR_MALLOC(CloseHandle, 1)
+	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE CommCreateFileA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
 	                                 LPSECURITY_ATTRIBUTES lpSecurityAttributes,
 	                                 DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
@@ -459,16 +460,19 @@ extern "C"
 	{
 		ULONG number;
 		const char* name;
+		// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 	} _SERIAL_IOCTL_NAME;
 
 	/**
 	 * FIXME: got a proper function name and place
 	 */
+	// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 	WINPR_API const char* _comm_serial_ioctl_name(ULONG number);
 
 	/**
 	 * FIXME: got a proper function name and place
 	 */
+	// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 	WINPR_API void _comm_setServerSerialDriver(HANDLE hComm, SERIAL_DRIVER_ID);
 
 	/**
@@ -476,6 +480,7 @@ extern "C"
 	 *
 	 * permissive mode is disabled by default.
 	 */
+	// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 	WINPR_API BOOL _comm_set_permissive(HANDLE hDevice, BOOL permissive);
 
 	/**

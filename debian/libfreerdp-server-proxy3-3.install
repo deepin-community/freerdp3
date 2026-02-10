@@ -1,1 +1,1 @@
-usr/lib/*/libfreerdp-server-proxy3.so.*
+usr/lib/${DEB_HOST_MULTIARCH}/libfreerdp-server-proxy3.so.*

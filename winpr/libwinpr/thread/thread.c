@@ -29,6 +29,12 @@
 
 #include <winpr/thread.h>
 
+#if defined(__FreeBSD__)
+#include <pthread_np.h>
+#elif defined(__linux__)
+#include <sys/syscall.h>
+#endif
+
 #ifndef MIN
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #endif
@@ -523,7 +529,8 @@ static void* thread_launcher(void* arg)
 
 	if (!TlsSetValue(currentThreadTlsIndex, thread))
 	{
-		WLog_ERR(TAG, "thread %d, unable to set current thread value", pthread_self());
+		WLog_ERR(TAG, "thread %" PRIu64 ", unable to set current thread value",
+		         WINPR_CXX_COMPAT_CAST(uint64_t, pthread_self()));
 		goto exit;
 	}
 
@@ -911,11 +918,17 @@ HANDLE _GetCurrentThread(VOID)
 
 DWORD GetCurrentThreadId(VOID)
 {
+#if defined(__FreeBSD__)
+	return WINPR_CXX_COMPAT_CAST(DWORD, pthread_getthreadid_np());
+#elif defined(__linux__)
+	return WINPR_CXX_COMPAT_CAST(DWORD, syscall(SYS_gettid));
+#else
 	pthread_t tid = pthread_self();
 	/* Since pthread_t can be 64-bits on some systems, take just the    */
 	/* lower 32-bits of it for the thread ID returned by this function. */
 	uintptr_t ptid = WINPR_REINTERPRET_CAST(tid, pthread_t, uintptr_t);
-	return ptid & UINT32_MAX;
+	return (ptid & UINT32_MAX) ^ (ptid >> 32);
+#endif
 }
 
 typedef struct

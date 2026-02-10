@@ -32,7 +32,7 @@ FREERDP_LOCAL BOOL gdi_bitmap_update(rdpContext* context, const BITMAP_UPDATE* b
 FREERDP_LOCAL gdiBitmap* gdi_bitmap_new_ex(rdpGdi* gdi, int width, int height, int bpp, BYTE* data);
 FREERDP_LOCAL void gdi_bitmap_free_ex(gdiBitmap* gdi_bmp);
 
-static INLINE BYTE* gdi_get_bitmap_pointer(HGDI_DC hdcBmp, INT32 x, INT32 y)
+static inline BYTE* gdi_get_bitmap_pointer(HGDI_DC hdcBmp, INT32 x, INT32 y)
 {
 	HGDI_BITMAP hBmp = (HGDI_BITMAP)hdcBmp->selectedObject;
 
@@ -45,8 +45,8 @@ static INLINE BYTE* gdi_get_bitmap_pointer(HGDI_DC hdcBmp, INT32 x, INT32 y)
 	else
 	{
 		WLog_ERR(FREERDP_TAG("gdi"),
-		         "gdi_get_bitmap_pointer: requesting invalid pointer: (%" PRIu32 ",%" PRIu32
-		         ") in %" PRIu32 "x%" PRIu32 "",
+		         "gdi_get_bitmap_pointer: requesting invalid pointer: (%" PRId32 ",%" PRId32
+		         ") in %" PRId32 "x%" PRId32 "",
 		         x, y, hBmp->width, hBmp->height);
 		return 0;
 	}
@@ -59,7 +59,7 @@ static INLINE BYTE* gdi_get_bitmap_pointer(HGDI_DC hdcBmp, INT32 x, INT32 y)
  * @param y dest y-coordinate
  * @return color pointer
  */
-static INLINE BYTE* gdi_get_brush_pointer(HGDI_DC hdcBrush, UINT32 x, UINT32 y)
+static inline BYTE* gdi_get_brush_pointer(HGDI_DC hdcBrush, UINT32 x, UINT32 y)
 {
 	BYTE* p = NULL;
 	UINT32 brushStyle = gdi_GetBrushStyle(hdcBrush);

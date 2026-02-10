@@ -122,7 +122,7 @@ extern "C"
 
 	void ndr_context_free(NdrContext* context);
 
-	static INLINE void ndr_context_destroy(NdrContext** pcontext)
+	static inline void ndr_context_destroy(NdrContext** pcontext)
 	{
 		WINPR_ASSERT(pcontext);
 		ndr_context_free(*pcontext);
@@ -130,14 +130,17 @@ extern "C"
 	}
 
 	WINPR_ATTR_MALLOC(ndr_context_free, 1)
+	WINPR_ATTR_NODISCARD
 	NdrContext* ndr_context_new(BOOL bigEndianDrep, BYTE version);
 
 	void ndr_context_reset(NdrContext* context);
 
 	WINPR_ATTR_MALLOC(ndr_context_free, 1)
+	WINPR_ATTR_NODISCARD
 	NdrContext* ndr_context_copy(const NdrContext* src);
 
 	WINPR_ATTR_MALLOC(ndr_context_free, 1)
+	WINPR_ATTR_NODISCARD
 	NdrContext* ndr_read_header(wStream* s);
 
 	BOOL ndr_write_header(NdrContext* context, wStream* s);

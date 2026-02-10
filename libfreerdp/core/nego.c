@@ -1321,6 +1321,9 @@ BOOL nego_process_negotiation_request(rdpNego* nego, wStream* s)
 
 static const char* nego_rdp_neg_rsp_flags_str(UINT32 flags)
 {
+	const uint32_t mask =
+	    (EXTENDED_CLIENT_DATA_SUPPORTED | DYNVC_GFX_PROTOCOL_SUPPORTED | RDP_NEGRSP_RESERVED |
+	     RESTRICTED_ADMIN_MODE_SUPPORTED | REDIRECTED_AUTHENTICATION_MODE_SUPPORTED);
 	static char buffer[1024] = { 0 };
 
 	(void)_snprintf(buffer, ARRAYSIZE(buffer), "[0x%02" PRIx32 "] ", flags);
@@ -1334,10 +1337,12 @@ static const char* nego_rdp_neg_rsp_flags_str(UINT32 flags)
 		winpr_str_append("RESTRICTED_ADMIN_MODE_SUPPORTED", buffer, sizeof(buffer), "|");
 	if (flags & REDIRECTED_AUTHENTICATION_MODE_SUPPORTED)
 		winpr_str_append("REDIRECTED_AUTHENTICATION_MODE_SUPPORTED", buffer, sizeof(buffer), "|");
-	if ((flags & (uint32_t)~(EXTENDED_CLIENT_DATA_SUPPORTED | DYNVC_GFX_PROTOCOL_SUPPORTED |
-	                         RDP_NEGRSP_RESERVED | RESTRICTED_ADMIN_MODE_SUPPORTED |
-	                         REDIRECTED_AUTHENTICATION_MODE_SUPPORTED)))
-		winpr_str_append("UNKNOWN", buffer, sizeof(buffer), "|");
+	if (flags & ~mask)
+	{
+		char buffer2[32] = { 0 };
+		(void)_snprintf(buffer2, sizeof(buffer2), "UNKNOWN[0x%04" PRIx32 "]", flags & ~mask);
+		winpr_str_append(buffer2, buffer, sizeof(buffer), "|");
+	}
 
 	return buffer;
 }
@@ -1374,6 +1379,43 @@ BOOL nego_process_negotiation_response(rdpNego* nego, wStream* s)
 	return nego_set_state(nego, NEGO_STATE_FINAL);
 }
 
+static const char* nego_rdp_neg_fail_str(uint32_t what)
+{
+	switch (what)
+	{
+		case SSL_REQUIRED_BY_SERVER:
+			return "SSL_REQUIRED_BY_SERVER";
+		case SSL_NOT_ALLOWED_BY_SERVER:
+			return "SSL_NOT_ALLOWED_BY_SERVER";
+		case SSL_CERT_NOT_ON_SERVER:
+			return "SSL_CERT_NOT_ON_SERVER";
+		case INCONSISTENT_FLAGS:
+			return "INCONSISTENT_FLAGS";
+		case HYBRID_REQUIRED_BY_SERVER:
+			return "HYBRID_REQUIRED_BY_SERVER";
+		case SSL_WITH_USER_AUTH_REQUIRED_BY_SERVER:
+			return "SSL_WITH_USER_AUTH_REQUIRED_BY_SERVER";
+		default:
+			return "UNKNOWN";
+	}
+}
+
+static void nego_disable_all_except(rdpNego* nego, uint32_t what)
+{
+	WINPR_ASSERT(nego);
+
+	char buffer[32] = { 0 };
+	WLog_Print(nego->log, WLOG_DEBUG, "Disabling all modes except %s",
+	           nego_protocol_to_str(what, buffer, sizeof(buffer)));
+
+	for (size_t x = 0; x < ARRAYSIZE(nego->EnabledProtocols); x++)
+	{
+		if (x == what)
+			continue;
+		nego->EnabledProtocols[x] = FALSE;
+	}
+}
+
 /**
  * Process Negotiation Failure from Connection Confirm message.
  * @param nego A pointer to the NEGO struct
@@ -1386,7 +1428,6 @@ BOOL nego_process_negotiation_failure(rdpNego* nego, wStream* s)
 {
 	BYTE flags = 0;
 	UINT16 length = 0;
-	UINT32 failureCode = 0;
 
 	WINPR_ASSERT(nego);
 	WINPR_ASSERT(s);
@@ -1407,38 +1448,39 @@ BOOL nego_process_negotiation_failure(rdpNego* nego, wStream* s)
 		WLog_Print(nego->log, WLOG_ERROR, "RDP_NEG_FAILURE::length != 8");
 		return FALSE;
 	}
-	Stream_Read_UINT32(s, failureCode);
-
+	const uint32_t failureCode = Stream_Get_UINT32(s);
+	const char* failureStr = nego_rdp_neg_fail_str(failureCode);
+	DWORD level = WLOG_WARN;
 	switch (failureCode)
 	{
 		case SSL_REQUIRED_BY_SERVER:
-			WLog_Print(nego->log, WLOG_WARN, "Error: SSL_REQUIRED_BY_SERVER");
+			nego_disable_all_except(nego, PROTOCOL_SSL);
 			break;
 
 		case SSL_NOT_ALLOWED_BY_SERVER:
-			WLog_Print(nego->log, WLOG_WARN, "Error: SSL_NOT_ALLOWED_BY_SERVER");
+			nego_disable_all_except(nego, PROTOCOL_RDP);
 			nego->sendNegoData = TRUE;
 			break;
 
 		case SSL_CERT_NOT_ON_SERVER:
-			WLog_Print(nego->log, WLOG_ERROR, "Error: SSL_CERT_NOT_ON_SERVER");
+			level = WLOG_ERROR;
 			nego->sendNegoData = TRUE;
 			break;
 
 		case INCONSISTENT_FLAGS:
-			WLog_Print(nego->log, WLOG_ERROR, "Error: INCONSISTENT_FLAGS");
+			level = WLOG_ERROR;
 			break;
 
 		case HYBRID_REQUIRED_BY_SERVER:
-			WLog_Print(nego->log, WLOG_WARN, "Error: HYBRID_REQUIRED_BY_SERVER");
+			nego_disable_all_except(nego, PROTOCOL_HYBRID);
 			break;
 
 		default:
-			WLog_Print(nego->log, WLOG_ERROR, "Error: Unknown protocol security error %" PRIu32 "",
-			           failureCode);
+			level = WLOG_ERROR;
 			break;
 	}
 
+	WLog_Print(nego->log, level, "Error: %s [0x%08" PRIx32 "]", failureStr, failureCode);
 	nego_set_state(nego, NEGO_STATE_FAIL);
 	return TRUE;
 }
@@ -1756,7 +1798,7 @@ void nego_set_RCG_supported(rdpNego* nego, BOOL enabled)
 	nego->RemoteCredsGuardSupported = enabled;
 }
 
-BOOL nego_get_remoteCredentialGuard(rdpNego* nego)
+BOOL nego_get_remoteCredentialGuard(const rdpNego* nego)
 {
 	WINPR_ASSERT(nego);
 
@@ -1962,7 +2004,7 @@ void nego_set_preconnection_blob(rdpNego* nego, const char* PreconnectionBlob)
 	nego->PreconnectionBlob = PreconnectionBlob;
 }
 
-UINT32 nego_get_selected_protocol(rdpNego* nego)
+UINT32 nego_get_selected_protocol(const rdpNego* nego)
 {
 	if (!nego)
 		return 0;
@@ -1977,7 +2019,7 @@ BOOL nego_set_selected_protocol(rdpNego* nego, UINT32 SelectedProtocol)
 	return TRUE;
 }
 
-UINT32 nego_get_requested_protocols(rdpNego* nego)
+UINT32 nego_get_requested_protocols(const rdpNego* nego)
 {
 	if (!nego)
 		return 0;
@@ -1994,7 +2036,7 @@ BOOL nego_set_requested_protocols(rdpNego* nego, UINT32 RequestedProtocols)
 	return TRUE;
 }
 
-NEGO_STATE nego_get_state(rdpNego* nego)
+NEGO_STATE nego_get_state(const rdpNego* nego)
 {
 	if (!nego)
 		return NEGO_STATE_FAIL;
@@ -2029,7 +2071,7 @@ void nego_free_nla(rdpNego* nego)
 	transport_set_nla(nego->transport, NULL);
 }
 
-const BYTE* nego_get_routing_token(rdpNego* nego, DWORD* RoutingTokenLength)
+const BYTE* nego_get_routing_token(const rdpNego* nego, DWORD* RoutingTokenLength)
 {
 	if (!nego)
 		return NULL;

@@ -80,8 +80,22 @@ list(
 target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include>)
 target_link_libraries(${MODULE_NAME} PRIVATE ${LIBS})
 
-install(TARGETS ${MODULE_NAME} COMPONENT server EXPORT FreeRDP-ShadowTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+installwithrpath(
+  TARGETS
+  ${MODULE_NAME}
+  COMPONENT
+  server
+  EXPORT
+  FreeRDP-ShadowTargets
+  ARCHIVE
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME
+  DESTINATION
+  ${CMAKE_INSTALL_BINDIR}
 )
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "Server/shadow")
@@ -113,11 +127,27 @@ target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include>
 target_link_libraries(${MODULE_NAME} PRIVATE ${LIBS})
 
 if(NOT BUILD_SHARED_LIBS)
-  install(TARGETS freerdp-shadow-subsystem-impl DESTINATION ${CMAKE_INSTALL_LIBDIR} EXPORT FreeRDP-ShadowTargets)
+  installwithrpath(
+    TARGETS freerdp-shadow-subsystem-impl DESTINATION ${CMAKE_INSTALL_LIBDIR} EXPORT FreeRDP-ShadowTargets
+  )
 endif()
 
-install(TARGETS ${MODULE_NAME} COMPONENT server EXPORT FreeRDP-ShadowTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+installwithrpath(
+  TARGETS
+  ${MODULE_NAME}
+  COMPONENT
+  server
+  EXPORT
+  FreeRDP-ShadowTargets
+  ARCHIVE
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME
+  DESTINATION
+  ${CMAKE_INSTALL_BINDIR}
 )
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "Server/shadow")
@@ -130,6 +160,13 @@ if(WITH_SERVER_SHADOW_CLI)
 endif()
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "Server/shadow")
+
+# Do not set Requires.Private if not a static build
+if(NOT BUILD_SHARED_LIBS)
+  set(FREERDP_SHADOW_PC_REQUIRES_PRIVATE "freerdp${FREERDP_API_VERSION}")
+  set(FREERDP_SHADOW_PC_LIBRARY_PRIVATE "-ldl -lpthread")
+endif()
+set(FREERDP_SHADOW_PC_REQUIRES freerdp-server${FREERDP_API_VERSION})
 
 include(pkg-config-install-prefix)
 cleaning_configure_file(

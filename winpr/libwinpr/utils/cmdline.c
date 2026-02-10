@@ -47,10 +47,56 @@
  *
  */
 
-static void log_error(DWORD flags, LPCSTR message, int index, LPCSTR argv)
+#if !defined(WITH_DEBUG_UTILS_CMDLINE_DUMP)
+static const char censoredmessage[] =
+    "<censored: build with -DWITH_DEBUG_UTILS_CMDLINE_DUMP=ON for details>";
+#endif
+
+#define log_error(flags, msg, index, arg) \
+	log_error_((flags), (msg), (index), (arg), __FILE__, __func__, __LINE__)
+static void log_error_(DWORD flags, LPCSTR message, int index, WINPR_ATTR_UNUSED LPCSTR argv,
+                       const char* file, const char* fkt, size_t line)
 {
 	if ((flags & COMMAND_LINE_SILENCE_PARSER) == 0)
-		WLog_ERR(TAG, message, index, argv);
+	{
+		const DWORD level = WLOG_ERROR;
+		static wLog* log = NULL;
+		if (!log)
+			log = WLog_Get(TAG);
+
+		if (!WLog_IsLevelActive(log, level))
+			return;
+
+		WLog_PrintTextMessage(log, level, line, file, fkt, "Failed at index %d [%s]: %s", index,
+#if defined(WITH_DEBUG_UTILS_CMDLINE_DUMP)
+		                      argv
+#else
+		                      censoredmessage
+#endif
+		                      ,
+		                      message);
+	}
+}
+
+#define log_comma_error(msg, arg) log_comma_error_((msg), (arg), __FILE__, __func__, __LINE__)
+static void log_comma_error_(const char* message, WINPR_ATTR_UNUSED const char* argument,
+                             const char* file, const char* fkt, size_t line)
+{
+	const DWORD level = WLOG_ERROR;
+	static wLog* log = NULL;
+	if (!log)
+		log = WLog_Get(TAG);
+
+	if (!WLog_IsLevelActive(log, level))
+		return;
+
+	WLog_PrintTextMessage(log, level, line, file, fkt, "%s [%s]", message,
+#if defined(WITH_DEBUG_UTILS_CMDLINE_DUMP)
+	                      argument
+#else
+	                      censoredmessage
+#endif
+	);
 }
 
 int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* options, DWORD flags,
@@ -93,8 +139,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 
 			if (count < 0)
 			{
-				log_error(flags, "Failed for index %d [%s]: PreFilter rule could not be applied", i,
-				          argv[i]);
+				log_error(flags, "PreFilter rule could not be applied", i, argv[i]);
 				status = COMMAND_LINE_ERROR;
 				return status;
 			}
@@ -139,7 +184,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 		{
 			if (notescaped)
 			{
-				log_error(flags, "Failed at index %d [%s]: Unescaped sigil", i, argv[i]);
+				log_error(flags, "Unescaped sigil", i, argv[i]);
 				return COMMAND_LINE_ERROR;
 			}
 
@@ -149,7 +194,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 		}
 		else
 		{
-			log_error(flags, "Failed at index %d [%s]: Invalid sigil", i, argv[i]);
+			log_error(flags, "Invalid sigil", i, argv[i]);
 			return COMMAND_LINE_ERROR;
 		}
 
@@ -161,6 +206,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 				if ((flags & COMMAND_LINE_IGN_UNKNOWN_KEYWORD))
 					continue;
 
+				log_error(flags, "Unexpected keyword", i, argv[i]);
 				return COMMAND_LINE_ERROR_NO_KEYWORD;
 			}
 
@@ -203,7 +249,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 			{
 				if (length < keyword_index)
 				{
-					log_error(flags, "Failed at index %d [%s]: Argument required", i, argv[i]);
+					log_error(flags, "Argument required", i, argv[i]);
 					return COMMAND_LINE_ERROR;
 				}
 
@@ -280,7 +326,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 					}
 					else if (!value_present && argument)
 					{
-						log_error(flags, "Failed at index %d [%s]: Argument required", i, argv[i]);
+						log_error(flags, "Argument required", i, argv[i]);
 						return COMMAND_LINE_ERROR;
 					}
 				}
@@ -289,7 +335,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 				{
 					if (value && (cur->Flags & COMMAND_LINE_VALUE_FLAG))
 					{
-						log_error(flags, "Failed at index %d [%s]: Unexpected value", i, argv[i]);
+						log_error(flags, "Unexpected value", i, argv[i]);
 						return COMMAND_LINE_ERROR_UNEXPECTED_VALUE;
 					}
 				}
@@ -304,7 +350,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 
 				if (!value && (cur->Flags & COMMAND_LINE_VALUE_REQUIRED))
 				{
-					log_error(flags, "Failed at index %d [%s]: Missing value", i, argv[i]);
+					log_error(flags, "Missing value", i, argv[i]);
 					status = COMMAND_LINE_ERROR_MISSING_VALUE;
 					return status;
 				}
@@ -315,7 +361,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 				{
 					if (!(cur->Flags & (COMMAND_LINE_VALUE_OPTIONAL | COMMAND_LINE_VALUE_REQUIRED)))
 					{
-						log_error(flags, "Failed at index %d [%s]: Unexpected value", i, argv[i]);
+						log_error(flags, "Unexpected value", i, argv[i]);
 						return COMMAND_LINE_ERROR_UNEXPECTED_VALUE;
 					}
 
@@ -360,9 +406,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 
 					if (count < 0)
 					{
-						log_error(flags,
-						          "Failed at index %d [%s]: PostFilter rule could not be applied",
-						          i, argv[i]);
+						log_error(flags, "PostFilter rule could not be applied", i, argv[i]);
 						status = COMMAND_LINE_ERROR;
 						return status;
 					}
@@ -380,7 +424,7 @@ int CommandLineParseArgumentsA(int argc, LPSTR* argv, COMMAND_LINE_ARGUMENT_A* o
 
 			if (!found && (flags & COMMAND_LINE_IGN_UNKNOWN_KEYWORD) == 0)
 			{
-				log_error(flags, "Failed at index %d [%s]: Unexpected keyword", i, argv[i]);
+				log_error(flags, "Unexpected keyword", i, argv[i]);
 				return COMMAND_LINE_ERROR_NO_KEYWORD;
 			}
 		}
@@ -495,6 +539,7 @@ static size_t get_element_count(const char* list, BOOL* failed, BOOL fullquoted)
 {
 	size_t count = 0;
 	int quoted = 0;
+	bool escaped = false;
 	BOOL finished = FALSE;
 	BOOL first = TRUE;
 	const char* it = list;
@@ -507,22 +552,39 @@ static size_t get_element_count(const char* list, BOOL* failed, BOOL fullquoted)
 	while (!finished)
 	{
 		BOOL nextFirst = FALSE;
-		switch (*it)
+
+		const char cur = *it++;
+
+		/* Ignore the symbol that was escaped. */
+		if (escaped)
+		{
+			escaped = false;
+			continue;
+		}
+
+		switch (cur)
 		{
 			case '\0':
 				if (quoted != 0)
 				{
-					WLog_ERR(TAG, "Invalid argument (missing closing quote) '%s'", list);
+					log_comma_error("Invalid argument (missing closing quote)", list);
 					*failed = TRUE;
 					return 0;
 				}
 				finished = TRUE;
 				break;
+			case '\\':
+				if (!escaped)
+				{
+					escaped = true;
+					continue;
+				}
+				break;
 			case '\'':
 			case '"':
 				if (!fullquoted)
 				{
-					int now = is_quoted(*it);
+					int now = is_quoted(cur) && !escaped;
 					if (now == quoted)
 						quoted = 0;
 					else if (quoted == 0)
@@ -532,7 +594,7 @@ static size_t get_element_count(const char* list, BOOL* failed, BOOL fullquoted)
 			case ',':
 				if (first)
 				{
-					WLog_ERR(TAG, "Invalid argument (empty list elements) '%s'", list);
+					log_comma_error("Invalid argument (empty list elements)", list);
 					*failed = TRUE;
 					return 0;
 				}
@@ -547,7 +609,6 @@ static size_t get_element_count(const char* list, BOOL* failed, BOOL fullquoted)
 		}
 
 		first = nextFirst;
-		it++;
 	}
 	return count + 1;
 }
@@ -556,27 +617,43 @@ static char* get_next_comma(char* string, BOOL fullquoted)
 {
 	const char* log = string;
 	int quoted = 0;
-	BOOL first = TRUE;
+	bool first = true;
+	bool escaped = false;
 
 	WINPR_ASSERT(string);
 
 	while (TRUE)
 	{
-		switch (*string)
+		char* last = string;
+		const char cur = *string++;
+		if (escaped)
+		{
+			escaped = false;
+			continue;
+		}
+
+		switch (cur)
 		{
 			case '\0':
 				if (quoted != 0)
-					WLog_ERR(TAG, "Invalid quoted argument '%s'", log);
+					log_comma_error("Invalid quoted argument", log);
 				return NULL;
 
+			case '\\':
+				if (!escaped)
+				{
+					escaped = true;
+					continue;
+				}
+				break;
 			case '\'':
 			case '"':
 				if (!fullquoted)
 				{
-					int now = is_quoted(*string);
+					int now = is_quoted(cur);
 					if ((quoted == 0) && !first)
 					{
-						WLog_ERR(TAG, "Invalid quoted argument '%s'", log);
+						log_comma_error("Invalid quoted argument", log);
 						return NULL;
 					}
 					if (now == quoted)
@@ -589,18 +666,17 @@ static char* get_next_comma(char* string, BOOL fullquoted)
 			case ',':
 				if (first)
 				{
-					WLog_ERR(TAG, "Invalid argument (empty list elements) '%s'", log);
+					log_comma_error("Invalid argument (empty list elements)", log);
 					return NULL;
 				}
 				if (quoted == 0)
-					return string;
+					return last;
 				break;
 
 			default:
 				break;
 		}
 		first = FALSE;
-		string++;
 	}
 
 	return NULL;
@@ -677,7 +753,7 @@ char** CommandLineParseCommaSeparatedValuesEx(const char* name, const char* list
 			{
 				if (start != end)
 				{
-					WLog_ERR(TAG, "invalid argument (quote mismatch) '%s'", list);
+					log_comma_error("Invalid argument (quote mismatch)", list);
 					goto fail;
 				}
 				if (!is_valid_fullquoted(unquoted))
@@ -759,7 +835,7 @@ char** CommandLineParseCommaSeparatedValuesEx(const char* name, const char* list
 			{
 				if (lastQuote != quote)
 				{
-					WLog_ERR(TAG, "invalid argument (quote mismatch) '%s'", list);
+					log_comma_error("Invalid argument (quote mismatch)", list);
 					goto fail;
 				}
 				else if (lastQuote != 0)

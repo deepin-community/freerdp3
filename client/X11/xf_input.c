@@ -101,14 +101,14 @@ static BOOL register_input_events(xfContext* xfc, Window window)
 
 		for (int j = 0; j < dev->num_classes; j++)
 		{
-			const XIAnyClassInfo* class = dev->classes[j];
+			const XIAnyClassInfo* c_class = dev->classes[j];
 
-			switch (class->type)
+			switch (c_class->type)
 			{
 				case XITouchClass:
 					if (freerdp_settings_get_bool(settings, FreeRDP_MultiTouchInput))
 					{
-						const XITouchClassInfo* t = (const XITouchClassInfo*)class;
+						const XITouchClassInfo* t = (const XITouchClassInfo*)c_class;
 						if (t->mode == XIDirectTouch)
 						{
 							WLog_DBG(
@@ -124,7 +124,7 @@ static BOOL register_input_events(xfContext* xfc, Window window)
 					break;
 				case XIButtonClass:
 				{
-					const XIButtonClassInfo* t = (const XIButtonClassInfo*)class;
+					const XIButtonClassInfo* t = (const XIButtonClassInfo*)c_class;
 					WLog_DBG(TAG, "%s button device (id: %d, mode: %d)", dev->name, dev->deviceid,
 					         t->num_buttons);
 					XISetMask(masks[nmasks], XI_ButtonPress);
@@ -139,7 +139,7 @@ static BOOL register_input_events(xfContext* xfc, Window window)
 					if (!log)
 						log = WLog_Get(TAG);
 
-					const XIValuatorClassInfo* t = (const XIValuatorClassInfo*)class;
+					const XIValuatorClassInfo* t = (const XIValuatorClassInfo*)c_class;
 					char* name = t->label ? Safe_XGetAtomName(log, xfc->display, t->label) : NULL;
 
 					WLog_Print(log, WLOG_DEBUG,
@@ -569,26 +569,6 @@ static int xf_input_handle_event_local(xfContext* xfc, const XEvent* event)
 	return 0;
 }
 
-#ifdef WITH_DEBUG_X11
-static char* xf_input_touch_state_string(DWORD flags)
-{
-	if (flags & RDPINPUT_CONTACT_FLAG_DOWN)
-		return "RDPINPUT_CONTACT_FLAG_DOWN";
-	else if (flags & RDPINPUT_CONTACT_FLAG_UPDATE)
-		return "RDPINPUT_CONTACT_FLAG_UPDATE";
-	else if (flags & RDPINPUT_CONTACT_FLAG_UP)
-		return "RDPINPUT_CONTACT_FLAG_UP";
-	else if (flags & RDPINPUT_CONTACT_FLAG_INRANGE)
-		return "RDPINPUT_CONTACT_FLAG_INRANGE";
-	else if (flags & RDPINPUT_CONTACT_FLAG_INCONTACT)
-		return "RDPINPUT_CONTACT_FLAG_INCONTACT";
-	else if (flags & RDPINPUT_CONTACT_FLAG_CANCELED)
-		return "RDPINPUT_CONTACT_FLAG_CANCELED";
-	else
-		return "RDPINPUT_CONTACT_FLAG_UNKNOWN";
-}
-#endif
-
 static void xf_input_hide_cursor(xfContext* xfc)
 {
 #ifdef WITH_XCURSOR
@@ -745,7 +725,7 @@ static int xf_input_pens_unhover(xfContext* xfc)
 	return 0;
 }
 
-static bool xf_use_rel_mouse(xfContext* xfc)
+bool xf_use_rel_mouse(xfContext* xfc)
 {
 	if (!freerdp_client_use_relative_mouse_events(&xfc->common))
 		return false;
@@ -778,8 +758,12 @@ int xf_input_event(xfContext* xfc, WINPR_ATTR_UNUSED const XEvent* xevent, XIDev
 
 			if (xfc->xi_event)
 			{
-				xf_generic_ButtonEvent(xfc, (int)event->event_x, (int)event->event_y, event->detail,
-				                       event->event, xfc->remote_app, evtype == XI_ButtonPress);
+				if (!xfc_is_floatbar_window(xfc, event->event) || (evtype != XI_ButtonPress))
+				{
+					xf_generic_ButtonEvent(xfc, (int)event->event_x, (int)event->event_y,
+					                       event->detail, event->event, xfc->remote_app,
+					                       evtype == XI_ButtonPress);
+				}
 			}
 			break;
 
@@ -788,8 +772,8 @@ int xf_input_event(xfContext* xfc, WINPR_ATTR_UNUSED const XEvent* xevent, XIDev
 
 			if (xfc->xi_event)
 			{
-				xf_generic_MotionNotify(xfc, (int)event->event_x, (int)event->event_y,
-				                        event->detail, event->event, xfc->remote_app);
+				xf_generic_MotionNotify(xfc, (int)event->event_x, (int)event->event_y, event->event,
+				                        xfc->remote_app);
 			}
 			break;
 		case XI_RawButtonPress:

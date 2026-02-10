@@ -206,6 +206,11 @@ static UINT audin_process_formats(AUDIN_PLUGIN* audin, AUDIN_CHANNEL_CALLBACK* c
 	}
 
 	Stream_Seek_UINT32(s); /* cbSizeFormatsPacket */
+
+	audin->format = NULL;
+	audio_formats_free(callback->formats, callback->formats_count);
+	callback->formats_count = 0;
+
 	callback->formats = audio_formats_new(NumFormats);
 
 	if (!callback->formats)
@@ -280,6 +285,7 @@ out:
 
 	if (error != CHANNEL_RC_OK)
 	{
+		audin->format = NULL;
 		audio_formats_free(callback->formats, NumFormats);
 		callback->formats = NULL;
 	}
@@ -386,7 +392,7 @@ static UINT audin_receive_wave_data(const AUDIO_FORMAT* format, const BYTE* data
 		return CHANNEL_RC_OK;
 
 	audio_format_print(audin->log, WLOG_TRACE, audin->format);
-	WLog_Print(audin->log, WLOG_TRACE, "[%" PRIdz "/%" PRIdz "]", size,
+	WLog_Print(audin->log, WLOG_TRACE, "[%" PRIuz "/%" PRIuz "]", size,
 	           Stream_GetPosition(audin->data) - 1);
 
 	if ((error = audin_send_incoming_data_pdu(callback)))
@@ -665,7 +671,7 @@ static UINT audin_on_new_channel_connection(IWTSListenerCallback* pListenerCallb
 	callback->plugin = listener_callback->plugin;
 	callback->channel_mgr = listener_callback->channel_mgr;
 	callback->channel = pChannel;
-	*ppCallback = (IWTSVirtualChannelCallback*)callback;
+	*ppCallback = &callback->iface;
 	return CHANNEL_RC_OK;
 }
 
@@ -979,8 +985,7 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE audin_DVCPluginEntry(IDRDYNVC_ENTRY_POINTS* p
 		char* device;
 	};
 	UINT error = CHANNEL_RC_INITIALIZATION_ERROR;
-	struct SubsystemEntry entries[] =
-	{
+	struct SubsystemEntry entries[] = {
 #if defined(WITH_PULSE)
 		{ "pulse", "" },
 #endif
@@ -1046,50 +1051,53 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE audin_DVCPluginEntry(IDRDYNVC_ENTRY_POINTS* p
 	audin->iface.Attached = audin_plugin_attached;
 	audin->iface.Detached = audin_plugin_detached;
 
-	const ADDIN_ARGV* args = pEntryPoints->GetPluginData(pEntryPoints);
-	audin->rdpcontext = pEntryPoints->GetRdpContext(pEntryPoints);
-
-	if (args)
 	{
-		if (!audin_process_addin_args(audin, args))
-			goto out;
-	}
+		const ADDIN_ARGV* args = pEntryPoints->GetPluginData(pEntryPoints);
+		audin->rdpcontext = pEntryPoints->GetRdpContext(pEntryPoints);
 
-	if (audin->subsystem)
-	{
-		if ((error = audin_load_device_plugin(audin, audin->subsystem, args)))
+		if (args)
 		{
-			WLog_Print(
-			    audin->log, WLOG_ERROR,
-			    "Unable to load microphone redirection subsystem %s because of error %" PRIu32 "",
-			    audin->subsystem, error);
-			goto out;
+			if (!audin_process_addin_args(audin, args))
+				goto out;
 		}
-	}
-	else
-	{
-		while (entry && entry->subsystem && !audin->device)
-		{
-			if ((error = audin_set_subsystem(audin, entry->subsystem)))
-			{
-				WLog_Print(audin->log, WLOG_ERROR,
-				           "audin_set_subsystem for %s failed with error %" PRIu32 "!",
-				           entry->subsystem, error);
-			}
-			else if ((error = audin_set_device_name(audin, entry->device)))
-			{
-				WLog_Print(audin->log, WLOG_ERROR,
-				           "audin_set_device_name for %s failed with error %" PRIu32 "!",
-				           entry->subsystem, error);
-			}
-			else if ((error = audin_load_device_plugin(audin, audin->subsystem, args)))
-			{
-				WLog_Print(audin->log, WLOG_ERROR,
-				           "audin_load_device_plugin %s failed with error %" PRIu32 "!",
-				           entry->subsystem, error);
-			}
 
-			entry++;
+		if (audin->subsystem)
+		{
+			if ((error = audin_load_device_plugin(audin, audin->subsystem, args)))
+			{
+				WLog_Print(
+				    audin->log, WLOG_ERROR,
+				    "Unable to load microphone redirection subsystem %s because of error %" PRIu32
+				    "",
+				    audin->subsystem, error);
+				goto out;
+			}
+		}
+		else
+		{
+			while (entry && entry->subsystem && !audin->device)
+			{
+				if ((error = audin_set_subsystem(audin, entry->subsystem)))
+				{
+					WLog_Print(audin->log, WLOG_ERROR,
+					           "audin_set_subsystem for %s failed with error %" PRIu32 "!",
+					           entry->subsystem, error);
+				}
+				else if ((error = audin_set_device_name(audin, entry->device)))
+				{
+					WLog_Print(audin->log, WLOG_ERROR,
+					           "audin_set_device_name for %s failed with error %" PRIu32 "!",
+					           entry->subsystem, error);
+				}
+				else if ((error = audin_load_device_plugin(audin, audin->subsystem, args)))
+				{
+					WLog_Print(audin->log, WLOG_ERROR,
+					           "audin_load_device_plugin %s failed with error %" PRIu32 "!",
+					           entry->subsystem, error);
+				}
+
+				entry++;
+			}
 		}
 	}
 

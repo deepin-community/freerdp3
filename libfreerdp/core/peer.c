@@ -493,7 +493,7 @@ static state_run_t peer_recv_tpkt_pdu(freerdp_peer* client, wStream* s)
 			case PDU_TYPE_FLOW_TEST:
 				if (!Stream_SafeSeek(s, remain))
 				{
-					WLog_WARN(TAG, "Short PDU, need %" PRIuz " bytes, got %" PRIuz, remain,
+					WLog_WARN(TAG, "Short PDU, need %" PRIu16 " bytes, got %" PRIuz, remain,
 					          Stream_GetRemainingLength(s));
 					return STATE_RUN_FAILED;
 				}
@@ -759,7 +759,7 @@ static state_run_t rdp_peer_handle_state_active(freerdp_peer* client)
 	}
 	if (!client->connected)
 	{
-		WLog_ERR(TAG, "PostConnect for peer %p failed", client);
+		WLog_ERR(TAG, "PostConnect for peer %p failed", WINPR_CXX_COMPAT_CAST(const void*, client));
 		ret = STATE_RUN_FAILED;
 	}
 	else if (!client->activated)
@@ -774,7 +774,8 @@ static state_run_t rdp_peer_handle_state_active(freerdp_peer* client)
 
 		if (!activated)
 		{
-			WLog_ERR(TAG, "Activate for peer %p failed", client);
+			WLog_ERR(TAG, "Activate for peer %p failed",
+			         WINPR_CXX_COMPAT_CAST(const void*, client));
 			ret = STATE_RUN_FAILED;
 		}
 		else
@@ -788,20 +789,17 @@ static state_run_t rdp_peer_handle_state_active(freerdp_peer* client)
 static state_run_t peer_recv_callback_internal(WINPR_ATTR_UNUSED rdpTransport* transport,
                                                wStream* s, void* extra)
 {
-	UINT32 SelectedProtocol = 0;
 	freerdp_peer* client = (freerdp_peer*)extra;
-	rdpRdp* rdp = NULL;
 	state_run_t ret = STATE_RUN_FAILED;
-	rdpSettings* settings = NULL;
 
 	WINPR_ASSERT(transport);
 	WINPR_ASSERT(client);
 	WINPR_ASSERT(client->context);
 
-	rdp = client->context->rdp;
+	rdpRdp* rdp = client->context->rdp;
 	WINPR_ASSERT(rdp);
 
-	settings = client->context->settings;
+	rdpSettings* settings = client->context->settings;
 	WINPR_ASSERT(settings);
 
 	IFCALL(client->ReachedState, client, rdp_get_state(rdp));
@@ -821,28 +819,37 @@ static state_run_t peer_recv_callback_internal(WINPR_ATTR_UNUSED rdpTransport* t
 			}
 			else
 			{
-				SelectedProtocol = nego_get_selected_protocol(rdp->nego);
+				const UINT32 SelectedProtocol = nego_get_selected_protocol(rdp->nego);
+
 				settings->RdstlsSecurity = (SelectedProtocol & PROTOCOL_RDSTLS) ? TRUE : FALSE;
 				settings->NlaSecurity = (SelectedProtocol & PROTOCOL_HYBRID) ? TRUE : FALSE;
 				settings->TlsSecurity = (SelectedProtocol & PROTOCOL_SSL) ? TRUE : FALSE;
 				settings->RdpSecurity = (SelectedProtocol == PROTOCOL_RDP) ? TRUE : FALSE;
 
+				client->authenticated = FALSE;
 				if (SelectedProtocol & PROTOCOL_HYBRID)
 				{
 					SEC_WINNT_AUTH_IDENTITY_INFO* identity =
 					    (SEC_WINNT_AUTH_IDENTITY_INFO*)nego_get_identity(rdp->nego);
-					sspi_CopyAuthIdentity(&client->identity, identity);
-					IFCALLRET(client->Logon, client->authenticated, client, &client->identity,
-					          TRUE);
+					if (sspi_CopyAuthIdentity(&client->identity, identity) >= 0)
+					{
+						client->authenticated =
+						    IFCALLRESULT(TRUE, client->Logon, client, &client->identity, TRUE);
+					}
 					nego_free_nla(rdp->nego);
 				}
 				else
 				{
-					IFCALLRET(client->Logon, client->authenticated, client, &client->identity,
-					          FALSE);
+					client->authenticated =
+					    IFCALLRESULT(TRUE, client->Logon, client, &client->identity, FALSE);
 				}
-				if (rdp_server_transition_to_state(rdp, CONNECTION_STATE_MCS_CREATE_REQUEST))
-					ret = STATE_RUN_SUCCESS;
+				if (!client->authenticated)
+					ret = STATE_RUN_FAILED;
+				else
+				{
+					if (rdp_server_transition_to_state(rdp, CONNECTION_STATE_MCS_CREATE_REQUEST))
+						ret = STATE_RUN_SUCCESS;
+				}
 			}
 			break;
 
@@ -1148,7 +1155,8 @@ static state_run_t peer_recv_callback_internal(WINPR_ATTR_UNUSED rdpTransport* t
 		case CONNECTION_STATE_FINALIZATION_CLIENT_GRANTED_CONTROL:
 		case CONNECTION_STATE_FINALIZATION_CLIENT_FONT_MAP:
 		default:
-			WLog_ERR(TAG, "%s state %d", rdp_get_state_string(rdp), rdp_get_state(rdp));
+			WLog_ERR(TAG, "%s state %" PRId32, rdp_get_state_string(rdp),
+			         WINPR_CXX_COMPAT_CAST(int32_t, rdp_get_state(rdp)));
 			break;
 	}
 
@@ -1443,24 +1451,14 @@ const char* freerdp_peer_os_minor_type_string(freerdp_peer* client)
 
 freerdp_peer* freerdp_peer_new(int sockfd)
 {
-	UINT32 option_value = 0;
-	socklen_t option_len = 0;
 	freerdp_peer* client = (freerdp_peer*)calloc(1, sizeof(freerdp_peer));
 
 	if (!client)
 		return NULL;
 
-	option_value = TRUE;
-	option_len = sizeof(option_value);
-
 	if (sockfd >= 0)
 	{
-		if (setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (void*)&option_value, option_len) < 0)
-		{
-			/* local unix sockets don't have the TCP_NODELAY implemented, so don't make this
-			 * error fatal */
-			WLog_DBG(TAG, "can't set TCP_NODELAY, continuing anyway");
-		}
+		(void)freerdp_tcp_set_nodelay(WLog_Get(TAG), WLOG_DEBUG, sockfd);
 	}
 
 	if (client)

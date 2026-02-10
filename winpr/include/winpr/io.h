@@ -76,6 +76,7 @@ extern "C"
 	                               LPDWORD lpBytesReturned, LPOVERLAPPED lpOverlapped);
 
 	WINPR_ATTR_MALLOC(CloseHandle, 1)
+	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE CreateIoCompletionPort(HANDLE FileHandle, HANDLE ExistingCompletionPort,
 	                                        ULONG_PTR CompletionKey,
 	                                        DWORD NumberOfConcurrentThreads);
@@ -198,11 +199,13 @@ extern "C"
 typedef HANDLE PDRIVER_OBJECT_EX;
 typedef HANDLE PDEVICE_OBJECT_EX;
 
+// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 WINPR_API NTSTATUS _IoCreateDeviceEx(PDRIVER_OBJECT_EX DriverObject, ULONG DeviceExtensionSize,
                                      PUNICODE_STRING DeviceName, DEVICE_TYPE DeviceType,
                                      ULONG DeviceCharacteristics, BOOLEAN Exclusive,
                                      PDEVICE_OBJECT_EX* DeviceObject);
 
+// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 WINPR_API VOID _IoDeleteDeviceEx(PDEVICE_OBJECT_EX DeviceObject);
 
 #endif

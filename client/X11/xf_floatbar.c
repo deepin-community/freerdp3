@@ -347,16 +347,20 @@ xfFloatbar* xf_floatbar_new(xfContext* xfc, Window window, const char* name, DWO
 	floatbar->xfc = xfc;
 	floatbar->locked = (flags & 0x0002) != 0 ? TRUE : FALSE;
 	xf_floatbar_toggle_fullscreen(floatbar, FALSE);
-	char** missingList = NULL;
-	int missingCount = 0;
-	char* defString = NULL;
-	floatbar->fontSet = XCreateFontSet(floatbar->xfc->display, "-*-*-*-*-*-*-*-*-*-*-*-*-*-*",
-	                                   &missingList, &missingCount, &defString);
-	if (floatbar->fontSet == NULL)
+
 	{
-		WLog_ERR(TAG, "Failed to create fontset");
+		char** missingList = NULL;
+		int missingCount = 0;
+		char* defString = NULL;
+		floatbar->fontSet = XCreateFontSet(floatbar->xfc->display, "-*-*-*-*-*-*-*-*-*-*-*-*-*-*",
+		                                   &missingList, &missingCount, &defString);
+
+		if (floatbar->fontSet == NULL)
+		{
+			WLog_ERR(TAG, "Failed to create fontset");
+		}
+		XFreeStringList(missingList);
 	}
-	XFreeStringList(missingList);
 	return floatbar;
 fail:
 	WINPR_PRAGMA_DIAG_PUSH
@@ -938,4 +942,18 @@ BOOL xf_floatbar_is_locked(xfFloatbar* floatbar)
 	if (!floatbar)
 		return FALSE;
 	return floatbar->mode != XF_FLOATBAR_MODE_NONE;
+}
+
+BOOL xf_floatbar_is_window(xfFloatbar* floatbar, Window window)
+{
+	if (!floatbar)
+		return FALSE;
+	return floatbar->handle == window;
+}
+
+BOOL xfc_is_floatbar_window(xfContext* xfc, Window window)
+{
+	if (!xfc || !xfc->window)
+		return FALSE;
+	return xf_floatbar_is_window(xfc->window->floatbar, window);
 }

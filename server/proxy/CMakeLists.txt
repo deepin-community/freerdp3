@@ -56,13 +56,34 @@ set(PUBLIC_LIBS winpr freerdp)
 target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include>)
 target_link_libraries(${MODULE_NAME} PRIVATE ${PRIVATE_LIBS} PUBLIC ${PUBLIC_LIBS})
 
-install(TARGETS ${MODULE_NAME} COMPONENT server EXPORT FreeRDP-ProxyTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+installwithrpath(
+  TARGETS
+  ${MODULE_NAME}
+  COMPONENT
+  server
+  EXPORT
+  FreeRDP-ProxyTargets
+  ARCHIVE
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME
+  DESTINATION
+  ${CMAKE_INSTALL_BINDIR}
 )
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "Server/Proxy")
 
 # pkg-config
+# Do not set Requires.Private if not a static build
+if(NOT BUILD_SHARED_LIBS)
+  set(FREERDP_PROXY_PC_REQUIRES_PRIVATE "freerdp-client${FREERDP_API_VERSION} freerdp-server${FREERDP_API_VERSION}")
+  set(FREERDP_PROXY_PC_LIBS_PRIVATE "-ldl -lpthread")
+endif()
+set(FREERDP_PROXY_PC_REQUIRES freerdp-server${FREERDP_API_VERSION})
+
 include(pkg-config-install-prefix)
 cleaning_configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/freerdp-proxy.pc.in ${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}${FREERDP_VERSION_MAJOR}.pc

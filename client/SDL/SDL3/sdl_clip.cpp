@@ -29,7 +29,7 @@
 #include <winpr/image.h>
 
 #include "sdl_clip.hpp"
-#include "sdl_freerdp.hpp"
+#include "sdl_context.hpp"
 
 #define TAG CLIENT_TAG("sdl.cliprdr")
 
@@ -37,7 +37,7 @@
 // NOLINTNEXTLINE(bugprone-suspicious-missing-comma)
 const char mime_text_utf8[] = mime_text_plain ";charset=utf-8";
 
-static const std::vector<const char*>& s_mime_text()
+[[nodiscard]] static const std::vector<const char*>& s_mime_text()
 {
 	static std::vector<const char*> values;
 	if (values.empty())
@@ -58,7 +58,7 @@ static const char s_mime_html[] = "text/html";
 
 #define BMP_MIME_LIST "image/bmp", "image/x-bmp", "image/x-MS-bmp", "image/x-win-bitmap"
 
-static const std::vector<const char*>& s_mime_bitmap()
+[[nodiscard]] static const std::vector<const char*>& s_mime_bitmap()
 {
 	static std::vector<const char*> values;
 	if (values.empty())
@@ -68,7 +68,7 @@ static const std::vector<const char*>& s_mime_bitmap()
 	return values;
 }
 
-static const std::vector<const char*>& s_mime_image()
+[[nodiscard]] static const std::vector<const char*>& s_mime_image()
 {
 	static std::vector<const char*> values;
 	if (values.empty())
@@ -144,10 +144,10 @@ sdlClip::~sdlClip()
 {
 	cliprdr_file_context_free(_file);
 	ClipboardDestroy(_system);
-	(void)CloseHandle(_event);
+	std::ignore = CloseHandle(_event);
 }
 
-BOOL sdlClip::init(CliprdrClientContext* clip)
+bool sdlClip::init(CliprdrClientContext* clip)
 {
 	WINPR_ASSERT(clip);
 	_ctx = clip;
@@ -162,14 +162,14 @@ BOOL sdlClip::init(CliprdrClientContext* clip)
 	return cliprdr_file_context_init(_file, _ctx);
 }
 
-BOOL sdlClip::uninit(CliprdrClientContext* clip)
+bool sdlClip::uninit(CliprdrClientContext* clip)
 {
 	WINPR_ASSERT(clip);
 	if (!cliprdr_file_context_uninit(_file, _ctx))
-		return FALSE;
+		return false;
 	_ctx = nullptr;
 	clip->custom = nullptr;
-	return TRUE;
+	return true;
 }
 
 bool sdlClip::contains(const char** mime_types, Sint32 count)
@@ -183,7 +183,7 @@ bool sdlClip::contains(const char** mime_types, Sint32 count)
 	return false;
 }
 
-bool sdlClip::handle_update(const SDL_ClipboardEvent& ev)
+bool sdlClip::handleEvent(const SDL_ClipboardEvent& ev)
 {
 	if (!_ctx || !_sync || ev.owner)
 	{
@@ -227,7 +227,7 @@ bool sdlClip::handle_update(const SDL_ClipboardEvent& ev)
 	size_t nformats = WINPR_ASSERTING_INT_CAST(size_t, ev.num_mime_types);
 	const char** clipboard_mime_formats = ev.mime_types;
 
-	WLog_Print(_log, WLOG_TRACE, "SDL has %d formats", nformats);
+	WLog_Print(_log, WLOG_TRACE, "SDL has %" PRIuz " formats", nformats);
 
 	bool textPushed = false;
 	bool imgPushed = false;
@@ -591,8 +591,8 @@ std::shared_ptr<BYTE> sdlClip::ReceiveFormatDataRequestHandle(
 	           ClipboardGetFormatIdString(localFormatId), localFormatId,
 	           ClipboardGetFormatName(clipboard->_system, localFormatId));
 
-	ClipboardLockGuard give_me_a_name(clipboard->_system);
-	std::lock_guard<CriticalSection> lock(clipboard->_lock);
+	ClipboardLockGuard systemlock(clipboard->_system);
+	std::scoped_lock lock(clipboard->_lock);
 
 	const UINT32 fileFormatId =
 	    ClipboardGetFormatId(clipboard->_system, s_type_FileGroupDescriptorW);
@@ -724,8 +724,8 @@ UINT sdlClip::ReceiveFormatDataResponse(CliprdrClientContext* context,
 	    cliprdr_file_context_get_context(static_cast<CliprdrFileContext*>(context->custom)));
 	WINPR_ASSERT(clipboard);
 
-	ClipboardLockGuard give_me_a_name(clipboard->_system);
-	std::lock_guard<CriticalSection> lock(clipboard->_lock);
+	ClipboardLockGuard systemlock(clipboard->_system);
+	std::scoped_lock lock(clipboard->_lock);
 	if (clipboard->_request_queue.empty())
 	{
 		WLog_Print(clipboard->_log, WLOG_ERROR, "no pending format request");
@@ -789,10 +789,15 @@ UINT sdlClip::ReceiveFormatDataResponse(CliprdrClientContext* context,
 			WLog_Print(clipboard->_log, WLOG_ERROR, "error when setting clipboard data");
 			return ERROR_INTERNAL_ERROR;
 		}
+		WLog_Print(clipboard->_log, WLOG_DEBUG, "updated clipboard data %s [0x%08" PRIx32 "]",
+		           ClipboardGetFormatName(clipboard->_system, srcFormatId), srcFormatId);
 	} while (false);
 
 	if (!SetEvent(clipboard->_event))
+	{
+		WLog_Print(clipboard->_log, WLOG_ERROR, "error when setting clipboard event");
 		return ERROR_INTERNAL_ERROR;
+	}
 
 	return CHANNEL_RC_OK;
 }
@@ -811,8 +816,8 @@ const void* sdlClip::ClipDataCb(void* userdata, const char* mime_type, size_t* s
 		mime_type = "text/plain";
 
 	{
-		ClipboardLockGuard give_me_a_name(clip->_system);
-		std::lock_guard<CriticalSection> lock(clip->_lock);
+		ClipboardLockGuard systemlock(clip->_system);
+		std::scoped_lock lock(clip->_lock);
 
 		/* check if we already used this mime type */
 		auto cache = clip->_cache_data.find(mime_type);
@@ -841,8 +846,8 @@ const void* sdlClip::ClipDataCb(void* userdata, const char* mime_type, size_t* s
 			}
 		}
 
-		WLog_Print(clip->_log, WLOG_INFO, "requesting format %s [0x%08" PRIx32 "]", mime_type,
-		           formatID);
+		WLog_Print(clip->_log, WLOG_DEBUG, "requesting format %s [%s 0x%08" PRIx32 "]", mime_type,
+		           ClipboardGetFormatName(clip->_system, formatID), formatID);
 		if (clip->SendDataRequest(formatID, mime_type))
 			return nullptr;
 	}
@@ -853,7 +858,7 @@ const void* sdlClip::ClipDataCb(void* userdata, const char* mime_type, size_t* s
 
 		if (status != WAIT_OBJECT_0 + 1)
 		{
-			std::lock_guard<CriticalSection> lock(clip->_lock);
+			std::scoped_lock lock(clip->_lock);
 			clip->_request_queue.pop();
 
 			if (status == WAIT_TIMEOUT)
@@ -865,13 +870,13 @@ const void* sdlClip::ClipDataCb(void* userdata, const char* mime_type, size_t* s
 	}
 
 	{
-		ClipboardLockGuard give_me_a_name(clip->_system);
-		std::lock_guard<CriticalSection> lock(clip->_lock);
+		ClipboardLockGuard systemlock(clip->_system);
+		std::scoped_lock lock(clip->_lock);
 		auto request = clip->_request_queue.front();
 		clip->_request_queue.pop();
 
 		if (clip->_request_queue.empty())
-			(void)ResetEvent(clip->_event);
+			std::ignore = ResetEvent(clip->_event);
 
 		if (request.success())
 		{
@@ -898,7 +903,7 @@ void sdlClip::ClipCleanCb(void* userdata)
 	auto clip = static_cast<sdlClip*>(userdata);
 	WINPR_ASSERT(clip);
 	ClipboardLockGuard give_me_a_name(clip->_system);
-	std::lock_guard<CriticalSection> lock(clip->_lock);
+	std::scoped_lock lock(clip->_lock);
 	ClipboardEmpty(clip->_system);
 }
 
@@ -982,4 +987,22 @@ bool ClipRequest::success() const
 void ClipRequest::setSuccess(bool status)
 {
 	_success = status;
+}
+
+CliprdrFormat::CliprdrFormat(uint32_t formatID, const char* formatName) : _formatID(formatID)
+{
+	if (formatName)
+		_formatName = formatName;
+}
+
+uint32_t CliprdrFormat::formatId() const
+{
+	return _formatID;
+}
+
+const char* CliprdrFormat::formatName() const
+{
+	if (_formatName.empty())
+		return nullptr;
+	return _formatName.c_str();
 }

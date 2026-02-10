@@ -388,8 +388,7 @@ char* GetKnownPath(eKnownPathTypes id)
 	}
 
 	if (!path)
-		WLog_WARN(TAG, "Path %s is %p", GetKnownPathIdString(WINPR_ASSERTING_INT_CAST(int, id)),
-		          path);
+		WLog_WARN(TAG, "Path %s is NULL", GetKnownPathIdString(WINPR_ASSERTING_INT_CAST(int, id)));
 	return path;
 }
 
@@ -446,9 +445,7 @@ char* GetEnvironmentSubPath(char* name, const char* path)
 
 char* GetCombinedPath(const char* basePath, const char* subPath)
 {
-	size_t length = 0;
 	HRESULT status = 0;
-	char* path = NULL;
 	char* subPathCpy = NULL;
 	size_t basePathLength = 0;
 	size_t subPathLength = 0;
@@ -459,8 +456,8 @@ char* GetCombinedPath(const char* basePath, const char* subPath)
 	if (subPath)
 		subPathLength = strlen(subPath);
 
-	length = basePathLength + subPathLength + 1;
-	path = (char*)calloc(1, length + 1);
+	const size_t length = basePathLength + subPathLength + 1;
+	char* path = (char*)calloc(1, length + 1);
 
 	if (!path)
 		goto fail;

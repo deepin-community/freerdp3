@@ -32,7 +32,7 @@ class SdlInputWidgetPairList : public SdlWidgetList
   public:
 	SdlInputWidgetPairList(const std::string& title, const std::vector<std::string>& labels,
 	                       const std::vector<std::string>& initial,
-	                       const std::vector<Uint32>& flags);
+	                       const std::vector<Uint32>& flags, ssize_t selected = -1);
 	SdlInputWidgetPairList(const SdlInputWidgetPairList& other) = delete;
 	SdlInputWidgetPairList(SdlInputWidgetPairList&& other) = delete;
 
@@ -41,11 +41,11 @@ class SdlInputWidgetPairList : public SdlWidgetList
 	SdlInputWidgetPairList& operator=(const SdlInputWidgetPairList& other) = delete;
 	SdlInputWidgetPairList& operator=(SdlInputWidgetPairList&& other) = delete;
 
-	int run(std::vector<std::string>& result);
+	[[nodiscard]] int run(std::vector<std::string>& result);
 
   protected:
-	bool updateInternal() override;
-	ssize_t get_index(const SDL_MouseButtonEvent& button);
+	[[nodiscard]] bool updateInternal() override;
+	[[nodiscard]] ssize_t get_index(const SDL_MouseButtonEvent& button);
 
   private:
 	enum
@@ -54,9 +54,10 @@ class SdlInputWidgetPairList : public SdlWidgetList
 		INPUT_BUTTON_CANCEL = -2
 	};
 
-	ssize_t next(ssize_t current);
+	[[nodiscard]] ssize_t next(ssize_t current);
 	[[nodiscard]] bool valid(ssize_t current) const;
-	std::shared_ptr<SdlInputWidgetPair> get(ssize_t index);
+	[[nodiscard]] std::shared_ptr<SdlInputWidgetPair> get(ssize_t index);
 
-	std::vector<std::shared_ptr<SdlInputWidgetPair>> _list;
+	std::vector<std::shared_ptr<SdlInputWidgetPair>> m_list;
+	ssize_t m_currentActiveTextInput = -1;
 };

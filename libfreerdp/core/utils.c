@@ -181,6 +181,7 @@ auth_status utils_authenticate(freerdp* instance, rdp_auth_reason reason, BOOL o
 			if (settings->SmartcardLogon)
 				reason = AUTH_SMARTCARD_PIN;
 			break;
+		case AUTH_RDSTLS:
 		default:
 			break;
 	}
@@ -319,7 +320,7 @@ const char* utils_is_vsock(const char* hostname)
 	if (!hostname)
 		return NULL;
 
-	const char vsock[8] = "vsock://";
+	const char vsock[8] = { 'v', 's', 'o', 'c', 'k', ':', '/', '/' };
 	if (strncmp(hostname, vsock, sizeof(vsock)) == 0)
 		return &hostname[sizeof(vsock)];
 	return NULL;

@@ -131,7 +131,7 @@ DEVICE* devman_get_device_by_id(DEVMAN* devman, UINT32 id)
 
 	if (!devman)
 	{
-		WLog_ERR(TAG, "device manager=%p", devman);
+		WLog_ERR(TAG, "device manager=NULL");
 		return NULL;
 	}
 

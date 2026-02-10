@@ -216,7 +216,7 @@ BOOL ndr_read_pickle(NdrContext* context, wStream* s)
 	if (!ndr_read_uint32(context, s, &v) || v != 0x20000)
 		return FALSE;
 
-	return ndr_read_uint32(context, s, &v); // padding
+	return TRUE;
 }
 
 BOOL ndr_write_pickle(NdrContext* context, wStream* s)
@@ -227,7 +227,6 @@ BOOL ndr_write_pickle(NdrContext* context, wStream* s)
 	if (!ndr_write_uint32(context, s, 0x20000))
 		return FALSE;
 
-	ndr_write_uint32(context, s, 0); /* padding */
 	return TRUE;
 }
 
@@ -519,6 +518,9 @@ BOOL ndr_read_uconformant_varying_array(NdrContext* context, wStream* s,
 	WINPR_ASSERT(itemType);
 	WINPR_ASSERT(ptarget);
 
+	if (itemType->itemSize == 0)
+		return FALSE;
+
 	UINT32 maxCount = 0;
 	UINT32 offset = 0;
 	UINT32 length = 0;
@@ -527,10 +529,10 @@ BOOL ndr_read_uconformant_varying_array(NdrContext* context, wStream* s,
 	    !ndr_read_uint32(context, s, &length))
 		return FALSE;
 
-	if ((length * itemType->itemSize) < hints->length)
+	if ((1ull * length * itemType->itemSize) > hints->length)
 		return FALSE;
 
-	if ((maxCount * itemType->itemSize) < hints->maxLength)
+	if ((1ull * maxCount * itemType->itemSize) > hints->maxLength)
 		return FALSE;
 
 	BYTE* target = (BYTE*)ptarget;
@@ -552,6 +554,9 @@ BOOL ndr_write_uconformant_varying_array(NdrContext* context, wStream* s,
 	WINPR_ASSERT(hints);
 	WINPR_ASSERT(itemType);
 	WINPR_ASSERT(psrc);
+
+	if (itemType->itemSize == 0)
+		return FALSE;
 
 	if (!ndr_write_uint32(context, s, hints->maxLength) || !ndr_write_uint32(context, s, 0) ||
 	    !ndr_write_uint32(context, s, hints->length))
@@ -575,13 +580,23 @@ BOOL ndr_read_uconformant_array(NdrContext* context, wStream* s, const NdrArrayH
 	WINPR_ASSERT(itemType);
 	WINPR_ASSERT(vtarget);
 
-	UINT32 count = 0;
+	if (itemType->itemSize == 0)
+		return FALSE;
 
+	UINT32 count = 0;
 	if (!ndr_read_uint32(context, s, &count))
 		return FALSE;
 
-	if ((count * itemType->itemSize < hints->count))
-		return FALSE;
+	if (itemType->arity == NDR_ARITY_SIMPLE)
+	{
+		if (count > hints->count)
+			return FALSE;
+	}
+	else
+	{
+		if ((1ull * count * itemType->itemSize) > hints->count)
+			return FALSE;
+	}
 
 	BYTE* target = (BYTE*)vtarget;
 	for (UINT32 i = 0; i < count; i++, target += itemType->itemSize)
@@ -911,6 +926,8 @@ BOOL ndr_read_pointedMessageEx(NdrContext* context, wStream* s, ndr_refid ptrId,
 	if (!ret)
 	{
 		size_t itemCount = ndr_hintsCount(descr, hints);
+		if (itemCount == 0)
+			return FALSE;
 		ret = calloc(itemCount, descr->itemSize);
 		if (!ret)
 			return FALSE;

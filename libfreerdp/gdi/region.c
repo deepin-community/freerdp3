@@ -143,11 +143,12 @@ GDI_RECT* gdi_CreateRect(INT32 xLeft, INT32 yTop, INT32 xRight, INT32 yBottom)
 
 BOOL gdi_RectToRgn(const GDI_RECT* rect, GDI_RGN* rgn)
 {
+	WINPR_ASSERT(rect);
+	WINPR_ASSERT(rgn);
+
 	BOOL rc = TRUE;
-	INT64 w = 0;
-	INT64 h = 0;
-	w = rect->right - rect->left + 1ll;
-	h = rect->bottom - rect->top + 1ll;
+	INT64 w = rect->right - rect->left + 1ll;
+	INT64 h = rect->bottom - rect->top + 1ll;
 
 	if ((w < 0) || (h < 0) || (w > INT32_MAX) || (h > INT32_MAX))
 	{
@@ -440,7 +441,7 @@ BOOL gdi_CRgnToCRect(INT32 x, INT32 y, INT32 w, INT32 h, INT32* left, INT32* top
  * @return nonzero if there is an overlap, 0 otherwise
  */
 
-INLINE BOOL gdi_CopyOverlap(INT32 x, INT32 y, INT32 width, INT32 height, INT32 srcx, INT32 srcy)
+inline BOOL gdi_CopyOverlap(INT32 x, INT32 y, INT32 width, INT32 height, INT32 srcx, INT32 srcy)
 {
 	GDI_RECT dst;
 	GDI_RECT src;
@@ -471,7 +472,7 @@ INLINE BOOL gdi_CopyOverlap(INT32 x, INT32 y, INT32 width, INT32 height, INT32 s
  * @return nonzero if successful, 0 otherwise
  */
 
-INLINE BOOL gdi_SetRect(GDI_RECT* rc, INT32 xLeft, INT32 yTop, INT32 xRight, INT32 yBottom)
+inline BOOL gdi_SetRect(GDI_RECT* rc, INT32 xLeft, INT32 yTop, INT32 xRight, INT32 yBottom)
 {
 	if (!rc)
 		return FALSE;
@@ -497,7 +498,7 @@ INLINE BOOL gdi_SetRect(GDI_RECT* rc, INT32 xLeft, INT32 yTop, INT32 xRight, INT
  * @return nonzero if successful, 0 otherwise
  */
 
-INLINE BOOL gdi_SetRgn(GDI_RGN* hRgn, INT32 nXLeft, INT32 nYLeft, INT32 nWidth, INT32 nHeight)
+inline BOOL gdi_SetRgn(GDI_RGN* hRgn, INT32 nXLeft, INT32 nYLeft, INT32 nWidth, INT32 nHeight)
 {
 	if (!hRgn)
 		return FALSE;
@@ -523,7 +524,7 @@ INLINE BOOL gdi_SetRgn(GDI_RGN* hRgn, INT32 nXLeft, INT32 nYLeft, INT32 nWidth, 
  * @return nonzero if successful, 0 otherwise
  */
 
-INLINE BOOL gdi_SetRectRgn(GDI_RGN* hRgn, INT32 nLeftRect, INT32 nTopRect, INT32 nRightRect,
+inline BOOL gdi_SetRectRgn(GDI_RGN* hRgn, INT32 nLeftRect, INT32 nTopRect, INT32 nRightRect,
                            INT32 nBottomRect)
 {
 	if (!gdi_CRectToRgn(nLeftRect, nTopRect, nRightRect, nBottomRect, hRgn))
@@ -541,7 +542,7 @@ INLINE BOOL gdi_SetRectRgn(GDI_RGN* hRgn, INT32 nLeftRect, INT32 nTopRect, INT32
  * @return nonzero if both regions are equal, 0 otherwise
  */
 
-INLINE BOOL gdi_EqualRgn(const GDI_RGN* hSrcRgn1, const GDI_RGN* hSrcRgn2)
+inline BOOL gdi_EqualRgn(const GDI_RGN* hSrcRgn1, const GDI_RGN* hSrcRgn2)
 {
 	WINPR_ASSERT(hSrcRgn1);
 	WINPR_ASSERT(hSrcRgn2);
@@ -563,7 +564,7 @@ INLINE BOOL gdi_EqualRgn(const GDI_RGN* hSrcRgn1, const GDI_RGN* hSrcRgn2)
  * @return nonzero if successful, 0 otherwise
  */
 
-INLINE BOOL gdi_CopyRect(GDI_RECT* dst, const GDI_RECT* src)
+inline BOOL gdi_CopyRect(GDI_RECT* dst, const GDI_RECT* src)
 {
 	if (!dst || !src)
 		return FALSE;
@@ -584,7 +585,7 @@ INLINE BOOL gdi_CopyRect(GDI_RECT* dst, const GDI_RECT* src)
  * @return nonzero if the point is inside, 0 otherwise
  */
 
-INLINE BOOL gdi_PtInRect(const GDI_RECT* rc, INT32 x, INT32 y)
+inline BOOL gdi_PtInRect(const GDI_RECT* rc, INT32 x, INT32 y)
 {
 	/*
 	 * points on the left and top sides are considered in,
@@ -612,7 +613,7 @@ INLINE BOOL gdi_PtInRect(const GDI_RECT* rc, INT32 x, INT32 y)
  * @return nonzero on success, 0 otherwise
  */
 
-INLINE BOOL gdi_InvalidateRegion(HGDI_DC hdc, INT32 x, INT32 y, INT32 w, INT32 h)
+inline BOOL gdi_InvalidateRegion(HGDI_DC hdc, INT32 x, INT32 y, INT32 w, INT32 h)
 {
 	GDI_RECT inv;
 	GDI_RECT rgn;

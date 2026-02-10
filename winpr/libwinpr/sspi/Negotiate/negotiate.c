@@ -41,6 +41,11 @@
 static const char NEGO_REG_KEY[] =
     "Software\\" WINPR_VENDOR_STRING "\\" WINPR_PRODUCT_STRING "\\SSPI\\Negotiate";
 
+static const char PACKAGE_NAME_DISABLE_ALL[] = "none";
+static const char PACKAGE_NAME_NTLM[] = "ntlm";
+static const char PACKAGE_NAME_KERBEROS[] = "kerberos";
+static const char PACKAGE_NAME_KERBEROS_U2U[] = "u2u";
+
 typedef struct
 {
 	const TCHAR* name;
@@ -249,20 +254,21 @@ static BOOL negotiate_get_dword(HKEY hKey, const char* subkey, DWORD* pdwValue)
 	return TRUE;
 }
 
-static BOOL negotiate_get_config_from_auth_package_list(void* pAuthData, BOOL* kerberos, BOOL* ntlm)
+static BOOL negotiate_get_config_from_auth_package_list(void* pAuthData, BOOL* kerberos, BOOL* ntlm,
+                                                        BOOL* u2u)
 {
+	BOOL rc = FALSE;
 	char* tok_ctx = NULL;
-	char* tok_ptr = NULL;
 	char* PackageList = NULL;
 
 	if (!sspi_CopyAuthPackageListA((const SEC_WINNT_AUTH_IDENTITY_INFO*)pAuthData, &PackageList))
 		return FALSE;
 
-	tok_ptr = strtok_s(PackageList, ",", &tok_ctx);
+	char* tok_ptr = strtok_s(PackageList, ",", &tok_ctx);
 
 	while (tok_ptr)
 	{
-		char* PackageName = tok_ptr;
+		const char* PackageName = tok_ptr;
 		BOOL PackageInclude = TRUE;
 
 		if (PackageName[0] == '!')
@@ -271,42 +277,67 @@ static BOOL negotiate_get_config_from_auth_package_list(void* pAuthData, BOOL* k
 			PackageInclude = FALSE;
 		}
 
-		if (!_stricmp(PackageName, "ntlm"))
+		if (_stricmp(PackageName, PACKAGE_NAME_NTLM) == 0)
 		{
 			*ntlm = PackageInclude;
 		}
-		else if (!_stricmp(PackageName, "kerberos"))
+		else if (_stricmp(PackageName, PACKAGE_NAME_KERBEROS) == 0)
 		{
 			*kerberos = PackageInclude;
 		}
+		else if (_stricmp(PackageName, PACKAGE_NAME_KERBEROS_U2U) == 0)
+		{
+			*u2u = PackageInclude;
+		}
+		else if (_stricmp(PackageName, PACKAGE_NAME_DISABLE_ALL) == 0)
+		{
+			*kerberos = FALSE;
+			*ntlm = FALSE;
+			*u2u = FALSE;
+
+			if (PackageName != PackageList)
+			{
+				WLog_WARN(TAG, "Special keyword '%s' not first in list, aborting", PackageName);
+				goto fail;
+			}
+		}
 		else
 		{
-			WLog_WARN(TAG, "Unknown authentication package name: %s", PackageName);
+			WLog_WARN(TAG, "Unknown authentication package name: %s, ignoring", PackageName);
 		}
 
 		tok_ptr = strtok_s(NULL, ",", &tok_ctx);
 	}
 
+	rc = TRUE;
+fail:
 	free(PackageList);
-	return TRUE;
+	return rc;
 }
 
-static BOOL negotiate_get_config(void* pAuthData, BOOL* kerberos, BOOL* ntlm)
+static BOOL negotiate_get_config(void* pAuthData, BOOL* kerberos, BOOL* ntlm, BOOL* u2u)
 {
 	HKEY hKey = NULL;
 	LONG rc = 0;
 
 	WINPR_ASSERT(kerberos);
 	WINPR_ASSERT(ntlm);
+	WINPR_ASSERT(u2u);
 
 #if !defined(WITH_KRB5_NO_NTLM_FALLBACK)
 	*ntlm = TRUE;
 #else
 	*ntlm = FALSE;
 #endif
+#if defined(WITH_KRB5)
 	*kerberos = TRUE;
+	*u2u = TRUE;
+#else
+	*kerberos = FALSE;
+	*u2u = FALSE;
+#endif
 
-	if (negotiate_get_config_from_auth_package_list(pAuthData, kerberos, ntlm))
+	if (negotiate_get_config_from_auth_package_list(pAuthData, kerberos, ntlm, u2u))
 	{
 		return TRUE; // use explicit authentication package list
 	}
@@ -316,11 +347,14 @@ static BOOL negotiate_get_config(void* pAuthData, BOOL* kerberos, BOOL* ntlm)
 	{
 		DWORD dwValue = 0;
 
-		if (negotiate_get_dword(hKey, "kerberos", &dwValue))
+		if (negotiate_get_dword(hKey, PACKAGE_NAME_KERBEROS, &dwValue))
 			*kerberos = (dwValue != 0) ? TRUE : FALSE;
 
+		if (negotiate_get_dword(hKey, PACKAGE_NAME_KERBEROS_U2U, &dwValue))
+			*u2u = (dwValue != 0) ? TRUE : FALSE;
+
 #if !defined(WITH_KRB5_NO_NTLM_FALLBACK)
-		if (negotiate_get_dword(hKey, "ntlm", &dwValue))
+		if (negotiate_get_dword(hKey, PACKAGE_NAME_NTLM, &dwValue))
 			*ntlm = (dwValue != 0) ? TRUE : FALSE;
 #endif
 
@@ -370,7 +404,7 @@ static BOOL negotiate_write_neg_token(PSecBuffer output_buffer, NegToken* token)
 	{
 		if (!WinPrAsn1EncContextualRawContent(enc, 0, &mechTypes))
 			goto cleanup;
-		WLog_DBG(TAG, "\tmechTypes [0] (%li bytes)", token->mechTypes.cbBuffer);
+		WLog_DBG(TAG, "\tmechTypes [0] (%" PRIu32 " bytes)", token->mechTypes.cbBuffer);
 	}
 	/* negState [0] ENUMERATED */
 	else if (token->negState != NOSTATE)
@@ -393,7 +427,7 @@ static BOOL negotiate_write_neg_token(PSecBuffer output_buffer, NegToken* token)
 	{
 		if (WinPrAsn1EncContextualOctetString(enc, 2, &mechToken) == 0)
 			goto cleanup;
-		WLog_DBG(TAG, "\tmechToken [2] (%li bytes)", token->mechToken.cbBuffer);
+		WLog_DBG(TAG, "\tmechToken [2] (%" PRIu32 " bytes)", token->mechToken.cbBuffer);
 	}
 
 	/* mechListMIC [3] OCTET STRING */
@@ -401,7 +435,7 @@ static BOOL negotiate_write_neg_token(PSecBuffer output_buffer, NegToken* token)
 	{
 		if (WinPrAsn1EncContextualOctetString(enc, 3, &mechListMic) == 0)
 			goto cleanup;
-		WLog_DBG(TAG, "\tmechListMIC [3] (%li bytes)", token->mic.cbBuffer);
+		WLog_DBG(TAG, "\tmechListMIC [3] (%" PRIu32 " bytes)", token->mic.cbBuffer);
 	}
 
 	/* NegTokenInit or NegTokenResp */
@@ -499,7 +533,7 @@ static BOOL negotiate_read_neg_token(PSecBuffer input, NegToken* token)
 						return FALSE;
 					token->mechTypes.cbBuffer = (UINT32)mlen;
 					token->mechTypes.pvBuffer = Stream_Buffer(&s);
-					WLog_DBG(TAG, "\tmechTypes [0] (%li bytes)", token->mechTypes.cbBuffer);
+					WLog_DBG(TAG, "\tmechTypes [0] (%" PRIu32 " bytes)", token->mechTypes.cbBuffer);
 				}
 				else
 				{
@@ -507,8 +541,21 @@ static BOOL negotiate_read_neg_token(PSecBuffer input, NegToken* token)
 					WinPrAsn1_ENUMERATED rd = 0;
 					if (!WinPrAsn1DecReadEnumerated(&dec2, &rd))
 						return FALSE;
-					token->negState = rd;
-					WLog_DBG(TAG, "\tnegState [0] (%d)", token->negState);
+					switch (rd)
+					{
+						case NOSTATE:
+						case ACCEPT_COMPLETED:
+						case ACCEPT_INCOMPLETE:
+						case REJECT:
+						case REQUEST_MIC:
+							break;
+						default:
+							WLog_ERR(TAG, "Invalid negState enumeration value %d", rd);
+							return FALSE;
+					}
+
+					token->negState = WINPR_ASSERTING_INT_CAST(enum NegState, rd);
+					WLog_DBG(TAG, "\tnegState [0] (%d)", rd);
 				}
 				break;
 			case 1:
@@ -517,7 +564,7 @@ static BOOL negotiate_read_neg_token(PSecBuffer input, NegToken* token)
 					/* reqFlags [1] ContextFlags BIT STRING (ignored) */
 					if (!WinPrAsn1DecPeekTagAndLen(&dec2, &tag, &len) || (tag != ER_TAG_BIT_STRING))
 						return FALSE;
-					WLog_DBG(TAG, "\treqFlags [1] (%li bytes)", len);
+					WLog_DBG(TAG, "\treqFlags [1] (%" PRIuz " bytes)", len);
 				}
 				else
 				{
@@ -537,7 +584,7 @@ static BOOL negotiate_read_neg_token(PSecBuffer input, NegToken* token)
 				token->mechToken.cbBuffer = (UINT32)octet_string.len;
 				token->mechToken.pvBuffer = octet_string.data;
 				token->mechToken.BufferType = SECBUFFER_TOKEN;
-				WLog_DBG(TAG, "\tmechToken [2] (%li bytes)", octet_string.len);
+				WLog_DBG(TAG, "\tmechToken [2] (%" PRIuz " bytes)", octet_string.len);
 				break;
 			case 3:
 				/* mechListMic [3] OCTET STRING */
@@ -548,7 +595,7 @@ static BOOL negotiate_read_neg_token(PSecBuffer input, NegToken* token)
 				token->mic.cbBuffer = (UINT32)octet_string.len;
 				token->mic.pvBuffer = octet_string.data;
 				token->mic.BufferType = SECBUFFER_TOKEN;
-				WLog_DBG(TAG, "\tmechListMIC [3] (%li bytes)", octet_string.len);
+				WLog_DBG(TAG, "\tmechListMIC [3] (%" PRIuz " bytes)", octet_string.len);
 				break;
 			default:
 				WLog_ERR(TAG, "unknown contextual item %d", contextual);
@@ -629,7 +676,7 @@ static SECURITY_STATUS SEC_ENTRY negotiate_InitializeSecurityContextW(
     PCtxtHandle phNewContext, PSecBufferDesc pOutput, PULONG pfContextAttr, PTimeStamp ptsExpiry)
 {
 	NEGOTIATE_CONTEXT* context = NULL;
-	NEGOTIATE_CONTEXT init_context = { 0 };
+	NEGOTIATE_CONTEXT init_context = NEGOTIATE_CONTEXT_init();
 	MechCred* creds = NULL;
 	PCtxtHandle sub_context = NULL;
 	PCredHandle sub_cred = NULL;
@@ -683,7 +730,10 @@ static SECURITY_STATUS SEC_ENTRY negotiate_InitializeSecurityContextW(
 			WINPR_ASSERT(pkg->table_w);
 
 			if (!cred->valid)
+			{
+				WLog_DBG(TAG, "Unavailable mechanism: %s", negotiate_mech_name(cred->mech->oid));
 				continue;
+			}
 
 			/* Send an optimistic token for the first valid mechanism */
 			if (!init_context.mech)
@@ -972,7 +1022,7 @@ static SECURITY_STATUS SEC_ENTRY negotiate_AcceptSecurityContext(
     PTimeStamp ptsTimeStamp)
 {
 	NEGOTIATE_CONTEXT* context = NULL;
-	NEGOTIATE_CONTEXT init_context = { 0 };
+	NEGOTIATE_CONTEXT init_context = NEGOTIATE_CONTEXT_init();
 	MechCred* creds = NULL;
 	PCredHandle sub_cred = NULL;
 	NegToken input_token = empty_neg_token;
@@ -1406,10 +1456,11 @@ static SECURITY_STATUS SEC_ENTRY negotiate_AcquireCredentialsHandleW(
     void* pAuthData, SEC_GET_KEY_FN pGetKeyFn, void* pvGetKeyArgument, PCredHandle phCredential,
     PTimeStamp ptsExpiry)
 {
-	BOOL kerberos = 0;
-	BOOL ntlm = 0;
+	BOOL kerberos = FALSE;
+	BOOL ntlm = FALSE;
+	BOOL u2u = FALSE;
 
-	if (!negotiate_get_config(pAuthData, &kerberos, &ntlm))
+	if (!negotiate_get_config(pAuthData, &kerberos, &ntlm, &u2u))
 		return SEC_E_INTERNAL_ERROR;
 
 	MechCred* creds = calloc(MECH_COUNT, sizeof(MechCred));
@@ -1423,7 +1474,9 @@ static SECURITY_STATUS SEC_ENTRY negotiate_AcquireCredentialsHandleW(
 		const SecPkg* pkg = MechTable[i].pkg;
 		cred->mech = &MechTable[i];
 
-		if (!kerberos && _tcsncmp(pkg->name, KERBEROS_SSP_NAME, ARRAYSIZE(KERBEROS_SSP_NAME)) == 0)
+		if (!kerberos && sspi_gss_oid_compare(MechTable[i].oid, &kerberos_OID))
+			continue;
+		if (!u2u && sspi_gss_oid_compare(MechTable[i].oid, &kerberos_u2u_OID))
 			continue;
 		if (!ntlm && _tcsncmp(SecPkgTable[i].name, NTLM_SSP_NAME, ARRAYSIZE(NTLM_SSP_NAME)) == 0)
 			continue;
@@ -1448,10 +1501,11 @@ static SECURITY_STATUS SEC_ENTRY negotiate_AcquireCredentialsHandleA(
     void* pAuthData, SEC_GET_KEY_FN pGetKeyFn, void* pvGetKeyArgument, PCredHandle phCredential,
     PTimeStamp ptsExpiry)
 {
-	BOOL kerberos = 0;
-	BOOL ntlm = 0;
+	BOOL kerberos = FALSE;
+	BOOL ntlm = FALSE;
+	BOOL u2u = FALSE;
 
-	if (!negotiate_get_config(pAuthData, &kerberos, &ntlm))
+	if (!negotiate_get_config(pAuthData, &kerberos, &ntlm, &u2u))
 		return SEC_E_INTERNAL_ERROR;
 
 	MechCred* creds = calloc(MECH_COUNT, sizeof(MechCred));
@@ -1466,7 +1520,9 @@ static SECURITY_STATUS SEC_ENTRY negotiate_AcquireCredentialsHandleA(
 
 		cred->mech = &MechTable[i];
 
-		if (!kerberos && _tcsncmp(pkg->name, KERBEROS_SSP_NAME, ARRAYSIZE(KERBEROS_SSP_NAME)) == 0)
+		if (!kerberos && sspi_gss_oid_compare(MechTable[i].oid, &kerberos_OID))
+			continue;
+		if (!u2u && sspi_gss_oid_compare(MechTable[i].oid, &kerberos_u2u_OID))
 			continue;
 		if (!ntlm && _tcsncmp(SecPkgTable[i].name, NTLM_SSP_NAME, ARRAYSIZE(NTLM_SSP_NAME)) == 0)
 			continue;

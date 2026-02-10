@@ -66,11 +66,12 @@ struct rdp_wst
 	uint16_t gwport;
 	char* gwpath;
 	websocket_context* wscontext;
+	wLog* log;
 };
 
-static const char arm_query_param[] = "%s%cClmTk=Bearer%%20%s&X-MS-User-Agent=FreeRDP%%2F3.0";
+static const char arm_query_param[] = "%s%cClmTk=Bearer%%20%s";
 
-static BOOL wst_get_gateway_credentials(rdpContext* context, rdp_auth_reason reason)
+static BOOL wst_get_gateway_credentials(wLog* log, rdpContext* context, rdp_auth_reason reason)
 {
 	WINPR_ASSERT(context);
 	freerdp* instance = context->instance;
@@ -85,7 +86,7 @@ static BOOL wst_get_gateway_credentials(rdpContext* context, rdp_auth_reason rea
 			freerdp_set_last_error_log(instance->context, FREERDP_ERROR_CONNECT_CANCELLED);
 			return FALSE;
 		case AUTH_NO_CREDENTIALS:
-			WLog_INFO(TAG, "No credentials provided - using NULL identity");
+			WLog_Print(log, WLOG_INFO, "No credentials provided - using NULL identity");
 			return TRUE;
 		case AUTH_FAILED:
 		default:
@@ -108,7 +109,7 @@ static BOOL wst_auth_init(rdpWst* wst, rdpTls* tls, TCHAR* authPkg)
 	if (!credssp_auth_init(wst->auth, authPkg, tls->Bindings))
 		return FALSE;
 
-	if (!wst_get_gateway_credentials(context, GW_AUTH_RDG))
+	if (!wst_get_gateway_credentials(wst->log, context, GW_AUTH_RDG))
 		return FALSE;
 
 	if (!identity_set_from_settings(&identity, settings, FreeRDP_GatewayUsername,
@@ -164,17 +165,15 @@ static BOOL wst_set_auth_header(rdpCredsspAuth* auth, HttpRequest* request)
 static BOOL wst_recv_auth_token(rdpCredsspAuth* auth, HttpResponse* response)
 {
 	size_t len = 0;
-	const char* token64 = NULL;
 	size_t authTokenLength = 0;
 	BYTE* authTokenData = NULL;
 	SecBuffer authToken = { 0 };
-	long StatusCode = 0;
 	int rc = 0;
 
 	if (!auth || !response)
 		return FALSE;
 
-	StatusCode = http_response_get_status_code(response);
+	const UINT16 StatusCode = http_response_get_status_code(response);
 	switch (StatusCode)
 	{
 		case HTTP_STATUS_DENIED:
@@ -185,7 +184,7 @@ static BOOL wst_recv_auth_token(rdpCredsspAuth* auth, HttpResponse* response)
 			return FALSE;
 	}
 
-	token64 = http_response_get_auth_token(response, credssp_auth_pkg_name(auth));
+	const char* token64 = http_response_get_auth_token(response, credssp_auth_pkg_name(auth));
 
 	if (!token64)
 		return FALSE;
@@ -228,7 +227,7 @@ static BOOL wst_tls_connect(rdpWst* wst, rdpTls* tls, UINT32 timeout)
 
 	sockfd = freerdp_tcp_connect(wst->context, peerHostname, peerPort, timeout);
 
-	WLog_DBG(TAG, "connecting to %s %d", peerHostname, peerPort);
+	WLog_Print(wst->log, WLOG_DEBUG, "connecting to %s %d", peerHostname, peerPort);
 	if (sockfd < 0)
 	{
 		return FALSE;
@@ -342,14 +341,15 @@ static BOOL wst_send_http_request(rdpWst* wst, rdpTls* tls)
 		return FALSE;
 
 	const size_t sz = Stream_Length(s);
-	int status = freerdp_tls_write_all(tls, Stream_Buffer(s), sz);
+	WLog_Print(wst->log, WLOG_TRACE, "header [%" PRIuz "]: %s", sz, Stream_Buffer(s));
 
+	const int status = freerdp_tls_write_all(tls, Stream_Buffer(s), sz);
 	Stream_Free(s, TRUE);
 	return (status >= 0);
 }
 
 static BOOL wst_handle_ok_or_forbidden(rdpWst* wst, HttpResponse** ppresponse, DWORD timeout,
-                                       long* pStatusCode)
+                                       UINT16* pStatusCode)
 {
 	WINPR_ASSERT(wst);
 	WINPR_ASSERT(ppresponse);
@@ -358,10 +358,16 @@ static BOOL wst_handle_ok_or_forbidden(rdpWst* wst, HttpResponse** ppresponse, D
 
 	/* AVD returns a 403 response with a ARRAffinity cookie set. retry with that cookie */
 	const char* affinity = http_response_get_setcookie(*ppresponse, "ARRAffinity");
-	if (affinity && freerdp_settings_get_bool(wst->context->settings, FreeRDP_GatewayArmTransport))
+	const char* samesite = http_response_get_setcookie(*ppresponse, "ARRAffinitySameSite");
+	if ((affinity || samesite) &&
+	    freerdp_settings_get_bool(wst->context->settings, FreeRDP_GatewayArmTransport))
 	{
-		WLog_DBG(TAG, "Got Affinity cookie %s", affinity);
-		http_context_set_cookie(wst->http, "ARRAffinity", affinity);
+		WLog_Print(wst->log, WLOG_INFO, "Got ARRAffinity cookie         %s", affinity);
+		WLog_Print(wst->log, WLOG_INFO, "Got ARRAffinitySameSite cookie %s", samesite);
+		if (affinity)
+			http_context_set_cookie(wst->http, "ARRAffinity", affinity);
+		if (samesite)
+			http_context_set_cookie(wst->http, "ARRAffinitySameSite", samesite);
 		http_response_free(*ppresponse);
 		*ppresponse = NULL;
 		/* Terminate this connection and make a new one with the Loadbalancing Cookie */
@@ -380,13 +386,26 @@ static BOOL wst_handle_ok_or_forbidden(rdpWst* wst, HttpResponse** ppresponse, D
 			char* urlWithAuth = NULL;
 			size_t urlLen = 0;
 			char firstParam = (strchr(wst->gwpath, '?') != NULL) ? '&' : '?';
-			winpr_asprintf(&urlWithAuth, &urlLen, arm_query_param, wst->gwpath, firstParam,
-			               freerdp_settings_get_string(wst->context->settings,
-			                                           FreeRDP_GatewayHttpExtAuthBearer));
+			const char* bearer = freerdp_settings_get_string(wst->context->settings,
+			                                                 FreeRDP_GatewayHttpExtAuthBearer);
+			const char* ua =
+			    freerdp_settings_get_string(wst->context->settings, FreeRDP_GatewayHttpMsUserAgent);
+			winpr_asprintf(&urlWithAuth, &urlLen, arm_query_param, wst->gwpath, firstParam, bearer,
+			               ua);
 			if (!urlWithAuth)
 				return FALSE;
 			free(wst->gwpath);
 			wst->gwpath = urlWithAuth;
+			if (!utils_str_is_empty(ua))
+			{
+				size_t ualen = 0;
+				char* uastr = NULL;
+				winpr_asprintf(&uastr, &ualen, "%s&X-MS-User-Agent=%s", wst->gwpath, ua);
+				if (!uastr)
+					return FALSE;
+				free(wst->gwpath);
+				wst->gwpath = uastr;
+			}
 			if (!http_context_set_uri(wst->http, wst->gwpath))
 				return FALSE;
 			if (!http_context_enable_websocket_upgrade(wst->http, TRUE))
@@ -399,13 +418,14 @@ static BOOL wst_handle_ok_or_forbidden(rdpWst* wst, HttpResponse** ppresponse, D
 		if (!*ppresponse)
 			return FALSE;
 
+		(void)http_response_extract_cookies(*ppresponse, wst->http);
 		*pStatusCode = http_response_get_status_code(*ppresponse);
 	}
 
 	return TRUE;
 }
 
-static BOOL wst_handle_denied(rdpWst* wst, HttpResponse** ppresponse, long* pStatusCode)
+static BOOL wst_handle_denied(rdpWst* wst, HttpResponse** ppresponse, UINT16* pStatusCode)
 {
 	WINPR_ASSERT(wst);
 	WINPR_ASSERT(ppresponse);
@@ -425,6 +445,8 @@ static BOOL wst_handle_denied(rdpWst* wst, HttpResponse** ppresponse, long* pSta
 	if (!*ppresponse)
 		return FALSE;
 
+	(void)http_response_extract_cookies(*ppresponse, wst->http);
+
 	while (!credssp_auth_is_complete(wst->auth))
 	{
 		if (!wst_recv_auth_token(wst->auth, *ppresponse))
@@ -439,20 +461,61 @@ static BOOL wst_handle_denied(rdpWst* wst, HttpResponse** ppresponse, long* pSta
 			*ppresponse = http_response_recv(wst->tls, TRUE);
 			if (!*ppresponse)
 				return FALSE;
+			(void)http_response_extract_cookies(*ppresponse, wst->http);
 		}
 	}
 	*pStatusCode = http_response_get_status_code(*ppresponse);
 	return TRUE;
 }
 
+static BOOL wst_handle_http_code(rdpWst* wst, UINT16 StatusCode)
+{
+	switch (StatusCode)
+	{
+		case HTTP_STATUS_PAYMENT_REQ:
+		case HTTP_STATUS_FORBIDDEN:
+		case HTTP_STATUS_DENIED:
+			freerdp_set_last_error_if_not(wst->context, FREERDP_ERROR_CONNECT_ACCESS_DENIED);
+			break;
+		case HTTP_STATUS_MOVED:
+		case HTTP_STATUS_USE_PROXY:
+		case HTTP_STATUS_BAD_REQUEST:
+		case HTTP_STATUS_NOT_FOUND:
+		case HTTP_STATUS_GONE:
+			freerdp_set_last_error_if_not(wst->context, FREERDP_ERROR_CONNECT_TRANSPORT_FAILED);
+			break;
+		case HTTP_STATUS_SERVER_ERROR:
+		case HTTP_STATUS_NOT_SUPPORTED:
+		case HTTP_STATUS_BAD_GATEWAY:
+		case HTTP_STATUS_SERVICE_UNAVAIL:
+		case HTTP_STATUS_VERSION_NOT_SUP:
+			freerdp_set_last_error_if_not(wst->context, FREERDP_ERROR_CONNECT_TRANSPORT_FAILED);
+			break;
+		case HTTP_STATUS_GATEWAY_TIMEOUT:
+			freerdp_set_last_error_if_not(wst->context, FREERDP_ERROR_CONNECT_ACTIVATION_TIMEOUT);
+			break;
+		default:
+			break;
+	}
+
+	char buffer[64] = { 0 };
+	WLog_Print(wst->log, WLOG_ERROR, "Unexpected HTTP status: %s",
+	           freerdp_http_status_string_format(StatusCode, buffer, ARRAYSIZE(buffer)));
+	freerdp_set_last_error_if_not(wst->context, FREERDP_ERROR_CONNECT_FAILED);
+	return FALSE;
+}
+
 BOOL wst_connect(rdpWst* wst, DWORD timeout)
 {
-	HttpResponse* response = NULL;
-	long StatusCode = 0;
-
 	WINPR_ASSERT(wst);
+	WINPR_ASSERT(wst->context);
+
 	if (!wst_tls_connect(wst, wst->tls, timeout))
+	{
+		freerdp_set_last_error_if_not(wst->context, FREERDP_ERROR_CONNECT_FAILED);
 		return FALSE;
+	}
+
 	if (freerdp_settings_get_bool(wst->context->settings, FreeRDP_GatewayArmTransport))
 	{
 		/*
@@ -463,15 +526,20 @@ BOOL wst_connect(rdpWst* wst, DWORD timeout)
 		http_context_enable_websocket_upgrade(wst->http, FALSE);
 	}
 	if (!wst_send_http_request(wst, wst->tls))
-		return FALSE;
-
-	response = http_response_recv(wst->tls, TRUE);
-	if (!response)
 	{
+		freerdp_set_last_error_if_not(wst->context, FREERDP_ERROR_CONNECT_FAILED);
 		return FALSE;
 	}
 
-	StatusCode = http_response_get_status_code(response);
+	HttpResponse* response = http_response_recv(wst->tls, TRUE);
+	if (!response)
+	{
+		freerdp_set_last_error_if_not(wst->context, FREERDP_ERROR_CONNECT_FAILED);
+		return FALSE;
+	}
+	(void)http_response_extract_cookies(response, wst->http);
+
+	UINT16 StatusCode = http_response_get_status_code(response);
 	BOOL success = TRUE;
 	switch (StatusCode)
 	{
@@ -491,17 +559,12 @@ BOOL wst_connect(rdpWst* wst, DWORD timeout)
 	const BOOL isWebsocket = http_response_is_websocket(wst->http, response);
 	http_response_free(response);
 	if (!success)
-		return FALSE;
+		return wst_handle_http_code(wst, StatusCode);
 
 	if (isWebsocket)
 		return websocket_context_reset(wst->wscontext);
-	else
-	{
-		char buffer[64] = { 0 };
-		WLog_ERR(TAG, "Unexpected HTTP status: %s",
-		         freerdp_http_status_string_format(StatusCode, buffer, ARRAYSIZE(buffer)));
-	}
-	return FALSE;
+
+	return wst_handle_http_code(wst, StatusCode);
 }
 
 DWORD wst_get_event_handles(rdpWst* wst, HANDLE* events, DWORD count)
@@ -728,7 +791,8 @@ static BOOL wst_parse_url(rdpWst* wst, const char* url)
 	{
 		if (strncmp("https://", url, 8) != 0)
 		{
-			WLog_ERR(TAG, "Websocket URL is invalid. Only wss:// or https:// URLs are supported");
+			WLog_Print(wst->log, WLOG_ERROR,
+			           "Websocket URL is invalid. Only wss:// or https:// URLs are supported");
 			return FALSE;
 		}
 		else
@@ -783,6 +847,7 @@ rdpWst* wst_new(rdpContext* context)
 	if (!wst)
 		return NULL;
 
+	wst->log = WLog_Get(TAG);
 	wst->context = context;
 
 	wst->gwhostname = NULL;
@@ -801,17 +866,23 @@ rdpWst* wst_new(rdpContext* context)
 	if (!wst->http)
 		goto wst_alloc_error;
 
-	if (!http_context_set_uri(wst->http, wst->gwpath) ||
-	    !http_context_set_accept(wst->http, "*/*") ||
-	    !http_context_set_cache_control(wst->http, "no-cache") ||
-	    !http_context_set_pragma(wst->http, "no-cache") ||
-	    !http_context_set_connection(wst->http, "Keep-Alive") ||
-	    !http_context_set_user_agent(wst->http, FREERDP_USER_AGENT) ||
-	    !http_context_set_x_ms_user_agent(wst->http, FREERDP_USER_AGENT) ||
-	    !http_context_set_host(wst->http, wst->gwhostname) ||
-	    !http_context_enable_websocket_upgrade(wst->http, TRUE))
 	{
-		goto wst_alloc_error;
+		const char* useragent =
+		    freerdp_settings_get_string(context->settings, FreeRDP_GatewayHttpUserAgent);
+		const char* msuseragent =
+		    freerdp_settings_get_string(context->settings, FreeRDP_GatewayHttpMsUserAgent);
+		if (!http_context_set_uri(wst->http, wst->gwpath) ||
+		    !http_context_set_accept(wst->http, "*/*") ||
+		    !http_context_set_cache_control(wst->http, "no-cache") ||
+		    !http_context_set_pragma(wst->http, "no-cache") ||
+		    !http_context_set_connection(wst->http, "Keep-Alive") ||
+		    !http_context_set_user_agent(wst->http, useragent) ||
+		    !http_context_set_x_ms_user_agent(wst->http, msuseragent) ||
+		    !http_context_set_host(wst->http, wst->gwhostname) ||
+		    !http_context_enable_websocket_upgrade(wst->http, TRUE))
+		{
+			goto wst_alloc_error;
+		}
 	}
 
 	wst->frontBio = BIO_new(BIO_s_wst());

@@ -51,6 +51,14 @@ if(NOT FREERDP_UNIFIED_BUILD)
   add_compile_definitions(NONAMELESSUNION)
 endif()
 
+set(WINPR_PC_REQUIRES_PRIVATE "" CACHE INTERNAL "dependencies")
+macro(winpr_pc_add_requires_private)
+  foreach(_lib ${ARGN})
+    list(APPEND WINPR_PC_REQUIRES_PRIVATE ${_lib})
+  endforeach()
+  set(WINPR_PC_REQUIRES_PRIVATE ${WINPR_PC_REQUIRES_PRIVATE} CACHE INTERNAL "dependencies")
+endmacro()
+
 if(WIN32 AND NOT UWP)
   set(NATIVE_SSPI ON)
 endif()
@@ -130,25 +138,8 @@ if(NOT WIN32)
 endif()
 
 # Soname versioning
-set(VERSION_REGEX "^(.*)([0-9]+)\\.([0-9]+)\\.([0-9]+)-?(.*)")
-set(RAW_VERSION_STRING "3.16.0")
-if(EXISTS "${PROJECT_SOURCE_DIR}/.source_tag")
-  file(READ ${PROJECT_SOURCE_DIR}/.source_tag RAW_VERSION_STRING)
-elseif(USE_VERSION_FROM_GIT_TAG)
-  git_get_exact_tag(_GIT_TAG --tags --always)
-  if(NOT ${_GIT_TAG} STREQUAL "n/a")
-    string(REGEX MATCH ${VERSION_REGEX} FOUND_TAG "${_GIT_TAG}")
-    if(FOUND_TAG)
-      set(RAW_VERSION_STRING ${_GIT_TAG})
-    endif()
-  endif()
-endif()
-string(STRIP ${RAW_VERSION_STRING} RAW_VERSION_STRING)
-
-string(REGEX REPLACE "${VERSION_REGEX}" "\\2" WINPR_VERSION_MAJOR "${RAW_VERSION_STRING}")
-string(REGEX REPLACE "${VERSION_REGEX}" "\\3" WINPR_VERSION_MINOR "${RAW_VERSION_STRING}")
-string(REGEX REPLACE "${VERSION_REGEX}" "\\4" WINPR_VERSION_REVISION "${RAW_VERSION_STRING}")
-string(REGEX REPLACE "${VERSION_REGEX}" "\\5" WINPR_VERSION_SUFFIX "${RAW_VERSION_STRING}")
+include(GetProjectVersion)
+get_project_version(WINPR_VERSION_MAJOR WINPR_VERSION_MINOR WINPR_VERSION_REVISION WINPR_VERSION_SUFFIX GIT_REVISION)
 
 set(WINPR_VERSION "${WINPR_VERSION_MAJOR}.${WINPR_VERSION_MINOR}.${WINPR_VERSION_REVISION}")
 set(WINPR_API_VERSION "${WINPR_VERSION_MAJOR}")
@@ -311,6 +302,7 @@ endif()
 
 if(WITH_OPENSSL AND OPENSSL_FOUND)
   add_compile_definitions("WITH_OPENSSL")
+  winpr_pc_add_requires_private("libssl")
 endif()
 
 if(WITH_MBEDTLS AND MBEDTLS_FOUND)
@@ -347,6 +339,17 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 set(WINPR_INCLUDE_DIR "include/winpr${WINPR_VERSION_MAJOR}")
 
 add_subdirectory(libwinpr)
+
+list(REMOVE_DUPLICATES WINPR_PC_REQUIRES_PRIVATE)
+list(JOIN WINPR_PC_REQUIRES_PRIVATE " " WINPR_PC_REQUIRES_PRIVATE)
+
+set(WINPR_PC_LIBRARY_PRIVATE "-ldl -lrt -lm -lpthread")
+
+# Do not set Requires.Private if not a static build
+if(BUILD_SHARED_LIBS)
+  set(WINPR_PC_REQUIRES_PRIVATE "")
+  set(WINPR_PC_LIBRARY_PRIVATE "")
+endif()
 
 if(WITH_WINPR_TOOLS)
   add_subdirectory(tools)

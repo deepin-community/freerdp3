@@ -66,6 +66,7 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/)
 
 include(ProjectCStandard)
+include(PkgConfigHelpers)
 
 # Check for cmake compatibility (enable/disable features)
 include(CheckCmakeCompat)
@@ -93,6 +94,7 @@ include(InstallFreeRDPMan)
 include(GetGitRevisionDescription)
 include(SetFreeRDPCMakeInstallDir)
 include(Doxygen)
+include(GetSysconfDir)
 
 # Soname versioning
 set(BUILD_NUMBER 0)
@@ -100,25 +102,10 @@ if($ENV{BUILD_NUMBER})
   set(BUILD_NUMBER $ENV{BUILD_NUMBER})
 endif()
 
-set(VERSION_REGEX "^(.*)([0-9]+)\\.([0-9]+)\\.([0-9]+)-?(.*)")
-set(RAW_VERSION_STRING "3.16.0")
-if(EXISTS "${PROJECT_SOURCE_DIR}/.source_tag")
-  file(READ ${PROJECT_SOURCE_DIR}/.source_tag RAW_VERSION_STRING)
-elseif(USE_VERSION_FROM_GIT_TAG)
-  git_get_exact_tag(_GIT_TAG --tags --always)
-  if(NOT ${_GIT_TAG} STREQUAL "n/a")
-    string(REGEX MATCH ${VERSION_REGEX} FOUND_TAG "${_GIT_TAG}")
-    if(FOUND_TAG)
-      set(RAW_VERSION_STRING ${_GIT_TAG})
-    endif()
-  endif()
-endif()
-string(STRIP ${RAW_VERSION_STRING} RAW_VERSION_STRING)
-
-string(REGEX REPLACE "${VERSION_REGEX}" "\\2" FREERDP_VERSION_MAJOR "${RAW_VERSION_STRING}")
-string(REGEX REPLACE "${VERSION_REGEX}" "\\3" FREERDP_VERSION_MINOR "${RAW_VERSION_STRING}")
-string(REGEX REPLACE "${VERSION_REGEX}" "\\4" FREERDP_VERSION_REVISION "${RAW_VERSION_STRING}")
-string(REGEX REPLACE "${VERSION_REGEX}" "\\5" FREERDP_VERSION_SUFFIX "${RAW_VERSION_STRING}")
+include(GetProjectVersion)
+get_project_version(
+  FREERDP_VERSION_MAJOR FREERDP_VERSION_MINOR FREERDP_VERSION_REVISION FREERDP_VERSION_SUFFIX GIT_REVISION
+)
 
 set(FREERDP_API_VERSION "${FREERDP_VERSION_MAJOR}")
 set(FREERDP_VERSION "${FREERDP_VERSION_MAJOR}.${FREERDP_VERSION_MINOR}.${FREERDP_VERSION_REVISION}")
@@ -128,22 +115,6 @@ else()
   set(FREERDP_VERSION_FULL "${FREERDP_VERSION}")
 endif()
 message("FREERDP_VERSION=${FREERDP_VERSION_FULL}")
-
-if(EXISTS "${PROJECT_SOURCE_DIR}/.source_version")
-  file(READ ${PROJECT_SOURCE_DIR}/.source_version GIT_REVISION)
-
-  string(STRIP ${GIT_REVISION} GIT_REVISION)
-elseif(USE_VERSION_FROM_GIT_TAG)
-  git_get_exact_tag(GIT_REVISION --tags --always)
-
-  if(${GIT_REVISION} STREQUAL "n/a")
-    git_rev_parse(GIT_REVISION --short)
-  endif()
-endif()
-
-if(NOT GIT_REVISION)
-  set(GIT_REVISION ${FREERDP_VERSION})
-endif()
 
 message(STATUS "Git Revision ${GIT_REVISION}")
 
@@ -171,10 +142,6 @@ option(WITHOUT_FREERDP_3x_DEPRECATED "Build FreeRDP 3x deprecated symbols" OFF)
 if(WITH_FREERDP_3x_DEPRECATED)
   message(WARNING "WITH_FREERDP_3x_DEPRECATED has been replaced with WITHOUT_FREERDP_3x_DEPRECATED")
   set(WITHOUT_FREERDP_3x_DEPRECATED OFF)
-endif()
-
-if(WITHOUT_FREERDP_3x_DEPRECATED)
-  add_compile_definitions(WITHOUT_FREERDP_3x_DEPRECATED)
 endif()
 
 option(WITH_FREERDP_DEPRECATED_COMMANDLINE "Build FreeRDP deprecated command line options" OFF)
@@ -355,7 +322,7 @@ set(OPENSSL_FEATURE_DESCRIPTION "encryption, certificate validation, hashing fun
 
 set(MBEDTLS_FEATURE_TYPE "OPTIONAL")
 set(MBEDTLS_FEATURE_PURPOSE "cryptography")
-set(MBEDTLS_FEATURE_DESCRIPTION "encryption, certificate validation, hashing functions")
+set(MBEDTLS_FEATURE_DESCRIPTION "[experimental] encryption, certificate validation, hashing functions")
 
 set(PCSC_FEATURE_TYPE "RECOMMENDED")
 set(PCSC_FEATURE_PURPOSE "smart card")
@@ -406,8 +373,11 @@ if(NOT WITHOUT_FREERDP_3x_DEPRECATED)
   find_feature(Wayland ${WAYLAND_FEATURE_TYPE} ${WAYLAND_FEATURE_PURPOSE} ${WAYLAND_FEATURE_DESCRIPTION})
 endif()
 
-option(WITH_LIBRESSL "build with LibreSSL" OFF)
+option(WITH_LIBRESSL "[experimental] build with LibreSSL" OFF)
 if(WITH_LIBRESSL)
+  message(WARNING "-DWITH_LIBRESSL=ON: LibreSSL enabled. Expect incompatibilities.")
+  message(WARNING "Only OpenSSL is tested on each release, other implementations depend on external contributions")
+
   find_package(LibreSSL REQUIRED)
   include_directories(SYSTEM ${LibreSSL_INCLUDE_DIRS})
   set(OPENSSL_INCLUDE_DIR ${LIBRESSL_INCLUDE_DIR})
@@ -468,6 +438,8 @@ if(OPENSSL_FOUND)
 endif()
 
 if(MBEDTLS_FOUND)
+  message(WARNING "-DWITH_MBEDTLS=ON: Mbed-TLS enabled. Expect incompatibilities")
+  message(WARNING "Only OpenSSL is tested on each release, other implementations depend on external contributions")
   add_compile_definitions("WITH_MBEDTLS")
 endif()
 
@@ -574,6 +546,9 @@ if(WITH_THIRD_PARTY)
   endif()
 endif()
 
+# used in libfreerdp subfolder as well
+setfreerdpcmakeinstalldir(FREERDP_CMAKE_INSTALL_DIR "FreeRDP${FREERDP_VERSION_MAJOR}")
+
 add_subdirectory(libfreerdp)
 
 if(WITH_CHANNELS)
@@ -587,6 +562,9 @@ endif()
 if(WITH_SERVER)
   add_subdirectory(server)
 endif()
+
+# must be after all targets have been added in libfreerdp and channel
+install(EXPORT FreeRDPTargets DESTINATION ${FREERDP_CMAKE_INSTALL_DIR})
 
 # Packaging
 

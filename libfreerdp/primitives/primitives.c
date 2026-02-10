@@ -206,7 +206,7 @@ static BOOL primitives_autodetect_best(primitives_t* prims)
 	{
 		const char* name;
 		primitives_t* prims;
-		UINT32 flags;
+		primitive_hints flags;
 		UINT32 count;
 	};
 
@@ -344,7 +344,7 @@ BOOL primitives_init(primitives_t* p, primitive_hints hints)
 			return TRUE;
 #endif
 		default:
-			WLog_ERR(TAG, "unknown hint %d", hints);
+			WLog_ERR(TAG, "unknown hint %u", hints);
 			return FALSE;
 	}
 }

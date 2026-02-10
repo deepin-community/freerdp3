@@ -4,6 +4,7 @@
 #include <winpr/crypto.h>
 #include <winpr/json.h>
 
+#include <freerdp/crypto/crypto.h>
 #include <freerdp/settings.h>
 #include <freerdp/codecs.h>
 
@@ -1593,11 +1594,11 @@ static BOOL test_serialize_strings(DWORD flags, const char* str)
 	if (!src)
 		return FALSE;
 
-	for (SSIZE_T x = 0; x < FreeRDP_Settings_StableAPI_MAX; x++)
+	for (int x = 0; x < FreeRDP_Settings_StableAPI_MAX; x++)
 	{
 		union
 		{
-			SSIZE_T s;
+			int s;
 			FreeRDP_Settings_Keys_Pointer ptr;
 		} iter;
 		iter.s = x;
@@ -1669,7 +1670,15 @@ static BOOL fill_random(rdpSettings* src, FreeRDP_Settings_Keys_Pointer key, siz
 	uint8_t* data = freerdp_settings_get_pointer_writable(src, key);
 	if (!data)
 		return FALSE;
-	winpr_RAND(data, len * elem);
+
+	const size_t size = len * elem;
+	char* random = calloc(len, elem);
+	if (!random)
+		return FALSE;
+	char* b64 = crypto_base64_encode(random, size);
+	free(random);
+	memcpy(data, b64, size);
+	free(b64);
 	return TRUE;
 }
 
@@ -1905,7 +1914,7 @@ static BOOL test_serialize(void)
 	return TRUE;
 }
 
-static BOOL test_bool_list(const rdpSettings* settings, const rdpSettings* cloned)
+static BOOL test_bool_list(rdpSettings* settings, const rdpSettings* cloned)
 {
 	BOOL rc = FALSE;
 	log_start();
@@ -1972,7 +1981,7 @@ fail:
 	return log_result(rc);
 }
 
-static BOOL test_uint16_list(const rdpSettings* settings, const rdpSettings* cloned)
+static BOOL test_uint16_list(rdpSettings* settings, const rdpSettings* cloned)
 {
 	BOOL rc = FALSE;
 	log_start();
@@ -2006,7 +2015,7 @@ fail:
 	return log_result(rc);
 }
 
-static BOOL test_int32_list(const rdpSettings* settings, const rdpSettings* cloned)
+static BOOL test_int32_list(rdpSettings* settings, const rdpSettings* cloned)
 {
 	BOOL rc = FALSE;
 	log_start();
@@ -2041,7 +2050,7 @@ fail:
 	return log_result(rc);
 }
 
-static BOOL test_uint32_list(const rdpSettings* settings, const rdpSettings* cloned)
+static BOOL test_uint32_list(rdpSettings* settings, const rdpSettings* cloned)
 {
 	BOOL rc = FALSE;
 	log_start();
@@ -2110,7 +2119,7 @@ fail:
 	return log_result(rc);
 }
 
-static BOOL test_uint64_list(const rdpSettings* settings, const rdpSettings* cloned)
+static BOOL test_uint64_list(rdpSettings* settings, const rdpSettings* cloned)
 {
 	BOOL rc = FALSE;
 	log_start();
@@ -2145,7 +2154,7 @@ fail:
 	return log_result(rc);
 }
 
-static BOOL test_string_list(const rdpSettings* settings, const rdpSettings* cloned)
+static BOOL test_string_list(rdpSettings* settings, const rdpSettings* cloned)
 {
 	BOOL rc = FALSE;
 	log_start();
@@ -2277,6 +2286,103 @@ fail:
 	return log_result(rc);
 }
 
+#if defined(BUILD_TESTING_INTERNAL)
+static FreeRDP_Settings_Keys_UInt32 getLenForKey(FreeRDP_Settings_Keys_Pointer key)
+{
+	return FreeRDP_TargetNetAddressCount;
+}
+
+static bool fillTargetBuffer(rdpSettings* settings, FreeRDP_Settings_Keys_Pointer key)
+{
+	const size_t count = freerdp_settings_get_uint32(settings, getLenForKey(key));
+	for (size_t x = 0; x < count; x++)
+	{
+		char test[128] = { 0 };
+		(void)_snprintf(test, sizeof(test), "test_value_%" PRIuz, x);
+		if (!freerdp_settings_set_pointer_array(settings, key, x, test))
+			return false;
+	}
+	return true;
+}
+
+static bool checkTargetBuffer(rdpSettings* settings, FreeRDP_Settings_Keys_Pointer key,
+                              size_t count)
+{
+	for (size_t x = 0; x < count; x++)
+	{
+		char test[128] = { 0 };
+		(void)_snprintf(test, sizeof(test), "test_value_%" PRIuz, x);
+		const char* cmp = freerdp_settings_get_pointer_array(settings, key, x);
+		if (!cmp)
+			return false;
+		if (strncmp(test, cmp, sizeof(test)) != 0)
+			return false;
+	}
+	return true;
+}
+
+static bool checkTargetBufferResized(rdpSettings* settings, FreeRDP_Settings_Keys_Pointer key,
+                                     size_t count, size_t newSize)
+{
+	if (count > newSize)
+		count = newSize;
+
+	if (!checkTargetBuffer(settings, key, count))
+		return false;
+
+	for (size_t x = count; x < newSize; x++)
+	{
+		const char* cmp = freerdp_settings_get_pointer_array(settings, key, x);
+		if (cmp != NULL)
+			return false;
+	}
+	return true;
+}
+
+static bool testSize(rdpSettings* settings, FreeRDP_Settings_Keys_Pointer key, size_t newSize)
+{
+	if (!fillTargetBuffer(settings, key))
+		return false;
+	const size_t count = freerdp_settings_get_uint32(settings, getLenForKey(key));
+	if (!checkTargetBuffer(settings, key, count))
+		return false;
+	if (key == FreeRDP_TargetNetAddresses)
+	{
+		if (!freerdp_target_net_addresses_resize(settings, newSize))
+			return false;
+	}
+	else
+	{
+		return false;
+	}
+	if (!checkTargetBufferResized(settings, key, count, newSize))
+		return false;
+	return true;
+}
+
+static bool testBufferResize(FreeRDP_Settings_Keys_Pointer key)
+{
+	bool rc = false;
+	rdpSettings* settings = freerdp_settings_new(0);
+	if (!settings)
+		return false;
+
+	if (!testSize(settings, key, 10))
+		goto fail;
+	if (!testSize(settings, key, 23))
+		goto fail;
+	if (!testSize(settings, key, 13))
+		goto fail;
+	if (!testSize(settings, key, 0))
+		goto fail;
+
+	rc = true;
+fail:
+	freerdp_settings_free(settings);
+	return rc;
+}
+#endif
+
 int TestSettings(int argc, char* argv[])
 {
 	int rc = -1;
@@ -2301,7 +2407,11 @@ int TestSettings(int argc, char* argv[])
 		goto fail;
 	if (!test_all())
 		goto fail;
-
+#if defined(BUILD_TESTING_INTERNAL)
+	// freerdp_target_net_addresses_resize
+	if (!testBufferResize(FreeRDP_TargetNetAddresses))
+		goto fail;
+#endif
 	rc = 0;
 
 fail:

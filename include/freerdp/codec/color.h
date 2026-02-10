@@ -134,6 +134,15 @@ typedef struct gdi_palette gdiPalette;
 #endif
 	FREERDP_API const char* FreeRDPGetColorFormatName(UINT32 format);
 
+	/** @brief convert a string to a \ref PIXEL_FORMAT
+	 *
+	 *  @param name The string representing the format
+	 *
+	 *  @return the \ref PIXEL_FORMAT value or \b 0 for failure
+	 *  @since version 3.18.0
+	 */
+	FREERDP_API uint32_t FreeRDPGetColorFromatFromName(const char* name);
+
 	/***
 	 *
 	 * Converts a pixel color in internal representation to its red, green, blue
@@ -182,7 +191,7 @@ typedef struct gdi_palette gdiPalette;
 #if defined(WITH_FREERDP_DEPRECATED)
 #define GetBitsPerPixel(...) FreeRDPGetBitsPerPixel(__VA_ARGS__)
 #endif
-	static INLINE UINT32 FreeRDPGetBitsPerPixel(UINT32 format)
+	static inline UINT32 FreeRDPGetBitsPerPixel(UINT32 format)
 	{
 		return (((format) >> 24) & 0x3F);
 	}
@@ -195,7 +204,7 @@ typedef struct gdi_palette gdiPalette;
 #if defined(WITH_FREERDP_DEPRECATED)
 #define ColorHasAlpha(...) FreeRDPColorHasAlpha(__VA_ARGS__)
 #endif
-	static INLINE BOOL FreeRDPColorHasAlpha(UINT32 format)
+	static inline BOOL FreeRDPColorHasAlpha(UINT32 format)
 	{
 		UINT32 alpha = (((format) >> 12) & 0x0F);
 
@@ -252,7 +261,7 @@ typedef struct gdi_palette gdiPalette;
 #if defined(WITH_FREERDP_DEPRECATED)
 #define ConvertColor(...) FreeRDPConvertColor(__VA_ARGS__)
 #endif
-	static INLINE UINT32 FreeRDPConvertColor(UINT32 color, UINT32 srcFormat, UINT32 dstFormat,
+	static inline UINT32 FreeRDPConvertColor(UINT32 color, UINT32 srcFormat, UINT32 dstFormat,
 	                                         const gdiPalette* palette)
 	{
 		BYTE r = 0;
@@ -274,11 +283,12 @@ typedef struct gdi_palette gdiPalette;
 #if defined(WITH_FREERDP_DEPRECATED)
 #define GetBytesPerPixel(...) FreeRDPGetBytesPerPixel(__VA_ARGS__)
 #endif
-	static INLINE UINT32 FreeRDPGetBytesPerPixel(UINT32 format)
+	static inline UINT32 FreeRDPGetBytesPerPixel(UINT32 format)
 	{
 		return (FreeRDPGetBitsPerPixel(format) + 7) / 8;
 	}
 
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 	/***
 	 *
 	 * @param width    width to copy in pixels
@@ -288,9 +298,28 @@ typedef struct gdi_palette gdiPalette;
 	 * @return          A buffer allocated with winpr_aligned_malloc(width * height, 16)
 	 *                  if successful, NULL otherwise.
 	 */
+
+	WINPR_DEPRECATED_VAR("[since 3.21.0] use freerdp_glyph_convert_ex instead",
+	                     WINPR_ATTR_MALLOC(winpr_aligned_free, 1)
+	                         WINPR_ATTR_NODISCARD FREERDP_API BYTE* freerdp_glyph_convert(
+	                             UINT32 width, UINT32 height, const BYTE* WINPR_RESTRICT data));
+#endif
+
+	/***
+	 *
+	 * @param width    width to copy in pixels
+	 * @param height   height to copy in pixels
+	 * @param data     source buffer, must be (nWidth + 7) / 8 bytes long
+	 * @param len      the length of \ref data in bytes
+	 *
+	 * @return          A buffer allocated with winpr_aligned_malloc(width * height, 16)
+	 *                  if successful, NULL otherwise.
+	 * @since version 3.21.0
+	 */
 	WINPR_ATTR_MALLOC(winpr_aligned_free, 1)
-	FREERDP_API BYTE* freerdp_glyph_convert(UINT32 width, UINT32 height,
-	                                        const BYTE* WINPR_RESTRICT data);
+	WINPR_ATTR_NODISCARD
+	FREERDP_API BYTE* freerdp_glyph_convert_ex(UINT32 width, UINT32 height,
+	                                           const BYTE* WINPR_RESTRICT data, size_t len);
 
 	/***
 	 *

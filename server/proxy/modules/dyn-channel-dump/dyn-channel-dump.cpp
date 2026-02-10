@@ -103,7 +103,7 @@ class ChannelData
 
 	bool add(const std::string& name, WINPR_ATTR_UNUSED bool back)
 	{
-		std::lock_guard<std::mutex> guard(_mux);
+		std::scoped_lock guard(_mux);
 		if (_map.find(name) == _map.end())
 		{
 			WLog_INFO(TAG, "adding '%s' to dump list", name.c_str());
@@ -114,7 +114,7 @@ class ChannelData
 
 	std::ofstream stream(const std::string& name, bool back)
 	{
-		std::lock_guard<std::mutex> guard(_mux);
+		std::scoped_lock guard(_mux);
 		auto& atom = _map[name];
 		auto count = atom++;
 		auto path = filepath(name, back, count);
@@ -423,10 +423,7 @@ static BOOL dump_unload(proxyPlugin* plugin)
 	return TRUE;
 }
 
-extern "C" FREERDP_API BOOL proxy_module_entry_point(proxyPluginsManager* plugins_manager,
-                                                     void* userdata);
-
-BOOL proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata)
+static BOOL int_proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata)
 {
 	proxyPlugin plugin = {};
 
@@ -448,3 +445,26 @@ BOOL proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userda
 
 	return plugins_manager->RegisterPlugin(plugins_manager, &plugin);
 }
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+#if defined(BUILD_SHARED_LIBS)
+	FREERDP_API BOOL proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata);
+
+	BOOL proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata)
+	{
+		return int_proxy_module_entry_point(plugins_manager, userdata);
+	}
+#else
+FREERDP_API BOOL dyn_channel_dump_proxy_module_entry_point(proxyPluginsManager* plugins_manager,
+                                                           void* userdata);
+BOOL dyn_channel_dump_proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata)
+{
+	return int_proxy_module_entry_point(plugins_manager, userdata);
+}
+#endif
+#ifdef __cplusplus
+}
+#endif

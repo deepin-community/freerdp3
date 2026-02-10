@@ -491,8 +491,8 @@ SSIZE_T rpc_channel_write_int(RpcChannel* channel, const BYTE* data, size_t leng
 	const DWORD level = WLOG_TRACE;
 	if (WLog_IsLevelActive(channel->rpc->log, level))
 	{
-		WLog_PrintMessage(channel->rpc->log, WLOG_MESSAGE_TEXT, level, line, file, fkt,
-		                  "Sending [%s] %" PRIuz " bytes", fkt, length);
+		WLog_PrintTextMessage(channel->rpc->log, level, line, file, fkt,
+		                      "Sending [%s] %" PRIuz " bytes", fkt, length);
 	}
 
 	return freerdp_tls_write_all(channel->tls, data, length);
@@ -539,7 +539,7 @@ static int rpc_channel_rpch_init(RpcClient* client, RpcChannel* channel, const c
 
 		if (guid)
 		{
-			char* strguid = NULL;
+			RPC_CSTR strguid = NULL;
 			RPC_STATUS rpcStatus = UuidToStringA(guid, &strguid);
 
 			if (rpcStatus != RPC_S_OK)

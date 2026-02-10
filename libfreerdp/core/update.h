@@ -120,7 +120,7 @@ typedef struct
 	BOOL glyph_v2;
 } rdp_secondary_update_internal;
 
-static INLINE rdp_update_internal* update_cast(rdpUpdate* update)
+static inline rdp_update_internal* update_cast(rdpUpdate* update)
 {
 	union
 	{
@@ -133,7 +133,7 @@ static INLINE rdp_update_internal* update_cast(rdpUpdate* update)
 	return cnv.internal;
 }
 
-static INLINE rdp_altsec_update_internal* altsec_update_cast(rdpAltSecUpdate* update)
+static inline rdp_altsec_update_internal* altsec_update_cast(rdpAltSecUpdate* update)
 {
 	union
 	{
@@ -146,7 +146,7 @@ static INLINE rdp_altsec_update_internal* altsec_update_cast(rdpAltSecUpdate* up
 	return cnv.internal;
 }
 
-static INLINE rdp_primary_update_internal* primary_update_cast(rdpPrimaryUpdate* update)
+static inline rdp_primary_update_internal* primary_update_cast(rdpPrimaryUpdate* update)
 {
 	union
 	{
@@ -159,7 +159,7 @@ static INLINE rdp_primary_update_internal* primary_update_cast(rdpPrimaryUpdate*
 	return cnv.internal;
 }
 
-static INLINE rdp_secondary_update_internal* secondary_update_cast(rdpSecondaryUpdate* update)
+static inline rdp_secondary_update_internal* secondary_update_cast(rdpSecondaryUpdate* update)
 {
 	union
 	{
@@ -175,6 +175,7 @@ static INLINE rdp_secondary_update_internal* secondary_update_cast(rdpSecondaryU
 FREERDP_LOCAL void update_free(rdpUpdate* update);
 
 WINPR_ATTR_MALLOC(update_free, 1)
+WINPR_ATTR_NODISCARD
 FREERDP_LOCAL rdpUpdate* update_new(rdpRdp* rdp);
 
 FREERDP_LOCAL void update_reset_state(rdpUpdate* update);
@@ -186,28 +187,36 @@ FREERDP_LOCAL BOOL update_recv_pointer(rdpUpdate* update, wStream* s);
 FREERDP_LOCAL BOOL update_recv(rdpUpdate* update, wStream* s);
 
 WINPR_ATTR_MALLOC(free_bitmap_update, 2)
+WINPR_ATTR_NODISCARD
 FREERDP_LOCAL BITMAP_UPDATE* update_read_bitmap_update(rdpUpdate* update, wStream* s);
 
 WINPR_ATTR_MALLOC(free_palette_update, 2)
+WINPR_ATTR_NODISCARD
 FREERDP_LOCAL PALETTE_UPDATE* update_read_palette(rdpUpdate* update, wStream* s);
 
 WINPR_ATTR_MALLOC(free_pointer_system_update, 2)
+WINPR_ATTR_NODISCARD
 FREERDP_LOCAL POINTER_SYSTEM_UPDATE* update_read_pointer_system(rdpUpdate* update, wStream* s);
 
 WINPR_ATTR_MALLOC(free_pointer_position_update, 2)
+WINPR_ATTR_NODISCARD
 FREERDP_LOCAL POINTER_POSITION_UPDATE* update_read_pointer_position(rdpUpdate* update, wStream* s);
 
 WINPR_ATTR_MALLOC(free_pointer_color_update, 2)
+WINPR_ATTR_NODISCARD
 FREERDP_LOCAL POINTER_COLOR_UPDATE* update_read_pointer_color(rdpUpdate* update, wStream* s,
                                                               BYTE xorBpp);
 
 WINPR_ATTR_MALLOC(free_pointer_large_update, 2)
+WINPR_ATTR_NODISCARD
 FREERDP_LOCAL POINTER_LARGE_UPDATE* update_read_pointer_large(rdpUpdate* update, wStream* s);
 
 WINPR_ATTR_MALLOC(free_pointer_new_update, 2)
+WINPR_ATTR_NODISCARD
 FREERDP_LOCAL POINTER_NEW_UPDATE* update_read_pointer_new(rdpUpdate* update, wStream* s);
 
 WINPR_ATTR_MALLOC(free_pointer_cached_update, 2)
+WINPR_ATTR_NODISCARD
 FREERDP_LOCAL POINTER_CACHED_UPDATE* update_read_pointer_cached(rdpUpdate* update, wStream* s);
 
 FREERDP_LOCAL BOOL update_read_refresh_rect(rdpUpdate* update, wStream* s);

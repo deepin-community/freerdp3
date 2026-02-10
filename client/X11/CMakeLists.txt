@@ -42,6 +42,7 @@ include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
 set(SRCS
     xf_utils.h
     xf_utils.c
+    xf_x11_utils.c
     xf_gfx.c
     xf_gfx.h
     xf_rail.c
@@ -188,7 +189,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC ${PUB_LIBS})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PRIV_LIBS})
 
 if(WITH_CLIENT_INTERFACE)
-  install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libraries)
+  installwithrpath(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libraries)
 endif()
 add_subdirectory(cli)
 add_subdirectory(man)

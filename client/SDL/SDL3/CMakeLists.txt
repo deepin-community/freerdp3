@@ -27,8 +27,8 @@ set(SRCS
     sdl_types.hpp
     sdl_utils.cpp
     sdl_utils.hpp
-    sdl_kbd.cpp
-    sdl_kbd.hpp
+    sdl_input.cpp
+    sdl_input.hpp
     sdl_touch.cpp
     sdl_touch.hpp
     sdl_pointer.cpp
@@ -45,6 +45,8 @@ set(SRCS
     sdl_window.cpp
     sdl_clip.hpp
     sdl_clip.cpp
+    sdl_context.hpp
+    sdl_context.cpp
 )
 
 list(
@@ -84,7 +86,7 @@ string(TIMESTAMP SDL_CLIENT_YEAR "%Y")
 set(SDL_CLIENT_UUID "com.freerdp.client.sdl3")
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/sdl_config.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/sdl_config.hpp @ONLY)
 
-install(TARGETS ${MODULE_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT client)
-install_freerdp_desktop("${MODULE_NAME}" "${MODULE_NAME}")
+installwithrpath(TARGETS ${MODULE_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT client)
+install_freerdp_desktop("${MODULE_NAME}" "${SDL_CLIENT_UUID}")
 
 add_subdirectory(man)

@@ -186,12 +186,14 @@ static UINT location_on_data_received(IWTSVirtualChannelCallback* pChannelCallba
 					break;
 			}
 
-			char cbuffer[64] = { 0 };
-			char sbuffer[64] = { 0 };
-			WLog_Print(plugin->baseDynPlugin.log, WLOG_DEBUG,
-			           "Server version %s, client version %s",
-			           location_version_str(callback->serverVersion, sbuffer, sizeof(sbuffer)),
-			           location_version_str(callback->clientVersion, cbuffer, sizeof(cbuffer)));
+			{
+				char cbuffer[64] = { 0 };
+				char sbuffer[64] = { 0 };
+				WLog_Print(plugin->baseDynPlugin.log, WLOG_DEBUG,
+				           "Server version %s, client version %s",
+				           location_version_str(callback->serverVersion, sbuffer, sizeof(sbuffer)),
+				           location_version_str(callback->clientVersion, cbuffer, sizeof(cbuffer)));
+			}
 
 			if (!plugin->context.LocationStart)
 			{
@@ -199,13 +201,16 @@ static UINT location_on_data_received(IWTSVirtualChannelCallback* pChannelCallba
 				           "LocationStart=NULL, no location data will be sent");
 				return CHANNEL_RC_OK;
 			}
-			const UINT res =
-			    plugin->context.LocationStart(&plugin->context, callback->clientVersion, 0);
-			if (res != CHANNEL_RC_OK)
-				return res;
+
+			{
+				const UINT res =
+				    plugin->context.LocationStart(&plugin->context, callback->clientVersion, 0);
+				if (res != CHANNEL_RC_OK)
+					return res;
+			}
 			return location_send_client_ready_pdu(callback);
 		default:
-			WLog_WARN(TAG, "invalid pduType=%s");
+			WLog_WARN(TAG, "invalid pduType=%" PRIu16, pduType);
 			return ERROR_INVALID_DATA;
 	}
 }
@@ -224,8 +229,9 @@ static UINT location_send_base_location3d(IWTSVirtualChannel* channel,
 		WLog_DBG(TAG,
 		         "latitude=%lf, longitude=%lf, altitude=%" PRId32
 		         ", speed=%lf, heading=%lf, haccuracy=%lf, source=%" PRIu8,
-		         pdu->latitude, pdu->longitude, pdu->altitude, pdu->speed, pdu->heading,
-		         pdu->horizontalAccuracy, *pdu->source);
+		         pdu->latitude, pdu->longitude, pdu->altitude, pdu->speed ? *pdu->speed : FP_NAN,
+		         pdu->heading ? *pdu->heading : FP_NAN,
+		         pdu->horizontalAccuracy ? *pdu->horizontalAccuracy : FP_NAN, *pdu->source);
 	else
 		WLog_DBG(TAG, "latitude=%lf, longitude=%lf, altitude=%" PRId32, pdu->latitude,
 		         pdu->longitude, pdu->altitude);
@@ -266,7 +272,8 @@ static UINT location_send_location2d_delta(IWTSVirtualChannel* channel,
 
 	if (ext)
 		WLog_DBG(TAG, "latitude=%lf, longitude=%lf, speed=%lf, heading=%lf", pdu->latitudeDelta,
-		         pdu->longitudeDelta, pdu->speedDelta, pdu->headingDelta);
+		         pdu->longitudeDelta, pdu->speedDelta ? *pdu->speedDelta : FP_NAN,
+		         pdu->headingDelta ? *pdu->headingDelta : FP_NAN);
 	else
 		WLog_DBG(TAG, "latitude=%lf, longitude=%lf", pdu->latitudeDelta, pdu->longitudeDelta);
 
@@ -302,8 +309,9 @@ static UINT location_send_location3d_delta(IWTSVirtualChannel* channel,
 
 	if (ext)
 		WLog_DBG(TAG, "latitude=%lf, longitude=%lf, altitude=%" PRId32 ", speed=%lf, heading=%lf",
-		         pdu->latitudeDelta, pdu->longitudeDelta, pdu->altitudeDelta, pdu->speedDelta,
-		         pdu->headingDelta);
+		         pdu->latitudeDelta, pdu->longitudeDelta, pdu->altitudeDelta,
+		         pdu->speedDelta ? *pdu->speedDelta : FP_NAN,
+		         pdu->headingDelta ? *pdu->headingDelta : FP_NAN);
 	else
 		WLog_DBG(TAG, "latitude=%lf, longitude=%lf, altitude=%" PRId32, pdu->latitudeDelta,
 		         pdu->longitudeDelta, pdu->altitudeDelta);
@@ -353,14 +361,18 @@ static UINT location_send(LocationClientContext* context, LOCATION_PDUTYPE type,
 				res = ERROR_INVALID_PARAMETER;
 			else
 			{
-				RDPLOCATION_BASE_LOCATION3D_PDU pdu = { 0 };
 				LOCATIONSOURCE source = LOCATIONSOURCE_IP;
 				double speed = FP_NAN;
 				double heading = FP_NAN;
 				double horizontalAccuracy = FP_NAN;
-				pdu.latitude = va_arg(ap, double);
-				pdu.longitude = va_arg(ap, double);
-				pdu.altitude = va_arg(ap, INT32);
+				RDPLOCATION_BASE_LOCATION3D_PDU pdu = { .latitude = va_arg(ap, double),
+					                                    .longitude = va_arg(ap, double),
+					                                    .altitude = va_arg(ap, INT32),
+					                                    .speed = NULL,
+					                                    .heading = NULL,
+					                                    .horizontalAccuracy = NULL,
+					                                    .source = NULL };
+
 				if ((count > 3) && (callback->clientVersion >= RDPLOCATION_PROTOCOL_VERSION_200))
 				{
 					speed = va_arg(ap, double);
@@ -380,10 +392,10 @@ static UINT location_send(LocationClientContext* context, LOCATION_PDUTYPE type,
 				res = ERROR_INVALID_PARAMETER;
 			else
 			{
-				RDPLOCATION_LOCATION2D_DELTA_PDU pdu = { 0 };
-
-				pdu.latitudeDelta = va_arg(ap, double);
-				pdu.longitudeDelta = va_arg(ap, double);
+				RDPLOCATION_LOCATION2D_DELTA_PDU pdu = { .latitudeDelta = va_arg(ap, double),
+					                                     .longitudeDelta = va_arg(ap, double),
+					                                     .speedDelta = NULL,
+					                                     .headingDelta = NULL };
 
 				double speedDelta = FP_NAN;
 				double headingDelta = FP_NAN;
@@ -402,13 +414,14 @@ static UINT location_send(LocationClientContext* context, LOCATION_PDUTYPE type,
 				res = ERROR_INVALID_PARAMETER;
 			else
 			{
-				RDPLOCATION_LOCATION3D_DELTA_PDU pdu = { 0 };
 				double speedDelta = FP_NAN;
 				double headingDelta = FP_NAN;
 
-				pdu.latitudeDelta = va_arg(ap, double);
-				pdu.longitudeDelta = va_arg(ap, double);
-				pdu.altitudeDelta = va_arg(ap, INT32);
+				RDPLOCATION_LOCATION3D_DELTA_PDU pdu = { .latitudeDelta = va_arg(ap, double),
+					                                     .longitudeDelta = va_arg(ap, double),
+					                                     .altitudeDelta = va_arg(ap, INT32),
+					                                     .speedDelta = NULL,
+					                                     .headingDelta = NULL };
 				if ((count > 3) && (callback->clientVersion >= RDPLOCATION_PROTOCOL_VERSION_200))
 				{
 					speedDelta = va_arg(ap, double);

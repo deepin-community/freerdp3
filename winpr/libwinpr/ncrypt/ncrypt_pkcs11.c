@@ -82,10 +82,15 @@ typedef struct
 	BYTE tag[3];
 } piv_cert_tags_t;
 static const piv_cert_tags_t piv_cert_tags[] = {
-	{ "Certificate for PIV Authentication", "\x5F\xC1\x05" },
-	{ "Certificate for Digital Signature", "\x5F\xC1\x0A" },
-	{ "Certificate for Key Management", "\x5F\xC1\x0B" },
-	{ "Certificate for Card Authentication", "\x5F\xC1\x01" },
+	{ "X.509 Certificate for PIV Authentication", { 0x5F, 0xC1, 0x05 } },
+	{ "X.509 Certificate for Digital Signature", { 0x5F, 0xC1, 0x0A } },
+	{ "X.509 Certificate for Key Management", { 0x5F, 0xC1, 0x0B } },
+	{ "X.509 Certificate for Card Authentication", { 0x5F, 0xC1, 0x01 } },
+
+	{ "Certificate for PIV Authentication", { 0x5F, 0xC1, 0x05 } },
+	{ "Certificate for Digital Signature", { 0x5F, 0xC1, 0x0A } },
+	{ "Certificate for Key Management", { 0x5F, 0xC1, 0x0B } },
+	{ "Certificate for Card Authentication", { 0x5F, 0xC1, 0x01 } },
 };
 
 static const BYTE APDU_PIV_SELECT_AID[] = { 0x00, 0xA4, 0x04, 0x00, 0x09, 0xA0, 0x00, 0x00,
@@ -116,8 +121,7 @@ static SECURITY_STATUS NCryptP11StorageProvider_dtor(NCRYPT_HANDLE handle)
 		if (provider->p11 && provider->p11->C_Finalize)
 			rv = provider->p11->C_Finalize(NULL);
 		if (rv != CKR_OK)
-			WLog_WARN(TAG, "C_Finalize failed with %s [0x%08" PRIx32 "]", CK_RV_error_string(rv),
-			          rv);
+			WLog_WARN(TAG, "C_Finalize failed with %s [0x%08lx]", CK_RV_error_string(rv), rv);
 
 		free(provider->modulePath);
 
@@ -228,12 +232,12 @@ static CK_RV object_load_attributes(NCryptP11ProviderHandle* provider, CK_SESSIO
 
 			rv = provider->p11->C_GetAttributeValue(session, object, attributes, count);
 			if (rv != CKR_OK)
-				WLog_WARN(TAG, "C_GetAttributeValue failed with %s [0x%08" PRIx32 "]",
+				WLog_WARN(TAG, "C_GetAttributeValue failed with %s [0x%08lx]",
 				          CK_RV_error_string(rv), rv);
 			break;
 		default:
-			WLog_WARN(TAG, "C_GetAttributeValue failed with %s [0x%08" PRIx32 "]",
-			          CK_RV_error_string(rv), rv);
+			WLog_WARN(TAG, "C_GetAttributeValue failed with %s [0x%08lx]", CK_RV_error_string(rv),
+			          rv);
 			return rv;
 	}
 
@@ -243,8 +247,7 @@ static CK_RV object_load_attributes(NCryptP11ProviderHandle* provider, CK_SESSIO
 		case CKR_ATTRIBUTE_TYPE_INVALID:
 		case CKR_BUFFER_TOO_SMALL:
 			WLog_ERR(TAG,
-			         "C_GetAttributeValue failed with %s [0x%08" PRIx32
-			         "] even after buffer allocation",
+			         "C_GetAttributeValue failed with %s [0x%08lx] even after buffer allocation",
 			         CK_RV_error_string(rv), rv);
 			break;
 		default:
@@ -366,9 +369,8 @@ static void log_(const char* tag, const char* msg, CK_RV rv, CK_ULONG index, CK_
 	if (!WLog_IsLevelActive(log_cached_ptr, log_level))
 		return;
 
-	WLog_PrintMessage(log_cached_ptr, WLOG_MESSAGE_TEXT, log_level, line, file, fkt,
-	                  "%s for slot #%" PRIu32 "(%" PRIu32 "), rv=%s", msg, index, slot,
-	                  CK_RV_error_string(rv));
+	WLog_PrintTextMessage(log_cached_ptr, log_level, line, file, fkt,
+	                      "%s for slot #%lu(%lu), rv=%s", msg, index, slot, CK_RV_error_string(rv));
 }
 
 static SECURITY_STATUS collect_keys(NCryptP11ProviderHandle* provider, P11EnumKeysState* state)
@@ -380,7 +382,7 @@ static SECURITY_STATUS collect_keys(NCryptP11ProviderHandle* provider, P11EnumKe
 	CK_FUNCTION_LIST_PTR p11 = provider->p11;
 	WINPR_ASSERT(p11);
 
-	WLog_DBG(TAG, "checking %" PRIu32 " slots for valid keys...", state->nslots);
+	WLog_DBG(TAG, "checking %lx slots for valid keys...", state->nslots);
 	state->nKeys = 0;
 	for (CK_ULONG i = 0; i < state->nslots; i++)
 	{
@@ -397,15 +399,14 @@ static SECURITY_STATUS collect_keys(NCryptP11ProviderHandle* provider, P11EnumKe
 		}
 
 		fix_padded_string((char*)slotInfo.slotDescription, sizeof(slotInfo.slotDescription));
-		WLog_DBG(TAG, "collecting keys for slot #%" PRIu32 "(%" PRIu32 ") descr='%s' flags=0x%x", i,
+		WLog_DBG(TAG, "collecting keys for slot #%lx(%lu) descr='%s' flags=0x%lx", i,
 		         state->slots[i], slotInfo.slotDescription, slotInfo.flags);
 
 		/* this is a safety guard as we're supposed to have listed only readers with tokens in them
 		 */
 		if (!(slotInfo.flags & CKF_TOKEN_PRESENT))
 		{
-			WLog_INFO(TAG, "token not present for slot #%" PRIu32 "(%" PRIu32 ")", i,
-			          state->slots[i]);
+			WLog_INFO(TAG, "token not present for slot #%lu(%lu)", i, state->slots[i]);
 			continue;
 		}
 
@@ -416,16 +417,16 @@ static SECURITY_STATUS collect_keys(NCryptP11ProviderHandle* provider, P11EnumKe
 		else
 		{
 			fix_padded_string((char*)tokenInfo.label, sizeof(tokenInfo.label));
-			WLog_DBG(TAG, "token, label='%s' flags=0x%x", tokenInfo.label, tokenInfo.flags);
+			WLog_DBG(TAG, "token, label='%s' flags=0x%lx", tokenInfo.label, tokenInfo.flags);
 		}
 
 		WINPR_ASSERT(p11->C_OpenSession);
 		rv = p11->C_OpenSession(state->slots[i], CKF_SERIAL_SESSION, NULL, NULL, &session);
 		if (rv != CKR_OK)
 		{
-			WLog_ERR(TAG,
-			         "unable to openSession for slot #%" PRIu32 "(%" PRIu32 "), session=%p rv=%s",
-			         i, state->slots[i], session, CK_RV_error_string(rv));
+			WLog_ERR(TAG, "unable to openSession for slot #%lu(%lu), session=%p rv=%s", i,
+			         state->slots[i], WINPR_CXX_COMPAT_CAST(const void*, session),
+			         CK_RV_error_string(rv));
 			continue;
 		}
 
@@ -438,39 +439,42 @@ static SECURITY_STATUS collect_keys(NCryptP11ProviderHandle* provider, P11EnumKe
 			goto cleanup_FindObjectsInit;
 		}
 
-		CK_ULONG nslotObjects = 0;
-		WINPR_ASSERT(p11->C_FindObjects);
-		rv = p11->C_FindObjects(session, &slotObjects[0], ARRAYSIZE(slotObjects), &nslotObjects);
-		if (rv != CKR_OK)
 		{
-			loge(TAG, "unable to findObjects", rv, i, state->slots[i]);
-			goto cleanup_FindObjects;
-		}
-
-		WLog_DBG(TAG, "slot has %d objects", nslotObjects);
-		for (CK_ULONG j = 0; j < nslotObjects; j++)
-		{
-			NCryptKeyEnum* key = &state->keys[state->nKeys];
-			CK_OBJECT_CLASS dataClass = CKO_PUBLIC_KEY;
-			CK_ATTRIBUTE key_or_certAttrs[] = {
-				{ CKA_ID, &key->id, sizeof(key->id) },
-				{ CKA_CLASS, &dataClass, sizeof(dataClass) },
-				{ CKA_LABEL, &key->keyLabel, sizeof(key->keyLabel) },
-				{ CKA_KEY_TYPE, &key->keyType, sizeof(key->keyType) }
-			};
-
-			rv = object_load_attributes(provider, session, slotObjects[j], key_or_certAttrs,
-			                            ARRAYSIZE(key_or_certAttrs));
+			CK_ULONG nslotObjects = 0;
+			WINPR_ASSERT(p11->C_FindObjects);
+			rv =
+			    p11->C_FindObjects(session, &slotObjects[0], ARRAYSIZE(slotObjects), &nslotObjects);
 			if (rv != CKR_OK)
 			{
-				WLog_ERR(TAG, "error getting attributes, rv=%s", CK_RV_error_string(rv));
-				continue;
+				loge(TAG, "unable to findObjects", rv, i, state->slots[i]);
+				goto cleanup_FindObjects;
 			}
 
-			key->idLen = key_or_certAttrs[0].ulValueLen;
-			key->slotId = state->slots[i];
-			key->slotInfo = slotInfo;
-			state->nKeys++;
+			WLog_DBG(TAG, "slot has %lu objects", nslotObjects);
+			for (CK_ULONG j = 0; j < nslotObjects; j++)
+			{
+				NCryptKeyEnum* key = &state->keys[state->nKeys];
+				CK_OBJECT_CLASS dataClass = CKO_PUBLIC_KEY;
+				CK_ATTRIBUTE key_or_certAttrs[] = {
+					{ CKA_ID, &key->id, sizeof(key->id) },
+					{ CKA_CLASS, &dataClass, sizeof(dataClass) },
+					{ CKA_LABEL, &key->keyLabel, sizeof(key->keyLabel) },
+					{ CKA_KEY_TYPE, &key->keyType, sizeof(key->keyType) }
+				};
+
+				rv = object_load_attributes(provider, session, slotObjects[j], key_or_certAttrs,
+				                            ARRAYSIZE(key_or_certAttrs));
+				if (rv != CKR_OK)
+				{
+					WLog_ERR(TAG, "error getting attributes, rv=%s", CK_RV_error_string(rv));
+					continue;
+				}
+
+				key->idLen = key_or_certAttrs[0].ulValueLen;
+				key->slotId = state->slots[i];
+				key->slotInfo = slotInfo;
+				state->nKeys++;
+			}
 		}
 
 	cleanup_FindObjects:
@@ -725,8 +729,7 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 		{
 			free(state);
 			/* TODO: perhaps convert rv to NTE_*** errors */
-			WLog_WARN(TAG, "C_GetSlotList failed with %s [0x%08" PRIx32 "]", CK_RV_error_string(rv),
-			          rv);
+			WLog_WARN(TAG, "C_GetSlotList failed with %s [0x%08lx]", CK_RV_error_string(rv), rv);
 			return NTE_FAIL;
 		}
 
@@ -738,8 +741,7 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 		{
 			free(state);
 			/* TODO: perhaps convert rv to NTE_*** errors */
-			WLog_WARN(TAG, "C_GetSlotList failed with %s [0x%08" PRIx32 "]", CK_RV_error_string(rv),
-			          rv);
+			WLog_WARN(TAG, "C_GetSlotList failed with %s [0x%08lx]", CK_RV_error_string(rv), rv);
 			return NTE_FAIL;
 		}
 
@@ -778,7 +780,7 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 				WINPR_ASSERT(provider->p11->C_CloseSession);
 				rv = provider->p11->C_CloseSession(currentSession);
 				if (rv != CKR_OK)
-					WLog_WARN(TAG, "C_CloseSession failed with %s [0x%08" PRIx32 "]",
+					WLog_WARN(TAG, "C_CloseSession failed with %s [0x%08lx]",
 					          CK_RV_error_string(rv), rv);
 				currentSession = (CK_SESSION_HANDLE)NULL;
 			}
@@ -788,7 +790,7 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 			                                  &currentSession);
 			if (rv != CKR_OK)
 			{
-				WLog_ERR(TAG, "C_OpenSession failed with %s [0x%08" PRIx32 "] for slot %d",
+				WLog_ERR(TAG, "C_OpenSession failed with %s [0x%08lx] for slot %lu",
 				         CK_RV_error_string(rv), rv, key->slotId);
 				continue;
 			}
@@ -801,7 +803,7 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 		                                      ARRAYSIZE(certificateFilter));
 		if (rv != CKR_OK)
 		{
-			WLog_ERR(TAG, "C_FindObjectsInit failed with %s [0x%08" PRIx32 "] for slot %d",
+			WLog_ERR(TAG, "C_FindObjectsInit failed with %s [0x%08lx] for slot %lu",
 			         CK_RV_error_string(rv), rv, key->slotId);
 			continue;
 		}
@@ -810,7 +812,7 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 		rv = provider->p11->C_FindObjects(currentSession, &certObject, 1, &ncertObjects);
 		if (rv != CKR_OK)
 		{
-			WLog_ERR(TAG, "C_FindObjects failed with %s [0x%08" PRIx32 "] for slot %d",
+			WLog_ERR(TAG, "C_FindObjects failed with %s [0x%08lx] for slot %lu",
 			         CK_RV_error_string(rv), rv, currentSlot);
 			goto cleanup_FindObjects;
 		}
@@ -844,8 +846,8 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 		WINPR_ASSERT(provider->p11->C_FindObjectsFinal);
 		rv = provider->p11->C_FindObjectsFinal(currentSession);
 		if (rv != CKR_OK)
-			WLog_ERR(TAG, "C_FindObjectsFinal failed with %s [0x%08" PRIx32 "]",
-			         CK_RV_error_string(rv), rv);
+			WLog_ERR(TAG, "C_FindObjectsFinal failed with %s [0x%08lx]", CK_RV_error_string(rv),
+			         rv);
 
 		if (keyName)
 		{
@@ -872,8 +874,8 @@ static SECURITY_STATUS get_piv_container_name(NCryptP11KeyHandle* key, const BYT
 	char container_name[PIV_CONTAINER_NAME_LEN + 1] = { 0 };
 	DWORD buf_len = 0;
 	SECURITY_STATUS ret = NTE_BAD_KEY;
-	WinPrAsn1Decoder dec = { 0 };
-	WinPrAsn1Decoder dec2 = { 0 };
+	WinPrAsn1Decoder dec = { .encoding = WINPR_ASN1_BER, { 0 } };
+	WinPrAsn1Decoder dec2 = { .encoding = WINPR_ASN1_BER, { 0 } };
 	size_t len = 0;
 	BYTE tag = 0;
 	BYTE* p = NULL;
@@ -1069,7 +1071,7 @@ static SECURITY_STATUS NCryptP11KeyGetProperties(NCryptP11KeyHandle* keyHandle,
 	rv = provider->p11->C_OpenSession(keyHandle->slotId, CKF_SERIAL_SESSION, NULL, NULL, &session);
 	if (rv != CKR_OK)
 	{
-		WLog_ERR(TAG, "error opening session on slot %d", keyHandle->slotId);
+		WLog_ERR(TAG, "error opening session on slot %lu", keyHandle->slotId);
 		return NTE_FAIL;
 	}
 
@@ -1077,7 +1079,7 @@ static SECURITY_STATUS NCryptP11KeyGetProperties(NCryptP11KeyHandle* keyHandle,
 	rv = provider->p11->C_FindObjectsInit(session, objectFilter, objectFilterLen);
 	if (rv != CKR_OK)
 	{
-		WLog_ERR(TAG, "unable to initiate search for slot %d", keyHandle->slotId);
+		WLog_ERR(TAG, "unable to initiate search for slot %lu", keyHandle->slotId);
 		goto out;
 	}
 
@@ -1085,7 +1087,7 @@ static SECURITY_STATUS NCryptP11KeyGetProperties(NCryptP11KeyHandle* keyHandle,
 	rv = provider->p11->C_FindObjects(session, &objectHandle, 1, &objectCount);
 	if (rv != CKR_OK)
 	{
-		WLog_ERR(TAG, "unable to findObjects for slot %d", keyHandle->slotId);
+		WLog_ERR(TAG, "unable to findObjects for slot %lu", keyHandle->slotId);
 		goto out_final;
 	}
 	if (!objectCount)
@@ -1173,14 +1175,14 @@ out_final:
 	rv = provider->p11->C_FindObjectsFinal(session);
 	if (rv != CKR_OK)
 	{
-		WLog_ERR(TAG, "error in C_FindObjectsFinal() for slot %d", keyHandle->slotId);
+		WLog_ERR(TAG, "error in C_FindObjectsFinal() for slot %lu", keyHandle->slotId);
 	}
 out:
 	WINPR_ASSERT(provider->p11->C_CloseSession);
 	rv = provider->p11->C_CloseSession(session);
 	if (rv != CKR_OK)
 	{
-		WLog_ERR(TAG, "error in C_CloseSession() for slot %d", keyHandle->slotId);
+		WLog_ERR(TAG, "error in C_CloseSession() for slot %lu", keyHandle->slotId);
 	}
 	return ret;
 }
@@ -1303,16 +1305,18 @@ SECURITY_STATUS NCryptOpenP11StorageProviderEx(NCRYPT_PROV_HANDLE* phProvider,
 			goto out_load_library;
 		}
 
-		c_get_function_list_t c_get_function_list =
-		    GetProcAddressAs(library, "C_GetFunctionList", c_get_function_list_t);
-
-		if (!c_get_function_list)
 		{
-			status = NTE_PROV_TYPE_ENTRY_BAD;
-			goto out_load_library;
-		}
+			c_get_function_list_t c_get_function_list =
+			    GetProcAddressAs(library, "C_GetFunctionList", c_get_function_list_t);
 
-		status = initialize_pkcs11(library, c_get_function_list, phProvider);
+			if (!c_get_function_list)
+			{
+				status = NTE_PROV_TYPE_ENTRY_BAD;
+				goto out_load_library;
+			}
+
+			status = initialize_pkcs11(library, c_get_function_list, phProvider);
+		}
 		if (status != ERROR_SUCCESS)
 		{
 			status = NTE_PROVIDER_DLL_FAIL;

@@ -1,1 +1,1 @@
-usr/lib/*/libfreerdp-shadow-subsystem*.so.*
+usr/lib/${DEB_HOST_MULTIARCH}/libfreerdp-shadow-subsystem*.so.*

@@ -85,6 +85,7 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  FreeRDPAreColorFormatsEqualNoAlpha@Base 3.0.0
  FreeRDPGetColor@Base 3.0.0
  FreeRDPGetColorFormatName@Base 3.0.0
+ FreeRDPGetColorFromatFromName@Base 3.18.0
  FreeRDPReadColor@Base 3.0.0
  FreeRDPSplitColor@Base 3.0.0
  FreeRDPWriteColor@Base 3.0.0
@@ -261,6 +262,7 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_assistance_set_connection_string2@Base 3.0.0
  freerdp_bitmap_compress@Base 3.0.0
  freerdp_bitmap_compress_planar@Base 3.0.0
+ freerdp_bitmap_decompress_planar@Base 3.18.0
  freerdp_bitmap_planar_context_free@Base 3.0.0
  freerdp_bitmap_planar_context_new@Base 3.0.0
  freerdp_bitmap_planar_context_reset@Base 3.0.0
@@ -337,6 +339,7 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_client_codecs_new@Base 3.6.2
  freerdp_client_codecs_prepare@Base 3.0.0
  freerdp_client_codecs_reset@Base 3.0.0
+ freerdp_codec_id_to_str@Base 3.18.0
  freerdp_codepages_free@Base 3.0.0
  freerdp_connect@Base 3.0.0
  freerdp_context_free@Base 3.0.0
@@ -344,6 +347,7 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_context_new_ex@Base 3.0.0
  freerdp_context_reset@Base 3.0.0
  freerdp_del_signal_cleanup_handler@Base 3.0.0
+ freerdp_desktop_rotation_flags_to_string@Base 3.22.0
  freerdp_detect_keyboard_layout_from_locale@Base 3.14.0
  freerdp_detect_keyboard_layout_from_system_locale@Base 3.0.0
  freerdp_device_clone@Base 3.0.0
@@ -418,6 +422,7 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_get_version@Base 3.0.0
  freerdp_get_version_string@Base 3.0.0
  freerdp_glyph_convert@Base 3.0.0
+ freerdp_glyph_convert_ex@Base 3.21.0
  freerdp_handle_signals@Base 3.0.0
  freerdp_heartbeat_send_heartbeat_pdu@Base 3.0.0
  freerdp_http_request@Base 3.0.0
@@ -432,6 +437,7 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_image_fill@Base 3.0.0
  freerdp_image_fill_ex@Base 3.13.0
  freerdp_image_scale@Base 3.0.0
+ freerdp_input_keyboard_flags_string@Base 3.19.0
  freerdp_input_send_extended_mouse_event@Base 3.0.0
  freerdp_input_send_focus_in_event@Base 3.0.0
  freerdp_input_send_keyboard_event@Base 3.0.0
@@ -442,6 +448,7 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_input_send_rel_mouse_event@Base 3.0.0
  freerdp_input_send_synchronize_event@Base 3.0.0
  freerdp_input_send_unicode_keyboard_event@Base 3.0.0
+ freerdp_input_touch_state_string@Base 3.22.0
  freerdp_interruptible_get_line@Base 3.0.0
  freerdp_interruptible_getc@Base 3.0.0
  freerdp_io_callback_set_event@Base 3.0.0
@@ -480,11 +487,13 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_message_queue_process_pending_messages@Base 3.0.0
  freerdp_nego_get_routing_token@Base 3.0.0
  freerdp_new@Base 3.0.0
+ freerdp_nla_FreeContextBuffer@Base 3.22.0
  freerdp_nla_QueryContextAttributes@Base 3.9.0
  freerdp_nla_decrypt@Base 3.9.0
  freerdp_nla_encrypt@Base 3.9.0
  freerdp_nla_impersonate@Base 3.0.0
  freerdp_nla_revert_to_self@Base 3.0.0
+ freerdp_order_support_flags_string@Base 3.22.0
  freerdp_passphrase_read@Base 3.0.0
  freerdp_peer_context_free@Base 3.0.0
  freerdp_peer_context_new@Base 3.0.0
@@ -752,9 +761,12 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  rdp_update_unlock@Base 3.0.0
  rdpdr_cap_type_string@Base 3.0.0
  rdpdr_component_string@Base 3.0.0
+ rdpdr_device_type_string@Base 3.22.0
  rdpdr_dump_received_packet@Base 3.0.0
  rdpdr_dump_send_packet@Base 3.0.0
+ rdpdr_irp_mask2str@Base 3.21.0
  rdpdr_irp_string@Base 3.0.0
+ rdpdr_irp_val2str@Base 3.21.0
  rdpdr_packetid_string@Base 3.0.0
  rdpdr_read_capset_header@Base 3.0.0
  rdpdr_write_capset_header@Base 3.0.0

@@ -318,9 +318,12 @@ struct xf_context
 	FREERDP_REMAP_TABLE* remap_table;
 	DWORD X11_KEYCODE_TO_VIRTUAL_SCANCODE[256];
 	bool isCursorHidden;
+	bool isActionScriptAllowed;
 };
 
 BOOL xf_create_window(xfContext* xfc);
+void xf_destroy_window(xfContext* xfc);
+
 BOOL xf_create_image(xfContext* xfc);
 void xf_toggle_fullscreen(xfContext* xfc);
 void xf_minimize(xfContext* xfc);
@@ -390,7 +393,8 @@ enum XF_EXIT_CODE
 	XF_EXIT_CONNECT_ACCOUNT_EXPIRED = 157,
 	XF_EXIT_CONNECT_LOGON_TYPE_NOT_GRANTED = 158,
 	XF_EXIT_CONNECT_NO_OR_MISSING_CREDENTIALS = 159,
-
+	XF_EXIT_CONNECT_TARGET_BOOTING = 160,
+	XF_EXIT_CODE_LAST = XF_EXIT_CONNECT_TARGET_BOOTING,
 	XF_EXIT_UNKNOWN = 255,
 };
 

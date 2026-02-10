@@ -35,46 +35,51 @@ extern "C"
 	} Array##T;                                                                           \
 	typedef BOOL Array##T##Cb(T* v, void* data);                                          \
                                                                                           \
-	static INLINE void array_##TLOWER##_init(Array##T* a)                                 \
+	static inline void array_##TLOWER##_init(Array##T* a)                                 \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
 		a->values = NULL;                                                                 \
 		a->nvalues = 0;                                                                   \
 	}                                                                                     \
                                                                                           \
-	static INLINE size_t array_##TLOWER##_size(const Array##T* a)                         \
+	WINPR_ATTR_NODISCARD                                                                  \
+	static inline size_t array_##TLOWER##_size(const Array##T* a)                         \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
 		return a->nvalues;                                                                \
 	}                                                                                     \
                                                                                           \
-	static INLINE T* array_##TLOWER##_data(const Array##T* a)                             \
+	WINPR_ATTR_NODISCARD                                                                  \
+	static inline T* array_##TLOWER##_data(const Array##T* a)                             \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
 		return a->values;                                                                 \
 	}                                                                                     \
                                                                                           \
-	static INLINE const T* array_##TLOWER##_cdata(const Array##T* a)                      \
+	WINPR_ATTR_NODISCARD                                                                  \
+	static inline const T* array_##TLOWER##_cdata(const Array##T* a)                      \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
 		return (const T*)a->values;                                                       \
 	}                                                                                     \
                                                                                           \
-	static INLINE T array_##TLOWER##_get(const Array##T* a, size_t idx)                   \
+	WINPR_ATTR_NODISCARD                                                                  \
+	static inline T array_##TLOWER##_get(const Array##T* a, size_t idx)                   \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
 		WINPR_ASSERT(a->nvalues > idx);                                                   \
 		return a->values[idx];                                                            \
 	}                                                                                     \
                                                                                           \
-	static INLINE void array_##TLOWER##_set(Array##T* a, size_t idx, T v)                 \
+	static inline void array_##TLOWER##_set(Array##T* a, size_t idx, T v)                 \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
 		WINPR_ASSERT(a->nvalues > idx);                                                   \
 		a->values[idx] = v;                                                               \
 	}                                                                                     \
                                                                                           \
-	static INLINE BOOL array_##TLOWER##_append(Array##T* a, T v)                          \
+	WINPR_ATTR_NODISCARD                                                                  \
+	static inline BOOL array_##TLOWER##_append(Array##T* a, T v)                          \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
 		T* tmp = realloc(a->values, sizeof(T) * (a->nvalues + 1));                        \
@@ -87,7 +92,8 @@ extern "C"
 		return TRUE;                                                                      \
 	}                                                                                     \
                                                                                           \
-	static INLINE BOOL array_##TLOWER##_contains(const Array##T* a, T v)                  \
+	WINPR_ATTR_NODISCARD                                                                  \
+	static inline BOOL array_##TLOWER##_contains(const Array##T* a, T v)                  \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
                                                                                           \
@@ -100,7 +106,8 @@ extern "C"
 		return FALSE;                                                                     \
 	}                                                                                     \
                                                                                           \
-	static INLINE BOOL array_##TLOWER##_foreach(Array##T* a, Array##T##Cb cb, void* data) \
+	WINPR_ATTR_NODISCARD                                                                  \
+	static inline BOOL array_##TLOWER##_foreach(Array##T* a, Array##T##Cb cb, void* data) \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
 		for (size_t i = 0; i < a->nvalues; i++)                                           \
@@ -112,13 +119,13 @@ extern "C"
 		return TRUE;                                                                      \
 	}                                                                                     \
                                                                                           \
-	static INLINE void array_##TLOWER##_reset(Array##T* a)                                \
+	static inline void array_##TLOWER##_reset(Array##T* a)                                \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
 		a->nvalues = 0;                                                                   \
 	}                                                                                     \
                                                                                           \
-	static INLINE void array_##TLOWER##_uninit(Array##T* a)                               \
+	static inline void array_##TLOWER##_uninit(Array##T* a)                               \
 	{                                                                                     \
 		WINPR_ASSERT(a);                                                                  \
 		free(a->values);                                                                  \

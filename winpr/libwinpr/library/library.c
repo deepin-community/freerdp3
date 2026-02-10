@@ -109,13 +109,13 @@ BOOL SetDefaultDllDirectories(WINPR_ATTR_UNUSED DWORD DirectoryFlags)
 
 HMODULE LoadLibraryA(LPCSTR lpLibFileName)
 {
+	if (!lpLibFileName)
+		return NULL;
+
 #if defined(_UWP)
 	int status;
 	HMODULE hModule = NULL;
 	WCHAR* filenameW = NULL;
-
-	if (!lpLibFileName)
-		return NULL;
 
 	filenameW = ConvertUtf8ToWCharAlloc(lpLibFileName, NULL);
 	if (filenameW)
@@ -125,8 +125,7 @@ HMODULE LoadLibraryA(LPCSTR lpLibFileName)
 	free(filenameW);
 	return hModule;
 #else
-	HMODULE library = NULL;
-	library = dlopen(lpLibFileName, RTLD_LOCAL | RTLD_LAZY);
+	HMODULE library = dlopen(lpLibFileName, RTLD_LOCAL | RTLD_LAZY);
 
 	if (!library)
 	{
@@ -142,17 +141,15 @@ HMODULE LoadLibraryA(LPCSTR lpLibFileName)
 
 HMODULE LoadLibraryW(LPCWSTR lpLibFileName)
 {
-	if (!lpLibFileName)
-		return NULL;
 #if defined(_UWP)
 	return LoadPackagedLibrary(lpLibFileName, 0);
 #else
-	HMODULE module = NULL;
-	char* name = ConvertWCharToUtf8Alloc(lpLibFileName, NULL);
-	if (!name)
-		return NULL;
+	char* name = NULL;
 
-	module = LoadLibraryA(name);
+	if (lpLibFileName)
+		name = ConvertWCharToUtf8Alloc(lpLibFileName, NULL);
+
+	HMODULE module = LoadLibraryA(name);
 	free(name);
 	return module;
 #endif
@@ -210,20 +207,19 @@ BOOL FreeLibrary(HMODULE hLibModule)
 	return TRUE;
 }
 
-HMODULE GetModuleHandleA(WINPR_ATTR_UNUSED LPCSTR lpModuleName)
+HMODULE GetModuleHandleA(LPCSTR lpModuleName)
 {
-	/* TODO: Implement */
-	WLog_ERR(TAG, "not implemented");
-	SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-	return NULL;
+	return dlopen(lpModuleName, RTLD_NOLOAD | RTLD_LOCAL | RTLD_LAZY);
 }
 
-HMODULE GetModuleHandleW(WINPR_ATTR_UNUSED LPCWSTR lpModuleName)
+HMODULE GetModuleHandleW(LPCWSTR lpModuleName)
 {
-	/* TODO: Implement */
-	WLog_ERR(TAG, "not implemented");
-	SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-	return NULL;
+	char* name = NULL;
+	if (lpModuleName)
+		name = ConvertWCharToUtf8Alloc(lpModuleName, NULL);
+	HANDLE hdl = GetModuleHandleA(name);
+	free(name);
+	return hdl;
 }
 
 /**
@@ -398,15 +394,14 @@ DWORD GetModuleFileNameA(HMODULE hModule, LPSTR lpFilename, DWORD nSize)
 
 HMODULE LoadLibraryX(LPCSTR lpLibFileName)
 {
-	if (!lpLibFileName)
-		return NULL;
-
 #if defined(_WIN32)
 	HMODULE hm = NULL;
-	WCHAR* wstr = ConvertUtf8ToWCharAlloc(lpLibFileName, NULL);
+	WCHAR* wstr = NULL;
 
-	if (wstr)
-		hm = LoadLibraryW(wstr);
+	if (lpLibFileName)
+		wstr = ConvertUtf8ToWCharAlloc(lpLibFileName, NULL);
+
+	hm = LoadLibraryW(wstr);
 	free(wstr);
 	return hm;
 #else

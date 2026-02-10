@@ -91,8 +91,22 @@ add_compile_definitions(${WINPR_DEFINITIONS})
 target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include/winpr${WINPR_VERSION_MAJOR}>)
 target_link_libraries(${MODULE_NAME} PRIVATE ${WINPR_TOOLS_LIBS})
 
-install(TARGETS ${MODULE_NAME} COMPONENT libraries EXPORT WinPR-toolsTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+installwithrpath(
+  TARGETS
+  ${MODULE_NAME}
+  COMPONENT
+  libraries
+  EXPORT
+  WinPR-toolsTargets
+  ARCHIVE
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME
+  DESTINATION
+  ${CMAKE_INSTALL_BINDIR}
 )
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "WinPR/Tools")
@@ -103,6 +117,13 @@ if(WITH_WINPR_TOOLS_CLI)
   add_subdirectory(makecert-cli)
   add_subdirectory(hash-cli)
 endif()
+
+# Do not set Requires.Private if not a static build
+if(NOT BUILD_SHARED_LIBS)
+  set(WINPR_TOOLS_PC_REQUIRES_PRIVATE "winpr${WINPR_API_VERSION} libssl")
+  set(WINPR_TOOLS_PC_LIBRARY_PRIVATE "crypto")
+endif()
+set(WINPR_TOOLS_PC_REQUIRES winpr${WINPR_API_VERSION})
 
 include(pkg-config-install-prefix)
 cleaning_configure_file(

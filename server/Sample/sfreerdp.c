@@ -128,8 +128,10 @@ static BOOL test_peer_context_new(freerdp_peer* client, rdpContext* ctx)
 	                       SAMPLE_SERVER_DEFAULT_HEIGHT))
 		goto fail;
 
-	const UINT32 rlgr = freerdp_settings_get_uint32(ctx->settings, FreeRDP_RemoteFxRlgrMode);
-	rfx_context_set_mode(context->rfx_context, rlgr);
+	{
+		const UINT32 rlgr = freerdp_settings_get_uint32(ctx->settings, FreeRDP_RemoteFxRlgrMode);
+		rfx_context_set_mode(context->rfx_context, WINPR_ASSERTING_INT_CAST(RLGR_MODE, rlgr));
+	}
 
 	if (!(context->nsc_context = nsc_context_new()))
 		goto fail;
@@ -563,7 +565,8 @@ static BOOL tf_peer_dump_rfx(freerdp_peer* client)
 			break;
 
 		record.data = Stream_Buffer(s);
-		pcap_get_next_record_content(pcap_rfx, &record);
+		if (!pcap_get_next_record_content(pcap_rfx, &record))
+			break;
 		Stream_SetPosition(s, Stream_Capacity(s));
 
 		if (info->test_dump_rfx_realtime &&
@@ -690,7 +693,6 @@ static BOOL tf_peer_post_connect(freerdp_peer* client)
 		/* A real server may perform OS login here if NLA is not executed previously. */
 	}
 
-	WLog_DBG(TAG, "");
 	WLog_DBG(TAG, "Client requested desktop: %" PRIu32 "x%" PRIu32 "x%" PRIu32 "",
 	         freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth),
 	         freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight),
@@ -1115,16 +1117,20 @@ static DWORD WINAPI test_peer_mainloop(LPVOID arg)
 			goto fail;
 	}
 
-	rdpPrivateKey* key = freerdp_key_new_from_file_enc(info->key, NULL);
-	if (!key)
-		goto fail;
-	if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerRsaKey, key, 1))
-		goto fail;
-	rdpCertificate* cert = freerdp_certificate_new_from_file(info->cert);
-	if (!cert)
-		goto fail;
-	if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerCertificate, cert, 1))
-		goto fail;
+	{
+		rdpPrivateKey* key = freerdp_key_new_from_file_enc(info->key, NULL);
+		if (!key)
+			goto fail;
+		if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerRsaKey, key, 1))
+			goto fail;
+	}
+	{
+		rdpCertificate* cert = freerdp_certificate_new_from_file(info->cert);
+		if (!cert)
+			goto fail;
+		if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerCertificate, cert, 1))
+			goto fail;
+	}
 
 	if (!freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, TRUE))
 		goto fail;
@@ -1345,7 +1351,12 @@ static const struct
 	const char slocal_only[13];
 	const char scert[7];
 	const char skey[6];
-} options = { "--pcap=", "--fast", "--port=", "--local-only", "--cert=", "--key=" };
+} options = { { '-', '-', 'p', 'c', 'a', 'p', '=' },
+	          { '-', '-', 'f', 'a', 's', 't' },
+	          { '-', '-', 'p', 'o', 'r', 't', '=' },
+	          { '-', '-', 'l', 'o', 'c', 'a', 'l', '-', 'o', 'n', 'l', 'y' },
+	          { '-', '-', 'c', 'e', 'r', 't', '=' },
+	          { '-', '-', 'k', 'e', 'y', '=' } };
 
 WINPR_PRAGMA_DIAG_PUSH
 WINPR_PRAGMA_DIAG_IGNORED_FORMAT_NONLITERAL

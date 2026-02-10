@@ -273,7 +273,7 @@ static BOOL update_write_bitmap_update(rdpUpdate* update, wStream* s,
 	if (!Stream_EnsureRemainingCapacity(s, 32))
 		return FALSE;
 
-	Stream_Write_UINT16(s, UPDATE_TYPE_BITMAP);   /* updateType */
+	Stream_Write_UINT16(s, UPDATE_TYPE_BITMAP); /* updateType */
 	Stream_Write_UINT16(s, WINPR_ASSERTING_INT_CAST(
 	                           uint16_t, bitmapUpdate->number)); /* numberRectangles (2 bytes) */
 
@@ -1471,6 +1471,8 @@ static BOOL update_send_frame_acknowledge(rdpContext* context, UINT32 frameId)
 
 	WINPR_ASSERT(rdp);
 	WINPR_ASSERT(rdp->settings);
+	WINPR_ASSERT(rdp->settings->ReceivedCapabilities);
+	WINPR_ASSERT(rdp->settings->ReceivedCapabilitiesSize > CAPSET_TYPE_FRAME_ACKNOWLEDGE);
 	if (rdp->settings->ReceivedCapabilities[CAPSET_TYPE_FRAME_ACKNOWLEDGE])
 	{
 		UINT16 sec_flags = 0;
@@ -1554,6 +1556,8 @@ static BOOL update_send_play_sound(rdpContext* context, const PLAY_SOUND_UPDATE*
 	WINPR_ASSERT(rdp);
 	WINPR_ASSERT(rdp->settings);
 	WINPR_ASSERT(play_sound);
+	WINPR_ASSERT(rdp->settings->ReceivedCapabilities);
+	WINPR_ASSERT(rdp->settings->ReceivedCapabilitiesSize > CAPSET_TYPE_SOUND);
 	if (!rdp->settings->ReceivedCapabilities[CAPSET_TYPE_SOUND])
 	{
 		return TRUE;
@@ -2826,7 +2830,7 @@ static BOOL update_send_window_icon(rdpContext* context, const WINDOW_ORDER_INFO
 	    s, WINPR_ASSERTING_INT_CAST(uint16_t, iconInfo->cbBitsMask)); /* CbBitsMask (2 bytes) */
 	Stream_Write_UINT16(
 	    s, WINPR_ASSERTING_INT_CAST(uint16_t, iconInfo->cbBitsColor)); /* CbBitsColor (2 bytes) */
-	Stream_Write(s, iconInfo->bitsMask, iconInfo->cbBitsMask); /* BitsMask (variable) */
+	Stream_Write(s, iconInfo->bitsMask, iconInfo->cbBitsMask);         /* BitsMask (variable) */
 
 	if (iconInfo->bpp <= 8)
 	{
@@ -3325,40 +3329,50 @@ rdpUpdate* update_new(rdpRdp* rdp)
 	if (!update->common.pointer)
 		goto fail;
 
-	rdp_primary_update_internal* primary =
-	    (rdp_primary_update_internal*)calloc(1, sizeof(rdp_primary_update_internal));
+	{
+		rdp_primary_update_internal* primary =
+		    (rdp_primary_update_internal*)calloc(1, sizeof(rdp_primary_update_internal));
 
-	if (!primary)
-		goto fail;
-	update->common.primary = &primary->common;
+		if (!primary)
+			goto fail;
+		update->common.primary = &primary->common;
+	}
 
-	rdp_secondary_update_internal* secondary =
-	    (rdp_secondary_update_internal*)calloc(1, sizeof(rdp_secondary_update_internal));
+	{
+		rdp_secondary_update_internal* secondary =
+		    (rdp_secondary_update_internal*)calloc(1, sizeof(rdp_secondary_update_internal));
 
-	if (!secondary)
-		goto fail;
-	update->common.secondary = &secondary->common;
+		if (!secondary)
+			goto fail;
+		update->common.secondary = &secondary->common;
+	}
 
-	rdp_altsec_update_internal* altsec =
-	    (rdp_altsec_update_internal*)calloc(1, sizeof(rdp_altsec_update_internal));
+	{
+		rdp_altsec_update_internal* altsec =
+		    (rdp_altsec_update_internal*)calloc(1, sizeof(rdp_altsec_update_internal));
 
-	if (!altsec)
-		goto fail;
+		if (!altsec)
+			goto fail;
 
-	update->common.altsec = &altsec->common;
-	update->common.window = (rdpWindowUpdate*)calloc(1, sizeof(rdpWindowUpdate));
+		update->common.altsec = &altsec->common;
 
-	if (!update->common.window)
-		goto fail;
+		update->common.window = (rdpWindowUpdate*)calloc(1, sizeof(rdpWindowUpdate));
 
-	OFFSCREEN_DELETE_LIST* deleteList = &(altsec->create_offscreen_bitmap.deleteList);
-	deleteList->sIndices = 64;
-	deleteList->indices = calloc(deleteList->sIndices, 2);
+		if (!update->common.window)
+			goto fail;
 
-	if (!deleteList->indices)
-		goto fail;
+		{
+			OFFSCREEN_DELETE_LIST* deleteList = &(altsec->create_offscreen_bitmap.deleteList);
+			deleteList->sIndices = 64;
+			deleteList->indices = calloc(deleteList->sIndices, 2);
 
-	deleteList->cIndices = 0;
+			if (!deleteList->indices)
+				goto fail;
+
+			deleteList->cIndices = 0;
+		}
+	}
+
 	update->common.SuppressOutput = update_send_suppress_output;
 	update->initialState = TRUE;
 	update->common.autoCalculateBitmapData = TRUE;

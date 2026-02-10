@@ -147,8 +147,7 @@ static krb5_error_code kerberos_log_msg(krb5_context ctx, krb5_error_code code, 
 			if (WLog_IsLevelActive(log, level))
 			{
 				const char* msg = krb5_get_error_message(ctx, code);
-				WLog_PrintMessage(log, WLOG_MESSAGE_TEXT, level, line, file, fkt, "%s (%s [%d])",
-				                  what, msg, code);
+				WLog_PrintTextMessage(log, level, line, file, fkt, "%s (%s [%d])", what, msg, code);
 				krb5_free_error_message(ctx, msg);
 			}
 		}
@@ -219,7 +218,7 @@ static krb5_error_code krb5_prompter(krb5_context context, void* data,
 	return 0;
 }
 
-static INLINE krb5glue_key get_key(struct krb5glue_keyset* keyset)
+static inline krb5glue_key get_key(struct krb5glue_keyset* keyset)
 {
 	return keyset->acceptor_key    ? keyset->acceptor_key
 	       : keyset->initiator_key ? keyset->initiator_key
@@ -247,6 +246,7 @@ static BOOL isValidIP(const char* ipAddress)
 
 #if defined(WITH_KRB5_MIT)
 WINPR_ATTR_MALLOC(free, 1)
+WINPR_ATTR_NODISCARD
 static char* get_realm_name(krb5_data realm, size_t* plen)
 {
 	WINPR_ASSERT(plen);
@@ -261,6 +261,7 @@ static char* get_realm_name(krb5_data realm, size_t* plen)
 }
 #elif defined(WITH_KRB5_HEIMDAL)
 WINPR_ATTR_MALLOC(free, 1)
+WINPR_ATTR_NODISCARD
 static char* get_realm_name(Realm realm, size_t* plen)
 {
 	WINPR_ASSERT(plen);
@@ -284,9 +285,11 @@ static int build_krbtgt(krb5_context ctx, krb5_principal principal, krb5_princip
 	if (!name || (len == 0))
 		goto fail;
 
-	krb5_principal target = { 0 };
-	rv = krb5_parse_name(ctx, name, &target);
-	*ptarget = target;
+	{
+		krb5_principal target = { 0 };
+		rv = krb5_parse_name(ctx, name, &target);
+		*ptarget = target;
+	}
 fail:
 	free(name);
 	return rv;
@@ -396,7 +399,12 @@ static SECURITY_STATUS SEC_ENTRY kerberos_AcquireCredentialsHandleA(
 				goto cleanup;
 		}
 		else
+		{
+			if (krb_log_exec(krb5_cc_default, ctx, &ccache))
+				goto cleanup;
 			own_ccache = FALSE;
+		}
+		WINPR_ASSERT(ccache);
 	}
 	else if (fCredentialUse & SECPKG_CRED_OUTBOUND)
 	{
@@ -405,6 +413,7 @@ static SECURITY_STATUS SEC_ENTRY kerberos_AcquireCredentialsHandleA(
 			goto cleanup;
 		if (krb_log_exec(krb5_cc_get_principal, ctx, ccache, &principal))
 			goto cleanup;
+		WINPR_ASSERT(ccache);
 		own_ccache = FALSE;
 	}
 	else
@@ -419,6 +428,7 @@ static SECURITY_STATUS SEC_ENTRY kerberos_AcquireCredentialsHandleA(
 			if (krb_log_exec(krb5_cc_resolve, ctx, krb_settings->cache, &ccache))
 				goto cleanup;
 		}
+		WINPR_ASSERT(ccache);
 	}
 
 	if (krb_settings && krb_settings->keytab)
@@ -445,6 +455,8 @@ static SECURITY_STATUS SEC_ENTRY kerberos_AcquireCredentialsHandleA(
 		matchCreds.client = principal;
 
 		WINPR_ASSERT(principal);
+		WINPR_ASSERT(ctx);
+		WINPR_ASSERT(ccache);
 		if (krb_log_exec(build_krbtgt, ctx, principal, &matchCreds.server))
 			goto cleanup;
 
@@ -710,46 +722,52 @@ static BOOL append(char* dst, size_t dstSize, const char* src)
 static BOOL kerberos_rd_tgt_req_tag2(WinPrAsn1Decoder* dec, char* buf, size_t len)
 {
 	BOOL rc = FALSE;
-	WinPrAsn1Decoder seq = { 0 };
+	WinPrAsn1Decoder seq = { .encoding = WINPR_ASN1_BER, { 0 } };
 
 	/* server-name [2] PrincipalName (SEQUENCE) */
 	if (!WinPrAsn1DecReadSequence(dec, &seq))
 		goto end;
 
 	/* name-type [0] INTEGER */
-	BOOL error = FALSE;
-	WinPrAsn1_INTEGER val = 0;
-	if (!WinPrAsn1DecReadContextualInteger(&seq, 0, &error, &val))
-		goto end;
-
-	/* name-string [1] SEQUENCE OF GeneralString */
-	if (!WinPrAsn1DecReadContextualSequence(&seq, 1, &error, dec))
-		goto end;
-
-	WinPrAsn1_tag tag = 0;
-	BOOL first = TRUE;
-	while (WinPrAsn1DecPeekTag(dec, &tag))
 	{
-		BOOL success = FALSE;
-		char* lstr = NULL;
-		if (!WinPrAsn1DecReadGeneralString(dec, &lstr))
-			goto fail;
-
-		if (!first)
+		BOOL error = FALSE;
 		{
-			if (!append(buf, len, "/"))
-				goto fail;
+			WinPrAsn1_INTEGER val = 0;
+			if (!WinPrAsn1DecReadContextualInteger(&seq, 0, &error, &val))
+				goto end;
 		}
-		first = FALSE;
 
-		if (!append(buf, len, lstr))
-			goto fail;
-
-		success = TRUE;
-	fail:
-		free(lstr);
-		if (!success)
+		/* name-string [1] SEQUENCE OF GeneralString */
+		if (!WinPrAsn1DecReadContextualSequence(&seq, 1, &error, dec))
 			goto end;
+	}
+
+	{
+		WinPrAsn1_tag tag = 0;
+		BOOL first = TRUE;
+		while (WinPrAsn1DecPeekTag(dec, &tag))
+		{
+			BOOL success = FALSE;
+			char* lstr = NULL;
+			if (!WinPrAsn1DecReadGeneralString(dec, &lstr))
+				goto fail;
+
+			if (!first)
+			{
+				if (!append(buf, len, "/"))
+					goto fail;
+			}
+			first = FALSE;
+
+			if (!append(buf, len, lstr))
+				goto fail;
+
+			success = TRUE;
+		fail:
+			free(lstr);
+			if (!success)
+				goto end;
+		}
 	}
 
 	rc = TRUE;
@@ -789,7 +807,7 @@ static BOOL kerberos_rd_tgt_req(WinPrAsn1Decoder* dec, char** target)
 	if (len == 0)
 		return TRUE;
 
-	WinPrAsn1Decoder dec2 = { 0 };
+	WinPrAsn1Decoder dec2 = { .encoding = WINPR_ASN1_BER, { 0 } };
 	WinPrAsn1_tagId tag = 0;
 	if (WinPrAsn1DecReadContextualTag(dec, &tag, &dec2) == 0)
 		return FALSE;
@@ -835,7 +853,7 @@ static BOOL kerberos_rd_tgt_rep(WinPrAsn1Decoder* dec, krb5_data* ticket)
 		return FALSE;
 
 	/* ticket [2] Ticket */
-	WinPrAsn1Decoder asnTicket = { 0 };
+	WinPrAsn1Decoder asnTicket = { .encoding = WINPR_ASN1_BER, { 0 } };
 	WinPrAsn1_tagId tag = 0;
 	if (WinPrAsn1DecReadContextualTag(dec, &tag, &asnTicket) == 0)
 		return FALSE;
@@ -863,11 +881,11 @@ static BOOL kerberos_rd_tgt_token(const sspi_gss_data* token, char** target, krb
 	if (target)
 		*target = NULL;
 
-	WinPrAsn1Decoder der = { 0 };
+	WinPrAsn1Decoder der = { .encoding = WINPR_ASN1_BER, { 0 } };
 	WinPrAsn1Decoder_InitMem(&der, WINPR_ASN1_DER, (BYTE*)token->data, token->length);
 
 	/* KERB-TGT-REQUEST (SEQUENCE) */
-	WinPrAsn1Decoder seq = { 0 };
+	WinPrAsn1Decoder seq = { .encoding = WINPR_ASN1_BER, { 0 } };
 	if (!WinPrAsn1DecReadSequence(&der, &seq))
 		return FALSE;
 
@@ -1281,6 +1299,122 @@ static SECURITY_STATUS SEC_ENTRY kerberos_InitializeSecurityContextW(
 	return status;
 }
 
+#ifdef WITH_KRB5
+static BOOL retrieveTgtForPrincipal(KRB_CREDENTIALS* credentials, krb5_principal principal,
+                                    krb5_creds* creds)
+{
+	BOOL ret = FALSE;
+	krb5_kt_cursor cur = { 0 };
+	krb5_keytab_entry entry = { 0 };
+	if (krb_log_exec(krb5_kt_start_seq_get, credentials->ctx, credentials->keytab, &cur))
+		goto cleanup;
+
+	do
+	{
+		krb5_error_code rv =
+		    krb_log_exec(krb5_kt_next_entry, credentials->ctx, credentials->keytab, &entry, &cur);
+		if (rv == KRB5_KT_END)
+			break;
+		if (rv != 0)
+			goto cleanup;
+
+		if (krb5_principal_compare(credentials->ctx, principal, entry.principal))
+			break;
+		rv = krb_log_exec(krb5glue_free_keytab_entry_contents, credentials->ctx, &entry);
+		memset(&entry, 0, sizeof(entry));
+		if (rv)
+			goto cleanup;
+	} while (1);
+
+	if (krb_log_exec(krb5_kt_end_seq_get, credentials->ctx, credentials->keytab, &cur))
+		goto cleanup;
+
+	if (!entry.principal)
+		goto cleanup;
+
+	/* Get the TGT */
+	if (krb_log_exec(krb5_get_init_creds_keytab, credentials->ctx, creds, entry.principal,
+	                 credentials->keytab, 0, NULL, NULL))
+		goto cleanup;
+
+	ret = TRUE;
+
+cleanup:
+	return ret;
+}
+
+static BOOL retrieveSomeTgt(KRB_CREDENTIALS* credentials, const char* target, krb5_creds* creds)
+{
+	BOOL ret = TRUE;
+	krb5_principal target_princ = { 0 };
+	char* default_realm = NULL;
+
+	krb5_error_code rv =
+	    krb_log_exec(krb5_parse_name_flags, credentials->ctx, target, 0, &target_princ);
+	if (rv)
+		return FALSE;
+
+#if defined(WITH_KRB5_HEIMDAL)
+	if (!target_princ->realm)
+	{
+		rv = krb_log_exec(krb5_get_default_realm, credentials->ctx, &default_realm);
+		if (rv)
+			goto out;
+
+		target_princ->realm = default_realm;
+	}
+#else
+	if (!target_princ->realm.length)
+	{
+		rv = krb_log_exec(krb5_get_default_realm, credentials->ctx, &default_realm);
+		if (rv)
+			goto out;
+
+		target_princ->realm.data = default_realm;
+		target_princ->realm.length = (unsigned int)strlen(default_realm);
+	}
+#endif
+
+	/*
+	 * First try with the account service. We were requested with something like
+	 * TERMSRV/<host>@<realm>, let's see if we have that in our keytab and if we're able
+	 * to retrieve a TGT with that entry
+	 *
+	 */
+	if (retrieveTgtForPrincipal(credentials, target_princ, creds))
+		goto out;
+
+	ret = FALSE;
+
+#if defined(WITH_KRB5_MIT)
+	/*
+	 * if it's not working let's try with <host>$@<REALM> (note the dollar)
+	 */
+	{
+		char hostDollar[300] = { 0 };
+		if (target_princ->length < 2)
+			goto out;
+
+		(void)snprintf(hostDollar, sizeof(hostDollar) - 1, "%s$@%s", target_princ->data[1].data,
+		               target_princ->realm.data);
+		krb5_free_principal(credentials->ctx, target_princ);
+
+		rv = krb_log_exec(krb5_parse_name_flags, credentials->ctx, hostDollar, 0, &target_princ);
+		if (rv)
+			return FALSE;
+	}
+	ret = retrieveTgtForPrincipal(credentials, target_princ, creds);
+#endif
+
+out:
+	if (default_realm)
+		krb5_free_default_realm(credentials->ctx, default_realm);
+
+	krb5_free_principal(credentials->ctx, target_princ);
+	return ret;
+}
+#endif
+
 static SECURITY_STATUS SEC_ENTRY kerberos_AcceptSecurityContext(
     PCredHandle phCredential, PCtxtHandle phContext, PSecBufferDesc pInput,
     WINPR_ATTR_UNUSED ULONG fContextReq, WINPR_ATTR_UNUSED ULONG TargetDataRep,
@@ -1299,11 +1433,7 @@ static SECURITY_STATUS SEC_ENTRY kerberos_AcceptSecurityContext(
 	krb5_flags ap_flags = 0;
 	krb5glue_authenticator authenticator = NULL;
 	char* target = NULL;
-	char* sname = NULL;
-	char* realm = NULL;
-	krb5_kt_cursor cur = { 0 };
 	krb5_keytab_entry entry = { 0 };
-	krb5_principal principal = NULL;
 	krb5_creds creds = { 0 };
 
 	/* behave like windows SSPIs that don't want empty context */
@@ -1352,91 +1482,7 @@ static SECURITY_STATUS SEC_ENTRY kerberos_AcceptSecurityContext(
 		if (!kerberos_rd_tgt_token(&input_token, &target, NULL))
 			goto bad_token;
 
-		/*
-		 *  we're requested with target="TERMSRV/<host>@<REALM>" but we're gonna look
-		 *  at <host>$@<REALM> in the keytab (notice the $), so we build a new "target"
-		 *  string containing
-		 *
-		 *  sname   realm
-		 *  |       |
-		 *  v       v
-		 *  <host>$@<REALM>
-		 *
-		 */
-		if (target)
-		{
-			sname = strchr(target, '/');
-			if (!sname)
-				goto cleanup;
-			sname++;
-
-			/* target goes from TERMSRV/<host>[@<REALM>] to <host>[@<REALM>] */
-			sname = memmove(target, sname, strlen(sname) + 1);
-
-			realm = strchr(target, '@');
-			if (realm)
-			{
-				*realm = '$';
-				realm++;
-
-				size_t len = strlen(realm);
-				memmove(realm + 1, realm, len + 1);
-
-				*realm = '@';
-				realm++;
-			}
-			else
-			{
-				size_t len = strlen(sname);
-				target[len] = '$';
-				target[len + 1] = 0;
-			}
-		}
-
-		if (krb_log_exec(krb5_parse_name_flags, credentials->ctx, sname ? sname : "",
-		                 KRB5_PRINCIPAL_PARSE_NO_REALM, &principal))
-			goto cleanup;
-
-		WINPR_ASSERT(principal);
-
-		if (realm)
-		{
-			if (krb_log_exec(krb5glue_set_principal_realm, credentials->ctx, principal, realm))
-				goto cleanup;
-		}
-
-		if (krb_log_exec(krb5_kt_start_seq_get, credentials->ctx, credentials->keytab, &cur))
-			goto cleanup;
-
-		do
-		{
-			krb5_error_code rv = krb_log_exec(krb5_kt_next_entry, credentials->ctx,
-			                                  credentials->keytab, &entry, &cur);
-			if (rv == KRB5_KT_END)
-				break;
-			if (rv != 0)
-				goto cleanup;
-
-			if ((!sname ||
-			     krb5_principal_compare_any_realm(credentials->ctx, principal, entry.principal)) &&
-			    (!realm || krb5_realm_compare(credentials->ctx, principal, entry.principal)))
-				break;
-			const krb5_error_code res =
-			    krb_log_exec(krb5glue_free_keytab_entry_contents, credentials->ctx, &entry);
-			memset(&entry, 0, sizeof(entry));
-			if (res != 0)
-				goto cleanup;
-		} while (1);
-
-		if (krb_log_exec(krb5_kt_end_seq_get, credentials->ctx, credentials->keytab, &cur))
-			goto cleanup;
-
-		if (!entry.principal)
-			goto cleanup;
-
-		/* Get the TGT */
-		if (krb_log_exec(krb5_get_init_creds_keytab, credentials->ctx, &creds, entry.principal,
-		                 credentials->keytab, 0, NULL, NULL))
+		if (!retrieveSomeTgt(credentials, target, &creds))
 			goto cleanup;
 
 		if (!kerberos_mk_tgt_token(output_buffer, KRB_TGT_REP, NULL, NULL, &creds.ticket))
@@ -1662,6 +1708,108 @@ static SECURITY_STATUS kerberos_ATTR_SIZES(KRB_CONTEXT* context, KRB_CREDENTIALS
 	return SEC_E_OK;
 }
 
+static SECURITY_STATUS kerberos_ATTR_AUTH_IDENTITY(KRB_CONTEXT* context,
+                                                   KRB_CREDENTIALS* credentials,
+                                                   SecPkgContext_AuthIdentity* AuthIdentity)
+{
+	const SecPkgContext_AuthIdentity empty = { 0 };
+
+	WINPR_ASSERT(context);
+	WINPR_ASSERT(context->auth_ctx);
+	WINPR_ASSERT(credentials);
+
+	WINPR_ASSERT(AuthIdentity);
+	*AuthIdentity = empty;
+
+	krb5glue_authenticator authenticator = NULL;
+	krb5_error_code rv = krb_log_exec(krb5_auth_con_getauthenticator, credentials->ctx,
+	                                  context->auth_ctx, &authenticator);
+	if (rv)
+		goto fail;
+
+	{
+		rv = -1;
+
+#if defined(WITH_KRB5_HEIMDAL)
+		const Realm data = authenticator->crealm;
+		if (!data)
+			goto fail;
+		const size_t data_len = length_Realm(&data);
+#else
+		krb5_data* realm_data = krb5_princ_realm(credentials->ctx, authenticator->client);
+		if (!realm_data)
+			goto fail;
+		const char* data = realm_data->data;
+		if (!data)
+			goto fail;
+		const size_t data_len = realm_data->length;
+#endif
+
+		if (data_len > (sizeof(AuthIdentity->Domain) - 1))
+			goto fail;
+		strncpy(AuthIdentity->Domain, data, data_len);
+	}
+
+	{
+#if defined(WITH_KRB5_HEIMDAL)
+		const PrincipalName* principal = &authenticator->cname;
+		const size_t name_length = length_PrincipalName(principal);
+		if (!principal->name_string.val)
+			goto fail;
+		const char* name = *principal->name_string.val;
+#else
+		char* name = NULL;
+		rv = krb_log_exec(krb5_unparse_name_flags, credentials->ctx, authenticator->client,
+		                  KRB5_PRINCIPAL_UNPARSE_NO_REALM, &name);
+		if (rv)
+			goto fail;
+
+		const size_t name_length = strlen(name);
+#endif
+
+		const bool ok = (name_length <= (sizeof(AuthIdentity->User) - 1));
+		if (ok)
+			strncpy(AuthIdentity->User, name, name_length);
+
+		rv = ok ? 0 : -1;
+
+#if !defined(WITH_KRB5_HEIMDAL)
+		krb5_free_unparsed_name(credentials->ctx, name);
+#endif
+	}
+
+fail:
+	krb5glue_free_authenticator(credentials->ctx, authenticator);
+	return krb5_error_to_SECURITY_STATUS(rv);
+}
+
+static SECURITY_STATUS kerberos_ATTR_PACKAGE_INFO(WINPR_ATTR_UNUSED KRB_CONTEXT* context,
+                                                  WINPR_ATTR_UNUSED KRB_CREDENTIALS* credentials,
+                                                  SecPkgContext_PackageInfo* PackageInfo)
+{
+	size_t size = sizeof(SecPkgInfoA);
+	SecPkgInfoA* pPackageInfo =
+	    (SecPkgInfoA*)sspi_ContextBufferAlloc(QuerySecurityPackageInfoIndex, size);
+
+	if (!pPackageInfo)
+		return SEC_E_INSUFFICIENT_MEMORY;
+
+	pPackageInfo->fCapabilities = KERBEROS_SecPkgInfoA.fCapabilities;
+	pPackageInfo->wVersion = KERBEROS_SecPkgInfoA.wVersion;
+	pPackageInfo->wRPCID = KERBEROS_SecPkgInfoA.wRPCID;
+	pPackageInfo->cbMaxToken = KERBEROS_SecPkgInfoA.cbMaxToken;
+	pPackageInfo->Name = _strdup(KERBEROS_SecPkgInfoA.Name);
+	pPackageInfo->Comment = _strdup(KERBEROS_SecPkgInfoA.Comment);
+
+	if (!pPackageInfo->Name || !pPackageInfo->Comment)
+	{
+		sspi_ContextBufferFree(pPackageInfo);
+		return SEC_E_INSUFFICIENT_MEMORY;
+	}
+	PackageInfo->PackageInfo = pPackageInfo;
+	return SEC_E_OK;
+}
+
 static SECURITY_STATUS kerberos_ATTR_TICKET_LOGON(KRB_CONTEXT* context,
                                                   KRB_CREDENTIALS* credentials,
                                                   KERB_TICKET_LOGON* ticketLogon)
@@ -1706,26 +1854,28 @@ again:
 	if (krb_log_exec(krb5_auth_con_init, credentials->ctx, &authContext))
 		goto out;
 
-	krb5_data derOut = { 0 };
-	if (krb_log_exec(krb5_fwd_tgt_creds, credentials->ctx, authContext, context->targetHost,
-	                 matchCred.client, matchCred.server, credentials->ccache, 1, &derOut))
 	{
-		ret = SEC_E_LOGON_DENIED;
-		goto out;
+		krb5_data derOut = { 0 };
+		if (krb_log_exec(krb5_fwd_tgt_creds, credentials->ctx, authContext, context->targetHost,
+		                 matchCred.client, matchCred.server, credentials->ccache, 1, &derOut))
+		{
+			ret = SEC_E_LOGON_DENIED;
+			goto out;
+		}
+
+		ticketLogon->MessageType = KerbTicketLogon;
+		ticketLogon->Flags = KERB_LOGON_FLAG_REDIRECTED;
+
+		if (!copy_krb5_data(&hostCred->ticket, &ticketLogon->ServiceTicket,
+		                    &ticketLogon->ServiceTicketLength))
+		{
+			krb5_free_data(credentials->ctx, &derOut);
+			goto out;
+		}
+
+		ticketLogon->TicketGrantingTicketLength = derOut.length;
+		ticketLogon->TicketGrantingTicket = (PUCHAR)derOut.data;
 	}
-
-	ticketLogon->MessageType = KerbTicketLogon;
-	ticketLogon->Flags = KERB_LOGON_FLAG_REDIRECTED;
-
-	if (!copy_krb5_data(&hostCred->ticket, &ticketLogon->ServiceTicket,
-	                    &ticketLogon->ServiceTicketLength))
-	{
-		krb5_free_data(credentials->ctx, &derOut);
-		goto out;
-	}
-
-	ticketLogon->TicketGrantingTicketLength = derOut.length;
-	ticketLogon->TicketGrantingTicket = (PUCHAR)derOut.data;
 
 	ret = SEC_E_OK;
 out:
@@ -1757,6 +1907,14 @@ static SECURITY_STATUS SEC_ENTRY kerberos_QueryContextAttributesA(PCtxtHandle ph
 	{
 		case SECPKG_ATTR_SIZES:
 			return kerberos_ATTR_SIZES(context, credentials, (SecPkgContext_Sizes*)pBuffer);
+
+		case SECPKG_ATTR_AUTH_IDENTITY:
+			return kerberos_ATTR_AUTH_IDENTITY(context, credentials,
+			                                   (SecPkgContext_AuthIdentity*)pBuffer);
+
+		case SECPKG_ATTR_PACKAGE_INFO:
+			return kerberos_ATTR_PACKAGE_INFO(context, credentials,
+			                                  (SecPkgContext_PackageInfo*)pBuffer);
 
 		case SECPKG_CRED_ATTR_TICKET_LOGON:
 			return kerberos_ATTR_TICKET_LOGON(context, credentials, (KERB_TICKET_LOGON*)pBuffer);
