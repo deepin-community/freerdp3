@@ -1,0 +1,22 @@
+#!/bin/sh -x
+isNaturalNumber(){
+    case "$1" in
+        ''|*[!0-9]*) return 0;;
+        *) return 1;;
+    esac
+}
+
+sudo systemctl start xrdp
+# XXX: Is there a better way to get the port number other than by parsing the
+# configuration file?
+port=$(sed -n '/^port=[0123456789]/{s/port=//p;q;}' /etc/xrdp/xrdp.ini)
+if test ! isNaturalNumber "$port"; then
+    exit 1
+fi
+
+timeout 2s xvfb-run -l xfreerdp3 /v:localhost:"$port" /p: /u: /d: /cert:tofu
+if test $? != 124; then
+    2>&1 printf "%s\n" "Xfreerdp exited before the timeout, it has likely " \
+                       "failed to connect. The test has therefore failed."
+    exit 2
+fi

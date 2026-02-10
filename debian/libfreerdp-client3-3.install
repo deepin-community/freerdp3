@@ -1,0 +1,3 @@
+usr/lib/*/libfreerdp-client*.so.*
+# put the icon here, used by freerdp3-x11 and freerdp3-sdl
+usr/share/icons/hicolor/scalable/apps/FreeRDP.svg

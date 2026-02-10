@@ -1,0 +1,6 @@
+usr/include/winpr*
+usr/lib/*/cmake/WinPR*
+usr/lib/*/libwinpr*.so
+usr/lib/*/libwinpr-tools*.so
+usr/lib/*/pkgconfig/winpr-tools3.pc
+usr/lib/*/pkgconfig/winpr3.pc

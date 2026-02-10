@@ -1,15 +1,335 @@
-Source: template-repository
-Section: unknown
+Source: freerdp3
+Section: x11
 Priority: optional
-Maintainer: Tsic404 <liuheng@deepin.org>
-Build-Depends: debhelper (>= 11)
-Standards-Version: 4.1.3
-Homepage: https://github.com/deepin-community/template-repository
-#Vcs-Browser: https://salsa.debian.org/debian/deepin-community-template-repository
-#Vcs-Git: https://salsa.debian.org/debian/deepin-community-template-repository.git
+Maintainer: Debian Remote Maintainers <debian-remote@lists.debian.org>
+Uploaders:
+ Mike Gabriel <sunweaver@debian.org>,
+ Bernhard Miklautz <bernhard.miklautz@shacknet.at>,
+ Michael Tokarev <mjt@tls.msk.ru>,
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake,
+ dpkg-dev (>= 1.22.5),
+ libasound2-dev,
+# ffmpeg is in universe in ubuntu (not enabled):
+ libavcodec-dev, libavutil-dev, libswscale-dev,
+# cairo is used on ubuntu only (alternative to swscale from ffmpeg):
+ libcairo2-dev,
+ libjson-c-dev,
+ libcups2-dev,
+ libfuse3-dev,
+ libgsm1-dev,
+ libicu-dev,
+ libjpeg-dev,
+ libkrb5-dev,
+ libopus-dev,
+ libpam0g-dev,
+ libpcsclite-dev,
+ libpkcs11-helper1-dev,
+ libpng-dev,
+ libpulse-dev,
+ libsdl2-dev <pkg.freerdp3.sdl2>,
+ libsdl2-image-dev <pkg.freerdp3.sdl2>,
+ libsdl2-ttf-dev <pkg.freerdp3.sdl2>,
+ libsdl3-dev <!pkg.freerdp3.sdl2>,
+ libsdl3-image-dev <!pkg.freerdp3.sdl2>,
+ libsdl3-ttf-dev <!pkg.freerdp3.sdl2>,
+ libssl-dev,
+ libv4l-dev [linux-any],
+ libswresample-dev,
+ libsystemd-dev [linux-any],
+ libudev-dev [linux-any],
+ libusb-1.0-0-dev [linux-any],
+ liburiparser-dev,
+ libwayland-dev [linux-any],
+ libwebp-dev,
+ libx11-dev,
+ libxcursor-dev,
+ libxdamage-dev,
+ libxext-dev,
+ libxfixes-dev,
+ libxinerama-dev,
+ libxi-dev,
+ libxkbcommon-dev,
+ libxkbfile-dev,
+ libxrandr-dev,
+ libxrender-dev,
+ libxtst-dev,
+ libxv-dev,
+ pkgconf,
+ uuid-dev,
+ xmlto,
+ xsltproc,
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://www.freerdp.com/
+Vcs-Browser: https://salsa.debian.org/debian-remote-team/freerdp3
+Vcs-Git: https://salsa.debian.org/debian-remote-team/freerdp3.git
 
-Package: template-repository
+Package: freerdp3-x11
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp-client3-3 (= ${binary:Version}),
+Provides:
+ freerdp,
+Description: RDP client for Windows Terminal Services (X11 client)
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the X11 based client.
+
+Package: libfreerdp3-3
+Architecture: any
+Section: libs
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libwinpr3-3 (= ${binary:Version}),
+Multi-Arch: same
+Suggests:
+ freerdp3-x11,
+Description: Free Remote Desktop Protocol library (core library)
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the shared library with all core functionality.
+
+Package: libfreerdp-client3-3
+Architecture: any
+Section: libs
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp3-3 (= ${binary:Version}),
+Multi-Arch: same
+Description: Free Remote Desktop Protocol library (client library)
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the shared library for common client functionality.
+
+Package: libfreerdp-server3-3
+Architecture: any
+Section: libs
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp3-3 (= ${binary:Version}),
+Multi-Arch: same
+Description: Free Remote Desktop Protocol library (server library)
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the shared library with common server functionality.
+
+Package: libwinpr3-3
+Architecture: any
+Section: libs
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+Multi-Arch: same
+Suggests:
+ freerdp3-x11,
+Description: Windows Portable Runtime library
+ WinPR is a spin-off project of FreeRDP which aims at providing a portable
+ implementation of important portions of the Windows API. Just like FreeRDP,
+ WinPR is released under the Apache license. Unlike Wine, WinPR does not provide
+ binary compatibility, and does not require applications to be built for
+ Windows. Instead, WinPR provides API compatibility for applications targeting
+ non-Windows environments. When on Windows, the original native API is being
+ used instead of the equivalent WinPR implementation, without having to modify
+ the code using it.
+ .
+ This package contains the WinPR shared library.
+
+Package: libwinpr-tools3-3
+Architecture: any
+Section: libs
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libwinpr3-3 (= ${binary:Version}),
+Multi-Arch: same
+Description: Windows Portable Runtime Tools library
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the shared library for Windows Portable Runtime
+ utilities and tools.
+
+Package: libwinpr3-dev
+Section: libdevel
+Architecture: any
+Depends:
+ libssl-dev,
+ libjson-c-dev,
+ libwinpr-tools3-3 (= ${binary:Version}),
+ libwinpr3-3 (= ${binary:Version}),
+ ${misc:Depends},
+Description: Windows Portable Runtime library (development files)
+ WinPR is a spin-off project of FreeRDP which aims at providing a portable
+ implementation of important portions of the Windows API. Just like FreeRDP,
+ WinPR is released under the Apache license. Unlike Wine, WinPR does not provide
+ binary compatibility, and does not require applications to be built for
+ Windows. Instead, WinPR provides API compatibility for applications targeting
+ non-Windows environments. When on Windows, the original native API is being
+ used instead of the equivalent WinPR implementation, without having to modify
+ the code using it.
+ .
+ This package contains the WinPR development files.
+
+Package: freerdp3-dev
+Section: devel
+Architecture: any
+Depends:
+ libfreerdp-server-proxy3-3 (= ${binary:Version}),
+ libfreerdp-client3-3 (= ${binary:Version}),
+ libfreerdp-server3-3 (= ${binary:Version}),
+ libfreerdp-shadow-subsystem3-3 (= ${binary:Version}),
+ libfreerdp-shadow3-3 (= ${binary:Version}),
+ libfreerdp3-3 (= ${binary:Version}),
+ libwinpr3-dev (= ${binary:Version}),
+ libfuse3-dev,
+ winpr3-utils (= ${binary:Version}),
+ ${misc:Depends},
+Description: Free Remote Desktop Protocol library (development files)
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the FreeRDP development files.
+
+Package: winpr3-utils
+Multi-Arch: foreign
+Section: utils
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libwinpr-tools3-3 (= ${binary:Version}),
+Description: Windows Portable Runtime library command line utilities
+ WinPR is a spin-off project of FreeRDP which aims at providing a portable
+ implementation of important portions of the Windows API. Just like FreeRDP,
+ WinPR is released under the Apache license. Unlike Wine, WinPR does not provide
+ binary compatibility, and does not require applications to be built for
+ Windows. Instead, WinPR provides API compatibility for applications targeting
+ non-Windows environments. When on Windows, the original native API is being
+ used instead of the equivalent WinPR implementation, without having to modify
+ the code using it.
+ .
+ This package contains WinPR command line utils (winpr-hash, winpr-makecert).
+
+Package: libfreerdp-shadow3-3
+Architecture: any
+Section: libs
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp-server3-3 (= ${binary:Version}),
+ libwinpr-tools3-3 (= ${binary:Version}),
+Multi-Arch: same
+Description: FreeRDP Remote Desktop Protocol shadow libraries
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the shadow libraries.
+
+Package: libfreerdp-shadow-subsystem3-3
+Architecture: any
+Section: libs
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp-shadow3-3 (= ${binary:Version}),
+Multi-Arch: same
+Description: FreeRDP Remote Desktop Protocol shadow subsystem libraries
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the shadow subsystem libraries.
+
+Package: freerdp3-shadow-x11
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp-shadow-subsystem3-3 (= ${binary:Version}),
+Provides:
+ freerdp,
+Description: FreeRDP x11 shadowing server
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains a "shadowing" server that can be used to
+ share an already started X11 DISPLAY.
+
+Package: freerdp3-wayland
+Architecture: linux-any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp-client3-3 (= ${binary:Version}),
+Description: RDP client for Windows Terminal Services (wayland client)
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the wayland based client.
+
+Package: freerdp3-sdl
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp-client3-3 (= ${binary:Version}),
+Description: RDP client for Windows Terminal Services (SDL client)
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the SDL based client.
+
+Package: libfreerdp-server-proxy3-3
+Architecture: any
+Section: libs
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp3-3 (= ${binary:Version}),
+ libfreerdp-client3-3 (= ${binary:Version}),
+ libwinpr3-3 (= ${binary:Version}),
+Multi-Arch: same
+Description: Free Remote Desktop Protocol library (proxy library)
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the shared library for proxying RDP connections.
+
+Package: freerdp3-proxy-modules
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp-server-proxy3-3 (= ${binary:Version}),
+Description: FreeRDP Remote Desktop Protocol proxy module libraries
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the modules for the proxy.
+
+Package: freerdp3-proxy
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ libfreerdp-server-proxy3-3 (= ${binary:Version}),
+ libfreerdp3-3 (= ${binary:Version}),
+ libwinpr3-3 (= ${binary:Version}),
+Suggests:
+ freerdp3-proxy-modules,
+Description: FreeRDP proxy server
+ FreeRDP is a libre client/server implementation of the Remote
+ Desktop Protocol (RDP).
+ .
+ This package contains the proxy server that can be used
+ as man in the middle proxy for RDP connections.

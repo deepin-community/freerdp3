@@ -1,5 +1,1021 @@
-template-repository (1.0-1) unstable; urgency=medium
+freerdp3 (3.16.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream bugfix release with (again) much improved SDL3 and X11 client
+  * d/patches/: remove all patches (all were taken from upstream)
+  * d/lib*.symbols: add new symbols
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 25 Jun 2025 17:01:08 +0300
+
+freerdp3 (3.15.0+dfsg-2) unstable; urgency=medium
+
+  [ Bernhard Miklautz ]
+  * d/copyright: regenerate and update copyright
+  * d/control: use libjson-c instead of libcjson
+  * d/rules: enable AAD support on Ubuntu
+
+  [ Michael Tokarev ]
+  * pick numerous fixes from upstream:
+    client-sdl-force-primary-monitor-in-windowed-mode.patch
+    client-sdl-only-draw-to-window-if-connected.patch
+    core-settings-handle-empty-OrderSupport-and-received.patch
+    crypto-certificate-Add-a-fallback-for-weak-RSA-keys.patch
+    rdpei-server-Fix-incorrect-PDU-length-read.patch
+    cmake-json-improve-json-detection.patch
+    client-sdl-fix-SDL-ttf-usage.patch
+    cache-glyph-fix-GLYPH_FRAGMENT_USE.patch
+    winpr-sysinfo-use-a-single-clock-to-provide-System-a.patch
+    fix-resources-remove-MimeType-from-desktop-file.patch
+    gcc-fix-server-side-connection-with-multiple-monitor.patch
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Thu, 24 Apr 2025 12:18:41 +0300
+
+freerdp3 (3.15.0+dfsg-1) unstable; urgency=medium
+
+  [ Bernhard Miklautz ]
+  * d/copyright:
+     - fix lintian warning "old-fsf-address-in-copyright-file"
+     - update files
+  * d/control:
+     - remove Multi-Arch: same field (for bin:pkg libwinpr3-dev)
+       (Closes: #1101910)
+     - drop unused build dependency to docbook-xsl
+
+  [ Michael Tokarev ]
+  * new upstream version (3.15.0)
+  * install .desktop files and FreeRDP.svg icon
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Mon, 14 Apr 2025 18:35:14 +0300
+
+freerdp3 (3.14.1+dfsg-2) unstable; urgency=medium
+
+  * d/rules: enable CHANNEL_RDPECAM_CLIENT (it is not enabled implicitly)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sat, 29 Mar 2025 09:14:17 +0300
+
+freerdp3 (3.14.1+dfsg-1) unstable; urgency=medium
+
+  [ Michael Tokarev ]
+  * new upstream (minor) release, fixing a number of issues
+  * d/control: Standards-Version: 4.7.2 (no changes needed)
+  * d/control: add comment about libcairo usage
+  * d/control: add ubuntu-related comment about libavcodec-dev &Co
+
+  [ Simon Quigley ]
+  * Disable CHANNEL_RDPECAM_CLIENT on Ubuntu, since ubuntu disables FFMPEG
+    (Closes: #1098643)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Tue, 25 Mar 2025 21:23:12 +0300
+
+freerdp3 (3.14.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release
+  * d/libfreerdp3-3.symbols: add new symbol
+  * d/rules: enable regular BUILD_TESTING and stop
+    stripping build paths from shipped .h files
+  * d/rules: remove --fail-missing override: it is the default now
+  * d/rules: drop another now-unneeded override
+    (to remove static libs which are not installed anymore)
+  * d/rules: remove get-orig-source-target (-lintian)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Thu, 13 Mar 2025 12:11:55 +0300
+
+freerdp3 (3.13.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release
+  * remove all patches which are now applied upstream
+  * d/libwinpr3-3.symbols, d/libfreerdp3-3.symbols: add new symbols
+  * d/rules: enable CHANNEL_RDPEAR (with kerberos)
+  * d/control, d/rules: switch to using libsdl3, but keep sdl2
+    as a build profile (pkg.freerdp3.sdl2)
+  * d/copyright: remove LICENSE file from file list
+  * d/control: add myself to uploaders
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Thu, 06 Mar 2025 12:03:07 +0300
+
+freerdp3 (3.12.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release
+  * add two patches from upstream to fix symbol visibility
+  * d/libfreerdp3-3.symbols: add new symbols
+  * d/rules,d/control: enable VAAPI_H264_ENCODING and CHANNEL_RDPECAM
+    on linux (libv4l)
+  * pick 3 more fixes from upstream
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sat, 15 Feb 2025 15:15:41 +0300
+
+freerdp3 (3.11.1+dfsg-1) unstable; urgency=medium
+
+  * new upstream release
+  * d/libwinpr3-3.symbols, d/libfreerdp3-3.symbols: add new symbols
+  * d/copyright: fix some file patterns
+  * d/control: remove lists of supported windows versions
+    from package descriptions
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Fri, 07 Feb 2025 16:34:07 +0300
+
+freerdp3 (3.10.3+dfsg-1) unstable; urgency=medium
+
+  * New upstream version 3.10.3+dfsg
+  * Revert "Cherry-pick 2 patches from future 3.10.3":
+    0001-winpr-sysinfo-fix-use-of-GetComputerNameExA.patch
+    0002-cmake-fix-regeneration-of-config-files-after-clean.patch
+    are now included in 3.10.3
+  * mostly mechanical little d/copyright update (SDL=>SDL2+SDL3)
+    (needs a lot more work)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Tue, 14 Jan 2025 09:31:32 +0300
+
+freerdp3 (3.10.2+dfsg-1) unstable; urgency=medium
+
+  * Team upload
+
+  [ Jeremy Bícha ]
+  * New upstream release
+  * Update install file
+  * Add new symbols to symbols files
+  * Cherry-pick 2 patches from future 3.10.3
+  * Release to unstable
+
+  [ Adrien Nader ]
+  * d/tests/connect: use /cert:tofu to avoid errors with proxies
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Thu, 19 Dec 2024 14:29:08 -0500
+
+freerdp3 (3.9.0+dfsg1-1~exp1) experimental; urgency=medium
+
+  * new upstream release
+  * remove 2000-skip-failing-test.patch
+  * d/*.symbols: add new symbols
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sun, 27 Oct 2024 12:36:53 +0300
+
+freerdp3 (3.6.3+dfsg1-2) unstable; urgency=medium
+
+  * Revert "Add Build-Depends: libmp3lame-dev for MP3 audio codec support":
+    the option is disabled by default and the feature is not used bu modern
+    operating systems
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Tue, 09 Jul 2024 07:37:31 -0400
+
+freerdp3 (3.6.3+dfsg1-1) unstable; urgency=medium
+
+  [ Jeremy Bícha ]
+  * Team upload
+  * New upstream release
+  * debian/*.symbols: Add new symbols
+  * Add Build-Depends: libmp3lame-dev for MP3 audio codec support
+
+  [ Michael Tokarev ]
+  * d/rules: disable stack unwind (WINPR_HAVE_UNWIND_H=OFF) on armel and armhf
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Mon, 08 Jul 2024 18:37:15 +0300
+
+freerdp3 (3.5.1+dfsg1-5) unstable; urgency=medium
+
+  * Add patch to skip a test that fails on 32-bit arm (Closes: #1071949)
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Tue, 28 May 2024 12:40:03 -0400
+
+freerdp3 (3.5.1+dfsg1-4) unstable; urgency=medium
+
+  * Enable build time tests (LP: #2058401)
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Tue, 21 May 2024 11:56:19 -0400
+
+freerdp3 (3.5.1+dfsg1-3) unstable; urgency=high
+
+  [ Bernhard Miklautz ]
+  * Performance improvements
+    - Set -DNDEBUG (automatically set for Release but not for RelWithDebInfo)
+    - Set -DWITH_VERBOSE_WINPR_ASSERT=OFF
+
+  [ Nathan Pratta Teodosio ]
+  * Add autopkgtest
+
+  [ Jeremy Bícha ]
+  * debian/*.symbols: Add new symbols
+  * Release to unstable
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Wed, 01 May 2024 16:32:21 -0400
+
+freerdp3 (3.5.1+dfsg1-2) experimental; urgency=medium
+
+  * Enable proxy support
+  * Enable the SDL client
+
+ -- Bernhard Miklautz <bernhard.miklautz@shacknet.at>  Mon, 29 Apr 2024 15:07:11 -0400
+
+freerdp3 (3.5.1+dfsg1-1) unstable; urgency=high
+
+  [ Jeremy Bícha ]
+  * New upstream release (Closes: #1069752)
+    - CVE-2024-32658 [Low] ExtractRunLengthRegular* out of bound read
+    - CVE-2024-32659 [Low] freerdp_image_copy out of bound read
+    - CVE-2024-32660 [Low] zgfx_decompress out of memory
+    - CVE-2024-32661 [Low] rdp_write_logon_info_v1 NULL access
+    - CVE-2024-32662 [Low] rdp_redirection_read_base64_wchar out of bound read
+  * Fix typo in enabling smartcard emulation
+  * Update symbols files
+  * Set symbols check level to 4
+
+  [ Bernhard Miklautz ]
+  * Update symbol files
+  * debian/[control|rules]: enable WEBP, JPEG and PNG support for clipboard
+  * debian/copyright[.in]: update copyright files
+  * debian/control: update pkg-config binary package name
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Mon, 29 Apr 2024 14:50:09 -0400
+
+freerdp3 (3.5.0+dfsg1-1) unstable; urgency=medium
+
+  * Team upload
+  * New upstream release (LP: #2061907)
+    - CVE-2024-32039 [Moderate] Integer overflow & OutOfBound Write in
+      clear_decompress_residual_data
+    - CVE-2024-32040 [Low] integer underflow in nsc_rle_decode
+    - CVE-2024-32041 [Low] OutOfBound Read in zgfx_decompress_segment
+    - CVE-2024-32458 [Low] OutOfBound Read in planar_skip_plane_rle
+    - CVE-2024-32459 [Low] OutOfBound Read in ncrush_decompress
+    - CVE-2024-32460 [Low] OutOfBound Read in interleaved_decompress
+  * Add freerdp3-dev Depends: libcjson-dev, libfuse3-dev
+  * Release to unstable
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Fri, 15 Mar 2024 06:36:44 -0400
+
+freerdp3 (3.3.0+dfsg1-1) experimental; urgency=medium
+
+  * Team upload
+  * New upstream release (Closes: #1056992)
+  * Rename source package & update binary package names
+  * Update symbols files
+  * Add Build-Depends: libcjson-dev, libfuse3-dev, libopus-dev,
+    libpkcs11-helper1-dev, libswresample-dev, liburiparser-dev
+  * Add Build-Depends dpkg-dev >= 1.22.5
+  * Compile libuwac as static to avoid conflict with freerdp2
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Sun, 10 Mar 2024 18:22:28 -0400
+
+freerdp2 (2.11.2+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #1051638).
+  * Fixed security issues since v2.11.0:
+    - CVE-2023-40589: [codec,ncrush] fix index checks properly verify all
+      offsets while decoding data.
+    - CVE-2023-40567: Fix out-of-bounds write in the
+      `clear_decompress_bands_data` function.
+    - CVE-2023-40188: Fix out-of-bounds read in the `general_LumaToYUV444`
+      function.
+    - CVE-2023-40186: Fix out-of-bounds write in the `gdi_CreateSurface`
+      function.
+    - CVE-2023-40181: Fix out-of-bounds read in the `zgfx_decompress_segment`
+      function.
+    - CVE-2023-39356: Fix out-of-bounds read in the `gdi_multi_opaque_rect`
+      function.
+    - CVE-2023-39355: Fix use-after-free in processing
+      `RDPGFX_CMDID_RESETGRAPHICS` packets.
+    - CVE-2023-39354: Fix out-of-bounds read in the `nsc_rle_decompress_data`
+      function.
+    - CVE-2023-39353: Fix missing offset validation leading to out-of-bounds
+      read in the `libfreerdp/codec/rfx.c` file.
+    - CVE-2023-39352: Fix invalid offset validation leading to out-of-bounds
+      write.
+    - CVE-2023-39351: Fix null-pointer-dereference leading a crash in the
+      RemoteFX (rfx) handling.
+    - CVE-2023-39350: Fix integer underflow leading to DOS (e.g. abort due to
+      `WINPR_ASSERT` with default compilation flags).
+  * debian/patches:
+    + Drop 0001_fix_ftbfs_1041377.patch. Applied upstream.
+  * debian/control:
+    + Add B-D: libkrb5-dev.
+  * debian/rules:
+    + Add -DWITH_KERBEROS=ON configure option. (Closes: #1036095).
+  * debian/watch:
+    + Rework file. Find all released versions of freerdp2. (Closes: #1053317).
+      Thanks to Tobias Frost for sending a patch.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Sun, 01 Oct 2023 23:21:15 +0200
+
+freerdp2 (2.10.0+dfsg1-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * debian/patches/0001_fix_ftbfs_1041377.patch:
+    - include upstream fix for FTBFS with FFmpeg 6.0
+      (Closes: #1041377)
+
+ -- Héctor Orón Martínez <zumbi@debian.org>  Fri, 04 Aug 2023 04:08:40 -0400
+
+freerdp2 (2.10.0+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release.
+    - Fix android build scripts, use CMake from SDK.
+    - Fix connection negotiation with mstsc/msrdc.
+    - [ntlm]: use rfc5929 binding hash algorithm.
+    - [channels,printer] Fixed reference counting.
+    - Fix uwac pixman.
+    - Fix Rdp security.
+    - [client,x11] Detect key autorepeat.
+    - [build] add channel path to RPATH.
+    - Fix build with BUILTIN_CHANNELS=OFF.
+    - revert changes so that the osmajortype/osminortype is not overwritten.
+    - [uwac] do not use iso C functions.
+    - [winpr,sam] fix inalid NULL arguments.
+    - Fix incompatible function pointer types.
+    - Ignore data PDUs for DVCs that were not opened successfully.
+    - [channel,urbdrc] fix type of usb hotplug callback.
+    - Extended info enforce limits.
+    - [core] add missing redirection fields.
+  * debian/control:
+    + Bump Standards-Version: to 4.6.2. No changes needed.
+  * debian/copyright:
+    + Update copyright attributions.
+    + Update auto-generated copyright.in file.
+  * debian/libfreerdp2-2.symbols:
+    + Update symbols.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Sun, 26 Feb 2023 21:59:16 +0100
+
+freerdp2 (2.9.0+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #1024511).
+    - CVE-2022-39316: Resolve out of bound read in ZGFX decoder component.
+    - CVE-2022-39317: Resolve missing a range check for input offset index
+      in ZGFX decoder.
+    - CVE-2022-39318: Resolve missing input validation in `urbdrc` channel.
+    - CVE-2022-39319: Resolve missing input length validation in the `urbdrc`
+      channel
+    - CVE-2022-39320: Resolve attempting integer addition on too narrow types
+      leading to allocation of a buffer too small holding the data written.
+    - CVE-2022-39347: Resolve missing path canonicalization and base path check
+      for `drive` channel.
+    - CVE-2022-41877: Resolv missing input length validation in `drive` channel.
+    - Test if packages' executables can be run without 'undefined symbol:
+      winpr_PathMakePath' error. (Closes: #1024758).
+  * debian/copyright:
+    + Update auto-generated copyright.in file.
+    + Update copyright attributions.
+  * debian/*.symbols:
+    + Update .symbols files.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Mon, 28 Nov 2022 09:51:57 +0100
+
+freerdp2 (2.8.1+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #1021659).
+    - Fixes CVE-2022-39282, CVE-2022-39283.
+  * debian/patches:
+    + Drop 1001_amend-DumpThreadHandles-inclusion.patch. Resolved upstream.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Wed, 12 Oct 2022 23:26:31 +0200
+
+freerdp2 (2.8.0+dfsg1-1) unstable; urgency=medium
+
+  * New upstream version. (Closes: #1016491).
+  * debian/control:
+    + Bump Standards-Version: to 4.6.1. No changes needed.
+  * debian/copyright:
+    + Update auto-generated copyright.in file.
+    + Update copyright attributions.
+  * debian/patches:
+    + Drop 1001_keep-symbol-DumpThreadHandles-if-debugging-is-disabled.patch.
+      Similar solution applied upstream, but only partially, it seems.
+    + Add 1001_amend-DumpThreadHandles-inclusion.patch. Amend missing adjustment
+      in thread.h.
+  * debian/*.symbols:
+    + Update .symbols files for 2.8.0.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Tue, 16 Aug 2022 23:19:34 +0200
+
+freerdp2 (2.7.0+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * debian/copyright:
+    + Update auto-generated copyright.in file.
+    + Update copyright attributions.
+  * debian/*.symbols:
+    + Update .symbols for 2.7.0.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Wed, 27 Apr 2022 16:49:43 +0200
+
+freerdp2 (2.6.1+dfsg1-3) unstable; urgency=medium
+
+  * debian/patches:
+    + Add 1001_keep-symbol-DumpThreadHandles-if-debugging-is-disabled.patch.
+      Keep DumpThreadHandles as a symbol even if WITH_DEBUG_THREADS is OFF.
+  * Revert "debian/libwinpr2-2.symbols: Update symbols."
+
+ -- Mike Gabriel <sunweaver@debian.org>  Tue, 08 Mar 2022 08:25:13 +0100
+
+freerdp2 (2.6.1+dfsg1-2) unstable; urgency=medium
+
+  [ Bernhard Miklautz ]
+  * debian/rules:
+    + Disable additional debug logging. (Closes: #1006683).
+    + Use ffmpeg for audio decoding if available to support additional
+      audio formats.
+  * debian/control:
+    + Drop unused gstreamer dependencies libgstreamer1.0-dev and
+      libgstreamer-plugins-base1.0-dev.
+  * debian/libwinpr2-2.symbols:
+    + Update symbols.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Tue, 08 Mar 2022 08:02:25 +0100
+
+freerdp2 (2.6.1+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * debian/patches:
+    + Drop 2001-fake-git-revision.patch. Not required anymore.
+  * debian/copyright:
+    + Update copyright attributions.
+    + Update auto-generated copyright.in file.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Tue, 08 Mar 2022 07:36:20 +0100
+
+freerdp2 (2.6.0+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * debian/copyright:
+    + Update list of files in Files-Excluded: field.
+    + Update copyright attributions.
+    + Update auto-generated copyright.in file.
+  * debian/libfreerdp-server2-2.symbols:
+    + Update symbols.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Sat, 26 Feb 2022 21:46:12 +0100
+
+freerdp2 (2.5.0+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release.
+    - Support OpenSSL 3.0. (Closes: #996286).
+  * debian/patches:
+    + Mark 2001-fake-git-revision.patch as non-forwardable.
+  * debian/copyright:
+    + Update auto-generated copyright.in file.
+    + Update copyright attributions.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Mon, 14 Feb 2022 08:14:09 +0100
+
+freerdp2 (2.4.1+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #999727).
+    - CVE-2021-41160: Fix improper region checks in all clients that allowed
+      out of bound write to memory. (Closes: #1001062).
+    - CVE-2021-41159: Fix improper client input validation for gateway
+      connections that allowed one to overwrite memory. (Closes: #1001061).
+  * debian/patches/:
+    + Drop all patches pulled in from upstream recently. All part of 2.4.0.
+  * debian/copyright:
+    + Update auto-generated copyright.in template/reference file.
+  * debian/control:
+    + Bump Standards-Version: to 4.6.0. No changes needed.
+  * debian/libwinpr2-2.symbols:
+    + Update symbols.
+  * debian/copyright:
+    + Update copyright attributions.
+    + Update auto-generated copyright.in reference file.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Thu, 09 Dec 2021 23:16:59 +0100
+
+freerdp2 (2.3.0+dfsg1-2) unstable; urgency=medium
+
+  * debian/watch:
+    + Fix Github watch URL.
+  * debian/patches:
+    + Backport changes from 2.3.2 (bound checks, API compat fixes, Smartcard
+      issues fixes, etc.).
+      - 0001-Added-compatibility-define.patch
+      - 0003-Reverted-connectErrorCode-removal.patch
+      - 0004-Fixed-a-leak-on-mouse-cursor-updates.patch
+      - 0007-Fixed-format-string-in-smartcard_trace_state_return.patch
+      - 0008-Fixed-linking-dependencies-for-client-geometry-chann.patch
+      - 0010-Fixed-smartcard_convert_string_list-with-0-length.patch
+      - 0012-Parse-on-a-copy-of-the-argument-string-for-printer.patch
+      - 0015-Fix-xf_Pointer_SetPosition-with-smart-sizing.patch
+      - 0017-Backported-6865-Disable-websockets-command-line-opti.patch
+      - 0019-Check-smartcard_convert_string_list-for-NULL-string.patch
+      - 0020-Use-specific-names-for-drive-hotplug-special-values.patch
+      - 0021-Filter-RDPDR-types-other-than-drives-on-windows-hotp.patch
+      - 0023-use-tlsOut-BIO-when-using-websocket-in-rdg_bio_ctrl.patch
+      - 0024-Added-bounds-checks-to-gfx-commands.patch
+      - 0025-Added-bounds-check-in-rdpgfx_recv_wire_to_surface_1_.patch
+      - 0026-Added-fuzzying-test-for-planar-decoder.patch
+      - 0027-Added-missing-bounds-check.patch
+      - 0028-Fixed-mac-issues-with-smartcard-context-cleanup-6890.patch
+      - 0031-Fix-monitor-list.patch
+      - 0032-Fixed-CodeQL-warnings.patch
+      - 0033-Reverted-winpr_BinToHexString-argument-change.patch
+  * debian/patches:
+    + Add 0034-Fixed-6938-Remote-app-mode-clipboard-fix.patch. In remote app
+      mode the _FREERDP_TIMESTAMP_PROPERTY does not work. Therefore ignore it.
+    + Add 0035-Fixed-6989-Use-X509_STORE_set_default_paths.patch. Fix Windows
+      10 logon when using an internal trusted root CA.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Sun, 16 May 2021 23:42:19 +0200
+
+freerdp2 (2.3.0+dfsg1-1) unstable; urgency=medium
+
+  [ Fabio Fantoni ]
+  * debian/control:
+    + Add missed binary version deps to avoid issue in some cases
+      like upgrade to -backports. (Closes: #964147)
+
+  [ Mike Gabriel ]
+  * New upstream release. (Closes: #893733, #903646).
+  * debian/control:
+    + Bump to Standards-Version: 4.5.1. No changes needed.
+  * debian/copyright:
+    + Update auto-generated copyright.in file.
+    + Update copyright attributions:
+  * debian/patches:
+    + Drop 1001_spelling-fixes.patch. Applied upstream.
+    + Revert upstream's removal of the connectErrorCode symbol via
+      2002_revert-e4b30a5cb6100a8ea4f320b829c9c5712ed4a783.patch.
+      This re-instates ABI compatibility with FreeRDP 2.2.0.
+  * debian/*.symbols:
+    + Update symbols for FreeRDP 2.3.0.
+  * debian/watch:
+    + Switch to format version 4.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Thu, 25 Feb 2021 16:14:52 +0100
+
+freerdp2 (2.2.0+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release.
+    + CVE-2020-15103: Integer overflow due to missing input sanitation in
+      rdpegfx channel. (Closes: #965979).
+  * debian/patches:
+    + Drop 0001-mask-CACHED_BRUSH-when-checking-brush-style.patch. Applied
+      upstream.
+  * debian/copyright:
+    + Update copyright attributions.
+  * debian/libfreerdp2-2.symbols:
+    + Update symbols.
+  * debian/libfreerdp-server2-2.symbols:
+    + Update symbols.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Tue, 25 Aug 2020 09:17:57 +0200
+
+freerdp2 (2.1.2+dfsg1-2) unstable; urgency=medium
+
+  [ Konstantin Demin ]
+  * debian/patches:
+    + Add 0001-mask-CACHED_BRUSH-when-checking-brush-style.patch. Fix
+      regression introduced in 2.1.2.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Thu, 02 Jul 2020 15:02:32 +0200
+
+freerdp2 (2.1.2+dfsg1-1) unstable; urgency=medium
+
+  * New upstream release.
+    - CVE-2020-4033: Out of bound read in RLEDECOMPRESS
+    - CVE-2020-4031: Use-After-Free in gdi_SelectObject
+    - CVE-2020-4032: Integer casting vulnerability in
+      `update_recv_secondary_order`
+    - CVE-2020-4030: OOB read in `TrioParse`
+    - CVE-2020-11099: OOB Read in license_read_new_or_upgrade_license_packet
+    - CVE-2020-11098: Out-of-bound read in glyph_cache_put
+    - CVE-2020-11097: OOB read in ntlm_av_pair_get
+    - CVE-2020-11095: Global OOB read in update_recv_primary_order
+    - CVE-2020-11096: Global OOB read in update_read_cache_bitmap_v3_order
+  * debian/copyright:
+    + Update auto-generated copyright.in file.
+    + Update copyright attributions.
+  * debian/libwinpr2-2.symbols:
+    + Update symbols.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Mon, 29 Jun 2020 14:03:55 +0200
+
+freerdp2 (2.1.1+dfsg1-1) unstable; urgency=medium
+
+  [ Konstantin Demin ]
+  * New upstream release.
+    - Fix smartcard login failures. (Closes: #919281)
+    - Fix crash when /gfx option is used with /sound option.
+      (Closes: #940925).
+  * debian/{copyright,rules,watch}:
+    + Use upstream tarball instead of Git snapshot.
+  * debian/control:
+    + Drop needless libdbus-glib-1-dev. (Closes: #955840).
+    + Bump Standards-Version: to 4.5.0. No changes needed.
+    + wrap-and-sort Build-Depends.
+    + Update Homepage URL scheme to https.
+  * debian/patches:
+    + Drop 0001_CVE-2019-17177.patch. Applied upstream.
+    + Drop 0002_fix-channels-smartcard-fix-statusw-call.patch.
+      Applied upstream.
+    + Refresh 1001_spelling-fixes.patch.
+    + Add 2001-fake-git-revision.patch. avoid Git interaction during build.
+  * debian/copyright:
+    + Update upstream Source URL scheme to https.
+  * debian/rules:
+    + Rework layout.
+    + Don't build freerdp-proxy so far.
+    + Specify correct build type.
+    + Fix build-time headers.
+    + Enable extended debug logging in freerdp2 itself.
+  * debian/{control,rules}:
+    + Enable image scaling support in freerdp.
+  * debian/*.symbols:
+    + Update symbols files.
+
+  [ Mike Gabriel ]
+  * debian/control:
+    + Add B-D: libpam0g-dev. (Closes: #958230).
+    + Bump DH compat level to version 13.
+  * debian/rules:
+    + Re-add get-orig-source target for developers' convenience.
+  * debian/copyright:
+    + Update auto-generated copyright.in file.
+    + Update copyright attributions.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Wed, 27 May 2020 21:54:38 +0200
+
+freerdp2 (2.0.0~git20190204.1.2693389a+dfsg1-2) unstable; urgency=medium
+
+  * debian/control:
+    + Bump Standards-Version: to 4.4.1. No changes needed.
+    + Add Rules-Requires-Root: field and set it to 'no'.
+  * debian/patches:
+    + Add 0001_CVE-2019-17177.patch. Fix realloc return handling.
+      (CVE-2019-17177).
+  * debian/rules:
+    + Drop dbgsym:migration dh_strip overrides.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Mon, 16 Dec 2019 11:25:24 +0100
+
+freerdp2 (2.0.0~git20190204.1.2693389a+dfsg1-1) unstable; urgency=medium
+
+  * Import Git snapshot for 2.0.0-2693389a (post ~rc4) from upstream:
+    + Obtained from master branch of http://github.com/FreeRDP/FreeRDP.
+      Commit hash: 2693389a103394e035edc2a01055ca2c9ccccb21
+  * debian/patches:
+    + Drop 1001_spelling-fixes.patch. Applied upstream.
+    + Add 1001_spelling-fixes.patch. Fix typo in man page and usage output.
+  * debian/copyright:
+    + Update copyright attributions.
+  * debian/control:
+    + Bump Standards-Version: to 4.3.0. No changes needed.
+  * debian/{control,compat}:
+    + Drop compat file. Switch to debhelper-compat in control file. Bump
+      DH compat level to version 12.
+  * debian/rules:
+    + Move --fail-missing from dh_install to dh_missing override.
+  * debian/*.symbols:
+    + Update symbols files.
+    + Update symbols for Hurd/i386, kFreeBSD/amd64 and kFreeBSD/i386.
+  * debian/upstream/metadata:
+    + Add file. Comply with DEP-12.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Mon, 04 Feb 2019 10:04:45 +0100
+
+freerdp2 (2.0.0~git20181120.1.e21b72c95+dfsg1-1) unstable; urgency=medium
+
+  [ Bernhard Miklautz ]
+  * Import Git snapshot for 2.0.0-rc4 from upstream:
+    + Obtained from master branch of http://github.com/FreeRDP/FreeRDP.
+      Commit hash: e21b72c95f857817b4b32b5ef5406355c005a9e8
+  * debian/patches - drop patches that are already upstream:
+    + 0001_nsc-context-free-must-not-access-uninit-fields.patch
+    + 0002_set-tls-seclevel.patch
+  * debian/rules:
+    + Remove unicode licensed code on import and use libicu instead.
+    + Create .source_version file on import to have version information
+      available.
+  * debian/control:
+    + Add libicu-dev to the build dependencies.
+  * debian/copyright:
+    + Update copyright attributions.
+    + Update autogenerated copyright.in file.
+
+  [ Mike Gabriel ]
+  * debian/patches:
+    + Add 1001_spelling-fixes.patch. Correct spelling flaw in WLog_DBG message.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Wed, 21 Nov 2018 17:22:43 +0100
+
+freerdp2 (2.0.0~git20180411.1.7a7b1802+dfsg1-3) unstable; urgency=medium
+
+  [ Bernhard Miklautz ]
+  * debian/patches:
+    + Add 0002_set-tls-seclevel.patch. Sets the default TLS security level to
+      1. Back-ported from ustream (PR 4996). (Closes: #912206).
+
+  [ Mike Gabriel ]
+  * debian/patches:
+    + Add patch header to 0002_set-tls-seclevel.patch.
+  * debian/*.symbols:
+    + Add Build-Depends-Package: field.
+  * debian/control:
+    + Bump Standards-Version: to 4.2.1. No changes needed.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Thu, 08 Nov 2018 12:08:43 +0100
+
+freerdp2 (2.0.0~git20180411.1.7a7b1802+dfsg1-2) unstable; urgency=medium
+
+  * debian/patches:
+    + Add 0001_nsc-context-free-must-not-access-uninit-fields.patch. Fixes
+      segfault in Vinagre when user mistypes the password. (Closes: #898448).
+
+ -- Mike Gabriel <mike.gabriel@das-netzwerkteam.de>  Tue, 15 May 2018 15:55:52 +0200
+
+freerdp2 (2.0.0~git20180411.1.7a7b1802+dfsg1-1) unstable; urgency=medium
+
+  * Import Git snapshot for 2.0.0-rc2 from upstream:
+    - Obtained from master branch of http://github.com/FreeRDP/FreeRDP.
+      Commit hash: 7a7b180277a9c04809bf07a54882d7c33eeeb9f9
+  * debian/patches:
+    + Drop 0001-Fix-gstreamer-1.0-detection.patch and
+      0002-fix-nla-don-t-use-server-version.patch. Included in this Git
+      snapshot (i.e. 2.0.0~rc2).
+    + Drop 1001__Typo-Fixes.patch, 1002_macro-fix-in-man-pages.patch,
+      1003_fix-FTBFS-on-kFreeBSD.patch and 1004_FreeBSD-is-not-kFreeBSD.patch.
+      All issues resolved upstream.
+  * debian/control: Bump Standards-Version: to 4.1.4. No changes needed.
+  * debian/copyright:
+    + Add Comment: field. Explain why we pack our own orig tarball.
+    + Update copyright attributions.
+    + Update autogenerated copyright.in file.
+  * debian/*.symbols:
+    + Update symbols (libfreerdp-client2-2, libfreerdp2-2 and libwinpr2-2).
+
+ -- Mike Gabriel <sunweaver@debian.org>  Wed, 09 May 2018 21:43:46 +0200
+
+freerdp2 (2.0.0~git20170725.1.1648deb+dfsg1-7) unstable; urgency=medium
+
+  * Team upload.
+
+  [ Bernhard Miklautz ]
+  * debian/patches
+    + add 0002-fix-nla-don-t-use-server-version.patch to fix
+      NLA connection problems with latest Windows update.
+  * debian/libwinpr2-2.docs
+    + add to fix lintian error "missing-notice-file-for-apache-license"
+
+  [ Matteo F. Vescovi ]
+  * debian/control: S-V bump 4.1.1 -> 4.1.3 (no changes needed)
+  * debian/control: Vcs-* fields updated to point to salsa
+  * debian/: debhelper bump 9 -> 11
+  * debian/rules: "--parallel" parameter dropped
+  * debian/control: autotools-dev b-dep dropped
+  * debian/rules: fix dpkg-architecture variables
+
+ -- Matteo F. Vescovi <mfv@debian.org>  Thu, 15 Mar 2018 14:35:27 +0100
+
+freerdp2 (2.0.0~git20170725.1.1648deb+dfsg1-6) unstable; urgency=medium
+
+  [ Mike Gabriel ]
+  * debian/changelog:
+    + Post-upload fix of 2.0.0~git20170725.1.1648deb+dfsg1-5 stanza. We forgot
+      to mention inclusion of pkg-info.pkg into debian/rules.
+
+  [ Jeremy Bicha ]
+  * debian/rules:
+    + Disable FFmpeg and GSM on Ubuntu (Closes: #880157)
+  * debian/gbp.conf:
+    + Add this file.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Thu, 02 Nov 2017 12:10:06 +0100
+
+freerdp2 (2.0.0~git20170725.1.1648deb+dfsg1-5) unstable; urgency=medium
+
+  * debian/{control,rules}:
+    + Don't build the wayland part of FreeRDP on non-Linux systems.
+    + Explicitly have libsystemd-dev as B-D. Disable building against
+      libsystemd-dev for non-Linux host.
+  * debian/control:
+    + Bump Standards-Version: to 4.1.1. No changes needed.
+    + Remove Multi-Arch: same field (for bin:pkg freerdp2-dev). (Closes:
+      #874222).
+  * debian/rules:
+    + FreeRDP2 does not build against oss4's alsa layer. Thus, deactivating
+      alsa support on non-linux hosts.
+    + Avoid using dpkg-parsechangelog.
+    + Include pkg-info.pkg from dpkg to have DEB_SOURCE and DEB_VERSION
+      available.
+  * debian/{control,*.install}:
+    + Process with wrap-and-sort -t -s -a.
+  * debian/copyright{,.in}:
+    + White-space fix.
+  * debian/libwinpr2-2.symbols{.kfreebsd-*,hurd-*}:
+    + The libwinpr/comm/comm_serial_sys.c API is Linux-only.
+  * debian/patches:
+    + Add 1003_fix-FTBFS-on-kFreeBSD.patch,
+          1004_FreeBSD-is-not-kFreeBSD.patch.
+      Fix upstream passages for building against GNU/kFreeBSD.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Sun, 22 Oct 2017 00:30:08 +0200
+
+freerdp2 (2.0.0~git20170725.1.1648deb+dfsg1-4) unstable; urgency=medium
+
+  * debian/control:
+    + Fix typo in newly added dependency for freerdp2-dev.
+  * debian/rules:
+    + Improve fix for build support on armel. Thanks to Adrian Bunk. (Closes:
+      #874164).
+
+ -- Mike Gabriel <mike.gabriel@das-netzwerkteam.de>  Mon, 09 Oct 2017 15:55:42 +0200
+
+freerdp2 (2.0.0~git20170725.1.1648deb+dfsg1-3) unstable; urgency=medium
+
+  * debian/control:
+    + Add D (freerdp-dev): libfreerdp-shadow-subsystem2-2 (same binary version}.
+      (Closes: #877456).
+
+ -- Mike Gabriel <sunweaver@debian.org>  Mon, 09 Oct 2017 11:15:16 +0200
+
+freerdp2 (2.0.0~git20170725.1.1648deb+dfsg1-2) unstable; urgency=medium
+
+  * debian/changelog:
+    + post-upload add closure of #871150
+  * debian/rules:
+    + For armel builds set -DARM_FP_ABI=hard and -DWITH_NEON=off. Fixes FTBFS
+      on Debian armel.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Sun, 01 Oct 2017 12:51:27 +0200
+
+freerdp2 (2.0.0~git20170725.1.1648deb+dfsg1-1) unstable; urgency=medium
+
+  [ Bernhard Miklautz ]
+  * import git snapshot for 2.0.0-rc0 from upstream (Closes: #854689, #851600)
+    - Obtained from master branch of http://github.com/FreeRDP/FreeRDP.
+      Commit hash: 1648deb435ad52206f7aa2afe4b4dff71d9329bc
+    + fixes CVE-2017-2834, CVE-2017-2835, CVE-2017-2836,
+      CVE-2017-2837, CVE-2017-2838, CVE-2017-2839
+    + update copyright
+    + update symbols
+  * debian/control:
+    - Remove B:/R: rules (freerdp2-dev): libfreerdp-dev and freerdp2-dev don't
+      have conflicting file names anymore
+  * debian/patches
+    + add 0001-Fix-gstreamer-1.0-detection.patch - fix gstreamer detection with
+      recent cmake versions. (Closes: #871150).
+
+  [ Mike Gabriel ]
+  * debian/{control,*.install,*.symbols}:
+    + Let package names match sonames.
+  * debian/control:
+    + Bump Standards-Version: to 4.0.0. No changes needed.
+  * lintian issue unused-override spelling-error-in-binary
+    usr/lib/x86_64-linux-gnu/libfreerdp-server.so.2.0.0 UNK(N)OWN
+    not triggered anymore.
+  * debian/patches:
+    + Add 1001_Typo-Fixes.patch and 1002_macro-fix-in-man-pages.patch.
+      Some cosmetic improvements (typos, man page flaws).
+
+ -- Mike Gabriel <sunweaver@debian.org>  Tue, 01 Aug 2017 10:37:14 +0000
+
+freerdp2 (2.0.0~git20161130.1.e60d0d5+dfsg1-1) unstable; urgency=medium
+
+  * Upload to unstable.
+  * debian/control:
+    + Add B:/R: rules (freerdp2-dev): freerdp2-dev has files of the same name
+      as libfreerdp-dev from FreeRDP 1.1. (Closes: #848235).
+
+ -- Mike Gabriel <sunweaver@debian.org>  Tue, 27 Dec 2016 11:39:55 +0100
+
+freerdp2 (2.0.0~git20161130.1.e60d0d5+dfsg1-1~exp1) experimental; urgency=medium
+
+  * Initial (experimental) upload to Debian of FreeRDP v2. (Closes: #824358,
+    #814676).
+
+  [ Bernhard Miklautz ]
+  * import git snapshot from upstream:
+    - Obtained from master branch of http://github.com/FreeRDP/FreeRDP.
+      Commit hash: f8285956097451f829d7da3455c45e3de39092e6
+  * debian/rules
+    + use BUILTIN_CHANNELS cmake define instead of the obsolete
+      STATIC_CHANNELS
+  * update copyright
+  * libwinpr2
+    + include wlog.1 man page
+
+  [ Mike Gabriel ]
+  * debian/control:
+    + Maintenance umbrella is: Debian Remote Maintainers team.
+    + Mention Windows 2012r2 explicitly in LONG_DESCRIPTIONs (freerdp-x11,
+      freerdp-wayland).
+    + Tidy up SYNOPSES and LONG_DESCRIPTIONs for new libwinpr-tools2(-dbg)
+      shared libraries.
+    + Bump Standards-Version: to 3.9.8. No changes needed.
+  * debian/{control,rules}:
+    + Build with -DCHANNEL_URBDRC_CLIENT=ON and -DCHANNEL_URBDRC=ON only on
+      Linux OSes.
+    + dbgsym: Don't build dbg:packages anymore.
+      See https://wiki.debian.org/AutomaticDebugPackages.
+  * debian/copyright:
+    + Update auto-generated copyright.in template.
+    + Update to match latest upstream Git snapshot.
+    + Finalize for initial upload to Debian.
+  * lintian:
+    + Some executables (winpr-hash, winpr-makecert, wlfreerdp,
+      freerdp-shadow-cli) don't yet have man pages. This is work in progress on
+      the upstream part.
+    + Ignore spelling error that was originally done by Microsoft and now is
+      part of the RDP protocol.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Thu, 01 Dec 2016 02:19:59 +0100
+
+freerdp2 (2.0.0~git20160503.1.f828595+dfsg1-1) UNRELEASED; urgency=medium
+
+  [ Bernhard Miklautz ]
+  * import git snapshot from upstream:
+    - Obtained from master branch of http://github.com/FreeRDP/FreeRDP.
+      Commit hash: f8285956097451f829d7da3455c45e3de39092e6
+  * integrate upstream changes
+    + new library libwinpr-tools
+  * debian/rules:
+    + build with WITH_CLIENT_INTERFACE=OFF this removes libxfreerdp-client
+  * debian/libfreerdp-shadow2.symbols
+    + remove symbols obsoleted by libwinpr-tools
+  * debian/control
+    + add dependency in libwinpr2-dev to libwinpr-tools2
+
+ -- Bernhard Miklautz <bernhard.miklautz@shacknet.at>  Tue, 03 May 2016 18:54:42 +0200
+
+freerdp2 (2.0.0~git20160502.1.a7ca42e+dfsg1-1) UNRELEASED; urgency=medium
+
+  [ Bernhard Miklautz ]
+  * import git snapshot from upstream:
+    - Obtained from master branch of http://github.com/FreeRDP/FreeRDP.
+      Commit hash: a7ca42ec17e545b90d6a08c84bd4967e8b472c01
+  * integrate upstream changes
+    - remove rdtk - not exported as library anymore
+  * debian/patches
+    - remove 1001_typo-fixes.patch - already upstream
+
+ -- Bernhard Miklautz <bernhard.miklautz@shacknet.at>  Mon, 02 May 2016 18:42:42 +0200
+
+freerdp2 (2.0.0~git20160317.1.75ae3f5+dfsg1-1) UNRELEASED; urgency=medium
+
+  [ Bernhard Miklautz ]
+  * Import git snapshot from upstream:
+    - Obtained from master branch of http://github.com/FreeRDP/FreeRDP.
+      Commit hash: 75ae3f58df5a14b4a67439aca96061a9c2ea5040
+  * Reflect upstream changes
+    - increase version numbers to 2 for rdtk and winpr
+  * debian/rules
+    + get-orig-source: don't add git refs in the generated ChangeLog
+
+  [ Mike Gabriel ]
+  * debian/control:
+    + Bump Standards: to 3.9.7. No changes needed.
+    + Make bin:pkg winpr-utils Priority: optional to match priority of
+      bin:pkg freerdp2-dev.
+    + Make bin:pkg winpr-utils Multi-Arch: foreign.
+    + freerdp2-shadow-x11 is not a debug package. Thus, dropping Section:
+      debug field.
+  * Split-off libxfreerdp-client.so.2.0.0 into its own bin:pkg.
+  * debian/*.symbols:
+    + Add .symbols files for all shared libraries.
+  * debian/freerdp2-x11.lintian-overrides:
+    + Override not required anymore.
+  * debian/libfreerdp-client2.install:
+    + Don't ship empty directory.
+  * debian/{freerdp2-dev.install,rules}:
+    + Don't install static libraries into dev:pkg freerdp2-dev.
+    + Ship libxfreerdp-client.so in freerdp2-dev bin:pkg.
+  * debian/patches:
+    + Add 1001_typo-fixes.patch. Provide spelling fixes in messages.
+
+ -- Bernhard Miklautz <bernhard.miklautz@shacknet.at>  Thu, 17 Mar 2016 11:42:03 +0000
+
+freerdp2 (2.0.0~git20160229.1.b4b8239+dfsg1-1) UNRELEASED; urgency=medium
+
+  * Import git snapshot from upstream:
+    - Obtained from master branch of http://github.com/FreeRDP/FreeRDP.
+      Commit hash: b4b8239bf642a6cc41b2558e55be1b44577aa5dd
+  * Enable wayland support
+    + Add package for libuwac (using wayland as a client)
+    + add package freerdp2-wayland
+  * Ship the shadowing libraries in an extra package
+    - libfreerdp-shadow2
+  * debian/control:
+    - Fix some typos and trailing white spaces
+
+ -- Bernhard Miklautz <bernhard.miklautz@shacknet.at>  Mon, 29 Feb 2016 16:50:52 +0000
+
+freerdp2 (2.0.0~git20160115.1.e2dbe5e+dfsg1-2) UNRELEASED; urgency=medium
+  [ Bernhard Miklautz]
+  * rename freerdp-x11 to freerdp2-x11 and
+    freerdp-shadow-x11 to freerdp2-shadow-x11
+  * freerdp2-dev: install missing files
+  * debian/control
+    + Use encrypted URLs for Vcs-*: field.
+    + Add B-D on dpkg-dev (>= 1.16.1.1) (required for buildflags.mk)
+  * debian/rules:
+    + Enable all hardening flags.
+
+  [ Jakub Adam]
+  * install missing files into libwinpr1-dev
+  * Use architecture-agnostic paths in debian/rules
+
+ -- Bernhard Miklautz <bernhard.miklautz@shacknet.at>  Tue, 23 Feb 2016 15:50:04 +0000
+
+freerdp2 (2.0.0~git20160115.1.e2dbe5e+dfsg1-1) UNRELEASED; urgency=medium
 
   * Initial release
+  * Import git snapshot from upstream:
+    - Obtained from master branch of http://github.com/FreeRDP/FreeRDP.
+      Using commit hash: e2dbe5ee2db83b62a83ddf3c7cc45b5ed53f40b1
 
- -- Tsic404 <liuheng@deepin.org>  Sat, 28 Jan 2023 13:46:49 +0800
+ -- Bernhard Miklautz <bernhard.miklautz@shacknet.at>  Fri, 15 Jan 2016 17:40:33 +0100
