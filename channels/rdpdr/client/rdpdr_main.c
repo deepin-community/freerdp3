@@ -106,25 +106,6 @@ static const char* rdpdr_state_str(enum RDPDR_CHANNEL_STATE state)
 	}
 }
 
-static const char* rdpdr_device_type_string(UINT32 type)
-{
-	switch (type)
-	{
-		case RDPDR_DTYP_SERIAL:
-			return "serial";
-		case RDPDR_DTYP_PRINT:
-			return "printer";
-		case RDPDR_DTYP_FILESYSTEM:
-			return "drive";
-		case RDPDR_DTYP_SMARTCARD:
-			return "smartcard";
-		case RDPDR_DTYP_PARALLEL:
-			return "parallel";
-		default:
-			return "UNKNOWN";
-	}
-}
-
 static const char* support_str(BOOL val)
 {
 	if (val)
@@ -377,7 +358,6 @@ static LRESULT CALLBACK hotplug_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 						char drive_name_upper, drive_name_lower;
 						ULONG_PTR* keys = NULL;
 						DEVICE_DRIVE_EXT* device_ext;
-						UINT32 ids[1];
 
 						for (int i = 0; i < 26; i++)
 						{
@@ -1454,8 +1434,7 @@ static BOOL device_announce(ULONG_PTR key, void* element, void* data)
 
 		arg->count++;
 		WLog_Print(rdpdr->log, WLOG_INFO,
-		           "registered [%09s] device #%" PRIu32 ": %05s (type=%2" PRIu32 " id=%2" PRIu32
-		           ")",
+		           "registered [%9s] device #%" PRIu32 ": %5s (type=%2" PRIu32 " id=%2" PRIu32 ")",
 		           rdpdr_device_type_string(device->type), arg->count, device->name, device->type,
 		           device->id);
 	}
@@ -2422,17 +2401,13 @@ static VOID VCAPITYPE rdpdr_virtual_channel_init_event_ex(LPVOID lpUserParam, LP
 /* rdpdr is always built-in */
 #define VirtualChannelEntryEx rdpdr_VirtualChannelEntryEx
 
-FREERDP_ENTRY_POINT(BOOL VCAPITYPE VirtualChannelEntryEx(PCHANNEL_ENTRY_POINTS pEntryPoints,
+FREERDP_ENTRY_POINT(BOOL VCAPITYPE VirtualChannelEntryEx(PCHANNEL_ENTRY_POINTS_EX pEntryPoints,
                                                          PVOID pInitHandle))
 {
-	UINT rc = 0;
-	rdpdrPlugin* rdpdr = NULL;
-	CHANNEL_ENTRY_POINTS_FREERDP_EX* pEntryPointsEx = NULL;
-
 	WINPR_ASSERT(pEntryPoints);
 	WINPR_ASSERT(pInitHandle);
 
-	rdpdr = (rdpdrPlugin*)calloc(1, sizeof(rdpdrPlugin));
+	rdpdrPlugin* rdpdr = (rdpdrPlugin*)calloc(1, sizeof(rdpdrPlugin));
 
 	if (!rdpdr)
 	{
@@ -2465,7 +2440,8 @@ FREERDP_ENTRY_POINT(BOOL VCAPITYPE VirtualChannelEntryEx(PCHANNEL_ENTRY_POINTS p
 	(void)sprintf_s(rdpdr->channelDef.name, ARRAYSIZE(rdpdr->channelDef.name),
 	                RDPDR_SVC_CHANNEL_NAME);
 	rdpdr->sequenceId = 0;
-	pEntryPointsEx = (CHANNEL_ENTRY_POINTS_FREERDP_EX*)pEntryPoints;
+	CHANNEL_ENTRY_POINTS_FREERDP_EX* pEntryPointsEx =
+	    (CHANNEL_ENTRY_POINTS_FREERDP_EX*)pEntryPoints;
 
 	if ((pEntryPointsEx->cbSize >= sizeof(CHANNEL_ENTRY_POINTS_FREERDP_EX)) &&
 	    (pEntryPointsEx->MagicNumber == FREERDP_CHANNEL_MAGIC_NUMBER))
@@ -2478,7 +2454,7 @@ FREERDP_ENTRY_POINT(BOOL VCAPITYPE VirtualChannelEntryEx(PCHANNEL_ENTRY_POINTS p
 
 	CopyMemory(&(rdpdr->channelEntryPoints), pEntryPoints, sizeof(CHANNEL_ENTRY_POINTS_FREERDP_EX));
 	rdpdr->InitHandle = pInitHandle;
-	rc = rdpdr->channelEntryPoints.pVirtualChannelInitEx(
+	const UINT rc = rdpdr->channelEntryPoints.pVirtualChannelInitEx(
 	    rdpdr, &rdpdr->context, pInitHandle, &rdpdr->channelDef, 1, VIRTUAL_CHANNEL_VERSION_WIN2000,
 	    rdpdr_virtual_channel_init_event_ex);
 

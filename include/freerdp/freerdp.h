@@ -84,7 +84,8 @@ extern "C"
 		GW_AUTH_HTTP,
 		GW_AUTH_RDG,
 		GW_AUTH_RPC,
-		AUTH_SMARTCARD_PIN
+		AUTH_SMARTCARD_PIN,
+		AUTH_RDSTLS
 	} rdp_auth_reason;
 
 	typedef BOOL (*pContextNew)(freerdp* instance, rdpContext* context);
@@ -109,22 +110,48 @@ extern "C"
 	typedef BOOL (*pAuthenticate)(freerdp* instance, char** username, char** password,
 	                              char** domain);
 
-	/** \brief Extended authentication callback function pointer definition
+	/** @brief Extended authentication callback function pointer definition
 	 *
-	 * \param instance A pointer to the instance to work on
-	 * \param username A pointer to the username string. On input the current username, on output
-	 * the username that should be used. Must not be NULL. \param password A pointer to the password
-	 * string. On input the current password, on output the password that sohould be used. Must not
-	 * be NULL. \param domain A pointer to the domain string. On input the current domain, on output
-	 * the domain that sohould be used. Must not be NULL. \param reason The reason the callback was
-	 * called. (e.g. NLA, TLS, RDP, GATEWAY, ...)
+	 *  This function is called whenever not all required credentials have been supplied or the
+	 * supplied credentials were rejected.
 	 *
-	 * \return \b FALSE to abort the connection, \b TRUE otherwise.
-	 * \note To not provide valid credentials and not abort the connection return \b TRUE and empty
-	 * (as in empty string) credentials
+	 * @param instance A pointer to the instance to work on
+	 * @param username A pointer to the username string. On input the current username, on output
+	 *          the username that should be used instead. Must not be NULL.
+	 * @param password A pointer to the password string. On input the current password, on output
+	 *          the password that sohould be used. Must not be NULL.
+	 * @param domain A pointer to the domain string. On input the current domain, on output the
+	 *          domain that sohould be used. Must not be NULL.
+	 * @param reason The reason the callback was called. (e.g. NLA, TLS, RDP, GATEWAY, ...)
+	 *
+	 * @return \b FALSE to abort the connection, \b TRUE otherwise.
+	 *
+	 * @attention All strings are allocated (on input and output) and \ref free needs to be called
+	 *          before replacing the input with the output values.
+	 * @note To not provide valid credentials and not abort the connection return \b TRUE and empty
+	 *          (as in empty string) credentials
 	 */
 	typedef BOOL (*pAuthenticateEx)(freerdp* instance, char** username, char** password,
 	                                char** domain, rdp_auth_reason reason);
+
+	/** @brief Callback to select a smartcard certificate from a list of detected ones.
+	 *
+	 *  This function is called when smartcard authentication (NLA) is used and more than one
+	 * smartcard certificate is detected that could be used. The purpose of this callback is to
+	 * present the user with a list of available options and then return the selection.
+	 *
+	 *  @param instance A pointer to the instance to work on
+	 *  @param cert_list A list of smartcard certificates
+	 *  @param count The number of smartcard certificates in the list
+	 *  @param choice A pointer to an integer that will represent the selected certificate index.
+	 * Must not be \b NULL
+	 *  @param gateway A indicator if the authentication is for a session (\b FALSE) or a gateway
+	 * (\b TRUE)
+	 *
+	 *  @return \b FALSE if the selection was aborted, \b TRUE if a selection was accepted.
+	 *
+	 *  @since version 3.0.0
+	 */
 	typedef BOOL (*pChooseSmartcard)(freerdp* instance, SmartcardCertInfo** cert_list, DWORD count,
 	                                 DWORD* choice, BOOL gateway);
 
@@ -605,7 +632,7 @@ owned by rdpRdp */
 
 #if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 	WINPR_DEPRECATED_VAR("use freerdp_shall_disconnect_context instead",
-	                     FREERDP_API BOOL freerdp_shall_disconnect(freerdp* instance));
+	                     FREERDP_API BOOL freerdp_shall_disconnect(const freerdp* instance));
 #endif
 
 	FREERDP_API BOOL freerdp_shall_disconnect_context(const rdpContext* context);
@@ -650,10 +677,10 @@ owned by rdpRdp */
 	                                                      wMessage* message);
 	FREERDP_API int freerdp_message_queue_process_pending_messages(freerdp* instance, DWORD id);
 
-	FREERDP_API UINT32 freerdp_error_info(freerdp* instance);
+	FREERDP_API UINT32 freerdp_error_info(const freerdp* instance);
 	FREERDP_API void freerdp_set_error_info(rdpRdp* rdp, UINT32 error);
 	FREERDP_API BOOL freerdp_send_error_info(rdpRdp* rdp);
-	FREERDP_API BOOL freerdp_get_stats(rdpRdp* rdp, UINT64* inBytes, UINT64* outBytes,
+	FREERDP_API BOOL freerdp_get_stats(const rdpRdp* rdp, UINT64* inBytes, UINT64* outBytes,
 	                                   UINT64* inPackets, UINT64* outPackets);
 
 	FREERDP_API void freerdp_get_version(int* major, int* minor, int* revision);
@@ -664,14 +691,15 @@ owned by rdpRdp */
 	FREERDP_API void freerdp_free(freerdp* instance);
 
 	WINPR_ATTR_MALLOC(freerdp_free, 1)
+	WINPR_ATTR_NODISCARD
 	FREERDP_API freerdp* freerdp_new(void);
 
 	FREERDP_API BOOL freerdp_focus_required(freerdp* instance);
 	FREERDP_API void freerdp_set_focus(freerdp* instance);
 
-	FREERDP_API int freerdp_get_disconnect_ultimatum(rdpContext* context);
+	FREERDP_API int freerdp_get_disconnect_ultimatum(const rdpContext* context);
 
-	FREERDP_API UINT32 freerdp_get_last_error(rdpContext* context);
+	FREERDP_API UINT32 freerdp_get_last_error(const rdpContext* context);
 	FREERDP_API const char* freerdp_get_last_error_name(UINT32 error);
 	FREERDP_API const char* freerdp_get_last_error_string(UINT32 error);
 	FREERDP_API const char* freerdp_get_last_error_category(UINT32 error);
@@ -699,12 +727,12 @@ owned by rdpRdp */
 	FREERDP_API const char* freerdp_get_logon_error_info_data_ex(UINT32 data, char* buffer,
 	                                                             size_t size);
 
-	FREERDP_API ULONG freerdp_get_transport_sent(rdpContext* context, BOOL resetCount);
+	FREERDP_API ULONG freerdp_get_transport_sent(const rdpContext* context, BOOL resetCount);
 
 	FREERDP_API BOOL freerdp_nla_impersonate(rdpContext* context);
 	FREERDP_API BOOL freerdp_nla_revert_to_self(rdpContext* context);
 
-	FREERDP_API UINT32 freerdp_get_nla_sspi_error(rdpContext* context);
+	FREERDP_API UINT32 freerdp_get_nla_sspi_error(const rdpContext* context);
 
 	/** Encrypts the provided buffer using the NLA's GSSAPI context
 	 *
@@ -740,14 +768,26 @@ owned by rdpRdp */
 	FREERDP_API SECURITY_STATUS freerdp_nla_QueryContextAttributes(rdpContext* context,
 	                                                               DWORD ulAttr, PVOID pBuffer);
 
+	/** Calls FreeContextbuffer on the SSPI context associated with the NLA part of the RDP context
+	 *
+	 *	\param context the RDP context
+	 *	\param pBuffer an opaque pointer to free
+	 *	\returns a SECURITY_STATUS indicating if the operation completed successfully
+	 *	\since version 3.22.0
+	 *
+	 *  Supported buffers are ones retrieved from SECPKG_ATTR_PACKAGE_INFO.
+	 */
+	FREERDP_API SECURITY_STATUS freerdp_nla_FreeContextBuffer(rdpContext* context, PVOID pBuffer);
+
 	FREERDP_API void clearChannelError(rdpContext* context);
 	FREERDP_API HANDLE getChannelErrorEventHandle(rdpContext* context);
-	FREERDP_API UINT getChannelError(rdpContext* context);
-	FREERDP_API const char* getChannelErrorDescription(rdpContext* context);
+	FREERDP_API UINT getChannelError(const rdpContext* context);
+	FREERDP_API const char* getChannelErrorDescription(const rdpContext* context);
 	FREERDP_API void setChannelError(rdpContext* context, UINT errorNum, const char* format, ...);
 	FREERDP_API BOOL checkChannelErrorEvent(rdpContext* context);
 
-	FREERDP_API const char* freerdp_nego_get_routing_token(rdpContext* context, DWORD* length);
+	FREERDP_API const char* freerdp_nego_get_routing_token(const rdpContext* context,
+	                                                       DWORD* length);
 
 	/** \brief returns the current \b CONNECTION_STATE of the context.
 	 *
@@ -812,7 +852,7 @@ owned by rdpRdp */
 	 *  @return The current function pointer set or \b NULL
 	 *  @since version 3.16.0
 	 */
-	FREERDP_API pGetCommonAccessToken freerdp_get_common_access_token(rdpContext* context);
+	FREERDP_API pGetCommonAccessToken freerdp_get_common_access_token(const rdpContext* context);
 
 #ifdef __cplusplus
 }

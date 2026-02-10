@@ -192,11 +192,13 @@ typedef union sockaddr_gen
 WINPR_PRAGMA_DIAG_PUSH
 WINPR_PRAGMA_DIAG_IGNORED_RESERVED_ID_MACRO
 
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #define _IFF_UP 0x00000001
 #define _IFF_BROADCAST 0x00000002
 #define _IFF_LOOPBACK 0x00000004
 #define _IFF_POINTTOPOINT 0x00000008
 #define _IFF_MULTICAST 0x00000010
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 
 WINPR_PRAGMA_DIAG_POP
 
@@ -303,6 +305,7 @@ extern "C"
 	WINPR_API BOOL WSACloseEvent(HANDLE hEvent);
 
 	WINPR_ATTR_MALLOC(WSACloseEvent, 1)
+	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WSACreateEvent(void);
 	WINPR_API BOOL WSASetEvent(HANDLE hEvent);
 	WINPR_API BOOL WSAResetEvent(HANDLE hEvent);
@@ -322,6 +325,7 @@ extern "C"
 	                       LPWSAOVERLAPPED lpOverlapped,
 	                       LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
 
+	// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 	WINPR_API SOCKET _accept(SOCKET s, struct sockaddr* addr, int* addrlen);
 	WINPR_API int _bind(SOCKET s, const struct sockaddr* addr, int namelen);
 	WINPR_API int closesocket(SOCKET s);
@@ -357,6 +361,8 @@ extern "C"
 	                                                                        const char* proto);
 	WINPR_API struct protoent* _getprotobynumber(int number);
 	WINPR_API struct protoent* _getprotobyname(const char* name);
+
+	// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 
 #ifdef __cplusplus
 }

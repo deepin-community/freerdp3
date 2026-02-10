@@ -418,9 +418,9 @@ static BOOL list_provider_keys(WINPR_ATTR_UNUSED const rdpSettings* settings,
 		if (status != ERROR_SUCCESS)
 		{
 			WLog_DBG(TAG,
-			         "unable to NCryptOpenKey(dwLegacyKeySpec=0x%" PRIx32 " dwFlags=0x%" PRIx32
+			         "unable to NCryptOpenKey(dwLegacyKeySpec=0x%08" PRIx32 " dwFlags=0x%08" PRIx32
 			         "), status=%s, skipping",
-			         status, keyName->dwLegacyKeySpec, keyName->dwFlags,
+			         keyName->dwLegacyKeySpec, keyName->dwFlags,
 			         winpr_NCryptSecurityStatusError(status));
 			goto endofloop;
 		}
@@ -493,8 +493,8 @@ static BOOL list_provider_keys(WINPR_ATTR_UNUSED const rdpSettings* settings,
 		if (status != ERROR_SUCCESS)
 		{
 			/* can happen that key don't have certificates */
-			WLog_DBG(TAG, "unable to retrieve certificate property len, status=0x%lx, skipping",
-			         status);
+			WLog_DBG(TAG, "unable to retrieve certificate property len, status=%s, skipping",
+			         winpr_NCryptSecurityStatusError(status));
 			goto endofloop;
 		}
 
@@ -581,8 +581,8 @@ static BOOL smartcard_hw_enumerateCerts(const rdpSettings* settings, LPCWSTR csp
 		if (!scopeStr)
 			goto out;
 
-		(void)_snprintf(scopeStr, readerSz + 5, "\\\\.\\%s\\", reader);
-		scope = ConvertUtf8NToWCharAlloc(scopeStr, readerSz + 5, NULL);
+		(void)_snprintf(scopeStr, readerSz + 6, "\\\\.\\%s\\", reader);
+		scope = ConvertUtf8NToWCharAlloc(scopeStr, readerSz + 6, NULL);
 		free(scopeStr);
 
 		if (!scope)
@@ -729,49 +729,54 @@ static SmartcardCertInfo* smartcardCertInfo_New(const char* privKeyPEM, const ch
 	if (!cert)
 		goto fail;
 
-	SmartcardKeyInfo* info = cert->key_info = calloc(1, sizeof(SmartcardKeyInfo));
-	if (!info)
-		goto fail;
-
-	cert->certificate = freerdp_certificate_new_from_pem(certPEM);
-	if (!cert->certificate)
 	{
-		WLog_ERR(TAG, "unable to read smartcard certificate");
-		goto fail;
+		SmartcardKeyInfo* info = cert->key_info = calloc(1, sizeof(SmartcardKeyInfo));
+		if (!info)
+			goto fail;
+
+		cert->certificate = freerdp_certificate_new_from_pem(certPEM);
+		if (!cert->certificate)
+		{
+			WLog_ERR(TAG, "unable to read smartcard certificate");
+			goto fail;
+		}
+
+		if (!treat_sc_cert(cert))
+		{
+			WLog_ERR(TAG, "unable to treat smartcard certificate");
+			goto fail;
+		}
+
+		cert->reader = ConvertUtf8ToWCharAlloc("FreeRDP Emulator", NULL);
+		if (!cert->reader)
+			goto fail;
+
+		cert->containerName = ConvertUtf8ToWCharAlloc("Private Key 00", NULL);
+		if (!cert->containerName)
+			goto fail;
+
+		/* compute PKINIT args FILE:<cert file>,<key file>
+		 *
+		 * We need files for PKINIT to read, so write the certificate to some
+		 * temporary location and use that.
+		 */
+		info->keyPath = create_temporary_file();
+		WLog_DBG(TAG, "writing PKINIT key to %s", info->keyPath);
+		if (!crypto_write_pem(info->keyPath, privKeyPEM, strlen(privKeyPEM)))
+			goto fail;
+
+		info->certPath = create_temporary_file();
+		WLog_DBG(TAG, "writing PKINIT cert to %s", info->certPath);
+		if (!crypto_write_pem(info->certPath, certPEM, strlen(certPEM)))
+			goto fail;
+
+		{
+			const int res = winpr_asprintf(&cert->pkinitArgs, &size, "FILE:%s,%s", info->certPath,
+			                               info->keyPath);
+			if (res <= 0)
+				goto fail;
+		}
 	}
-
-	if (!treat_sc_cert(cert))
-	{
-		WLog_ERR(TAG, "unable to treat smartcard certificate");
-		goto fail;
-	}
-
-	cert->reader = ConvertUtf8ToWCharAlloc("FreeRDP Emulator", NULL);
-	if (!cert->reader)
-		goto fail;
-
-	cert->containerName = ConvertUtf8ToWCharAlloc("Private Key 00", NULL);
-	if (!cert->containerName)
-		goto fail;
-
-	/* compute PKINIT args FILE:<cert file>,<key file>
-	 *
-	 * We need files for PKINIT to read, so write the certificate to some
-	 * temporary location and use that.
-	 */
-	info->keyPath = create_temporary_file();
-	WLog_DBG(TAG, "writing PKINIT key to %s", info->keyPath);
-	if (!crypto_write_pem(info->keyPath, privKeyPEM, strlen(privKeyPEM)))
-		goto fail;
-
-	info->certPath = create_temporary_file();
-	WLog_DBG(TAG, "writing PKINIT cert to %s", info->certPath);
-	if (!crypto_write_pem(info->certPath, certPEM, strlen(certPEM)))
-		goto fail;
-
-	int res = winpr_asprintf(&cert->pkinitArgs, &size, "FILE:%s,%s", info->certPath, info->keyPath);
-	if (res <= 0)
-		goto fail;
 
 	return cert;
 fail:

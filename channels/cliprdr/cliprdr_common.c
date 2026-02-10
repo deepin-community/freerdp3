@@ -101,7 +101,7 @@ static BOOL cliprdr_validate_file_contents_request(const CLIPRDR_FILE_CONTENTS_R
 	{
 		if (request->cbRequested != sizeof(UINT64))
 		{
-			WLog_ERR(TAG, "cbRequested must be %" PRIu32 ", got %" PRIu32 "", sizeof(UINT64),
+			WLog_ERR(TAG, "cbRequested must be %" PRIuz ", got %" PRIu32 "", sizeof(UINT64),
 			         request->cbRequested);
 			return FALSE;
 		}
@@ -148,7 +148,7 @@ static void cliprdr_write_file_contents_request(wStream* s,
 		Stream_Write_UINT32(s, request->clipDataId); /* clipDataId (4 bytes) */
 }
 
-static INLINE void cliprdr_write_lock_unlock_clipdata(wStream* s, UINT32 clipDataId)
+static inline void cliprdr_write_lock_unlock_clipdata(wStream* s, UINT32 clipDataId)
 {
 	Stream_Write_UINT32(s, clipDataId);
 }

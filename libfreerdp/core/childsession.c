@@ -58,7 +58,7 @@ static int transport_bio_named_write(BIO* bio, const char* buf, int size)
 	BIO_clear_flags(bio, BIO_FLAGS_WRITE);
 	DWORD written = 0;
 
-	UINT64 start = GetTickCount64();
+	const UINT64 start = GetTickCount64();
 	BOOL ret = WriteFile(ptr->hFile, buf, WINPR_ASSERTING_INT_CAST(uint32_t, size), &written, NULL);
 	// winpr_HexDump(TAG, WLOG_DEBUG, buf, size);
 
@@ -68,7 +68,8 @@ static int transport_bio_named_write(BIO* bio, const char* buf, int size)
 		return 0;
 	}
 
-	WLog_VRB(TAG, "(%d)=%d written=%d duration=%d", size, ret, written, GetTickCount64() - start);
+	WLog_VRB(TAG, "(%d)=%d written=%" PRIu32 " duration=%" PRIu64, size, ret, written,
+	         GetTickCount64() - start);
 
 	if (written == 0)
 	{
@@ -256,7 +257,11 @@ static int transport_bio_named_puts(BIO* bio, const char* str)
 	WINPR_ASSERT(bio);
 	WINPR_ASSERT(str);
 
-	return transport_bio_named_write(bio, str, (int)strnlen(str, INT32_MAX));
+	const size_t max = (INT_MAX > SIZE_MAX) ? SIZE_MAX : INT_MAX;
+	const size_t len = strnlen(str, max);
+	if (len >= max)
+		return -1;
+	return transport_bio_named_write(bio, str, WINPR_ASSERTING_INT_CAST(int, len));
 }
 
 static int transport_bio_named_gets(BIO* bio, char* str, int size)
@@ -470,53 +475,67 @@ static BOOL createChildSessionTransport(HANDLE* pFile)
 	hModule = LoadLibraryA("winsta.dll");
 	if (!hModule)
 		return FALSE;
-	WCHAR pipePath[0x80] = { 0 };
-	char pipePathA[0x80] = { 0 };
 
-	WinStationCreateChildSessionTransportFn createChildSessionFn = GetProcAddressAs(
-	    hModule, "WinStationCreateChildSessionTransport", WinStationCreateChildSessionTransportFn);
-	if (!createChildSessionFn)
 	{
-		WLog_ERR(TAG, "unable to retrieve WinStationCreateChildSessionTransport function");
-		goto out;
-	}
+		WCHAR pipePath[0x80] = { 0 };
+		char pipePathA[0x80] = { 0 };
 
-	HRESULT hStatus = createChildSessionFn(pipePath, 0x80);
-	if (!SUCCEEDED(hStatus))
-	{
-		WLog_ERR(TAG, "error 0x%x when creating childSessionTransport", hStatus);
-		goto out;
-	}
-
-	const BYTE startOfPath[] = { '\\', 0, '\\', 0, '.', 0, '\\', 0 };
-	if (_wcsncmp(pipePath, (const WCHAR*)startOfPath, 4))
-	{
-		/* when compiled under 32 bits, the path may miss "\\.\" at the beginning of the string
-		 * so add it if it's not there
-		 */
-		size_t len = _wcslen(pipePath);
-		if (len > 0x80 - (4 + 1))
 		{
-			WLog_ERR(TAG, "pipePath is too long to be adjusted");
-			goto out;
+			WinStationCreateChildSessionTransportFn createChildSessionFn =
+			    GetProcAddressAs(hModule, "WinStationCreateChildSessionTransport",
+			                     WinStationCreateChildSessionTransportFn);
+			if (!createChildSessionFn)
+			{
+				WLog_ERR(TAG, "unable to retrieve WinStationCreateChildSessionTransport function");
+				goto out;
+			}
+
+			{
+				HRESULT hStatus = createChildSessionFn(pipePath, 0x80);
+				if (!SUCCEEDED(hStatus))
+				{
+					WLog_ERR(TAG, "error 0x%08x when creating childSessionTransport",
+					         WINPR_CXX_COMPAT_CAST(unsigned, hStatus));
+					goto out;
+				}
+			}
 		}
 
-		memmove(pipePath + 4, pipePath, (len + 1) * sizeof(WCHAR));
-		memcpy(pipePath, startOfPath, 8);
+		{
+			const BYTE startOfPath[] = { '\\', 0, '\\', 0, '.', 0, '\\', 0 };
+			if (_wcsncmp(pipePath, (const WCHAR*)startOfPath, 4))
+			{
+				/* when compiled under 32 bits, the path may miss "\\.\" at the beginning of the
+				 * string so add it if it's not there
+				 */
+				size_t len = _wcslen(pipePath);
+				if (len > 0x80 - (4 + 1))
+				{
+					WLog_ERR(TAG, "pipePath is too long to be adjusted");
+					goto out;
+				}
+
+				memmove(pipePath + 4, pipePath, (len + 1) * sizeof(WCHAR));
+				memcpy(pipePath, startOfPath, 8);
+			}
+		}
+
+		(void)ConvertWCharNToUtf8(pipePath, 0x80, pipePathA, sizeof(pipePathA));
+		WLog_DBG(TAG, "child session is at '%s'", pipePathA);
+
+		{
+			HANDLE f = CreateFileW(pipePath, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+			                       FILE_FLAG_OVERLAPPED, NULL);
+			if (f == INVALID_HANDLE_VALUE)
+			{
+				WLog_ERR(TAG, "error when connecting to local named pipe");
+				goto out;
+			}
+
+			*pFile = f;
+		}
 	}
 
-	(void)ConvertWCharNToUtf8(pipePath, 0x80, pipePathA, sizeof(pipePathA));
-	WLog_DBG(TAG, "child session is at '%s'", pipePathA);
-
-	HANDLE f = CreateFileW(pipePath, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
-	                       FILE_FLAG_OVERLAPPED, NULL);
-	if (f == INVALID_HANDLE_VALUE)
-	{
-		WLog_ERR(TAG, "error when connecting to local named pipe");
-		goto out;
-	}
-
-	*pFile = f;
 	ret = TRUE;
 
 out:

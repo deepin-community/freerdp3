@@ -278,7 +278,7 @@ static BOOL demo_mouse_event([[maybe_unused]] proxyPlugin* plugin,
 	WINPR_ASSERT(pdata);
 	WINPR_ASSERT(event_data);
 
-	WLog_INFO(TAG, "called %p", event_data);
+	WLog_INFO(TAG, "called %p", WINPR_CXX_COMPAT_CAST(const void*, event_data));
 	return TRUE;
 }
 
@@ -291,7 +291,7 @@ static BOOL demo_mouse_ex_event([[maybe_unused]] proxyPlugin* plugin,
 	WINPR_ASSERT(pdata);
 	WINPR_ASSERT(event_data);
 
-	WLog_INFO(TAG, "called %p", event_data);
+	WLog_INFO(TAG, "called %p", WINPR_CXX_COMPAT_CAST(const void*, event_data));
 	return TRUE;
 }
 
@@ -349,7 +349,7 @@ static BOOL demo_server_fetch_target_addr([[maybe_unused]] proxyPlugin* plugin,
 	WINPR_ASSERT(pdata);
 	WINPR_ASSERT(event_data);
 
-	WLog_INFO(TAG, "called %p", event_data);
+	WLog_INFO(TAG, "called %p", WINPR_CXX_COMPAT_CAST(const void*, event_data));
 	return TRUE;
 }
 
@@ -376,7 +376,7 @@ static BOOL demo_dyn_channel_intercept_list([[maybe_unused]] proxyPlugin* plugin
 	WINPR_ASSERT(pdata);
 	WINPR_ASSERT(data);
 
-	WLog_INFO(TAG, "%s: %p", __func__, data);
+	WLog_INFO(TAG, "%s: %p", __func__, WINPR_CXX_COMPAT_CAST(const void*, data));
 	return TRUE;
 }
 
@@ -390,7 +390,7 @@ static BOOL demo_static_channel_intercept_list([[maybe_unused]] proxyPlugin* plu
 	WINPR_ASSERT(pdata);
 	WINPR_ASSERT(data);
 
-	WLog_INFO(TAG, "%s: %p", __func__, data);
+	WLog_INFO(TAG, "%s: %p", __func__, WINPR_CXX_COMPAT_CAST(const void*, data));
 	return TRUE;
 }
 
@@ -404,20 +404,11 @@ static BOOL demo_dyn_channel_intercept([[maybe_unused]] proxyPlugin* plugin,
 	WINPR_ASSERT(pdata);
 	WINPR_ASSERT(data);
 
-	WLog_INFO(TAG, "%s: %p", __func__, data);
+	WLog_INFO(TAG, "%s: %p", __func__, WINPR_CXX_COMPAT_CAST(const void*, data));
 	return TRUE;
 }
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-	FREERDP_API BOOL proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata);
-#ifdef __cplusplus
-}
-#endif
-
-BOOL proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata)
+static BOOL int_proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata)
 {
 	struct demo_custom_data* custom = nullptr;
 	proxyPlugin plugin = {};
@@ -467,3 +458,26 @@ BOOL proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userda
 
 	return plugins_manager->RegisterPlugin(plugins_manager, &plugin);
 }
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+#if defined(BUILD_SHARED_LIBS)
+	FREERDP_API BOOL proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata);
+
+	BOOL proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata)
+	{
+		return int_proxy_module_entry_point(plugins_manager, userdata);
+	}
+#else
+FREERDP_API BOOL demo_proxy_module_entry_point(proxyPluginsManager* plugins_manager,
+                                               void* userdata);
+BOOL demo_proxy_module_entry_point(proxyPluginsManager* plugins_manager, void* userdata)
+{
+	return int_proxy_module_entry_point(plugins_manager, userdata);
+}
+#endif
+#ifdef __cplusplus
+}
+#endif

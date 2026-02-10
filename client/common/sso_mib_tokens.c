@@ -7,7 +7,6 @@
 #include <freerdp/crypto/crypto.h>
 #include <winpr/json.h>
 
-#include <sso-mib/sso-mib.h>
 #include "sso_mib_tokens.h"
 
 #include <freerdp/log.h>
@@ -101,7 +100,7 @@ static BOOL sso_mib_get_rdsaad_access_token(rdpClientContext* client_context, co
 	{
 		goto cleanup;
 	}
-	WINPR_JSON* prop = WINPR_JSON_GetObjectItem(json, "kid");
+	WINPR_JSON* prop = WINPR_JSON_GetObjectItemCaseSensitive(json, "kid");
 	if (!prop)
 	{
 		goto cleanup;
@@ -149,7 +148,7 @@ static BOOL sso_mib_get_access_token(rdpContext* context, AccessTokenType tokenT
 	}
 
 	if (!client_context->mibClientWrapper->app)
-		return ERROR_INTERNAL_ERROR;
+		return FALSE;
 
 	const char* scope = NULL;
 	const char* req_cnf = NULL;

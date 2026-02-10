@@ -2,10 +2,6 @@
 
 include /usr/share/dpkg/default.mk
 
-ifeq (,$(filter terse,$(DEB_BUILD_OPTIONS)))
-    export DH_VERBOSE = 1
-endif
-
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 export DPKG_GENSYMBOLS_CHECK_LEVEL = 4
 DPKG_EXPORT_BUILDFLAGS = 1
@@ -39,6 +35,7 @@ DEB_CMAKE_EXTRA_FLAGS = \
     -DWITH_PCSC=ON \
     -DWITH_JPEG=ON \
     -DWITH_KERBEROS=ON \
+    -DCHANNEL_RDP2TCP=ON -DCHANNEL_RDP2TCP_CLIENT=ON \
     -DCHANNEL_RDPEAR=ON -DCHANNEL_RDPEAR_CLIENT=ON \
     -DWITH_CLANG_FORMAT=OFF \
     -DWITH_OPUS=ON \
@@ -124,3 +121,15 @@ endif
 
 override_dh_auto_configure:
 	dh_auto_configure -- $(DEB_CMAKE_EXTRA_FLAGS)
+
+# all packages depends on exact same version of libwinpr3-3: link docs to it
+# only do this for arch packages, as arch<=>indep dir_to_symlink is forbidden
+doc-pkg := libwinpr3-3
+override_dh_installdocs-arch:
+	dh_installdocs -p ${doc-pkg}
+	for p in $$(dh_listpackages -a | grep -v '^${doc-pkg}$$'); do \
+	    mkdir -p debian/$$p/usr/share/doc; \
+	    ln -s ${doc-pkg} debian/$$p/usr/share/doc/$$p; \
+	    echo "dir_to_symlink /usr/share/doc/$$p ${doc-pkg} 3.17.1+dfsg-1~" >\
+		debian/$$p.maintscript; \
+	done

@@ -84,16 +84,25 @@ extern "C"
 	 *  @since version 3.6.0
 	 */
 	WINPR_ATTR_MALLOC(freerdp_client_codecs_free, 1)
+	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpCodecs* freerdp_client_codecs_new(UINT32 TheadingFlags);
 
 #if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 	WINPR_DEPRECATED_VAR("[since 3.6.0] Use freerdp_client_codecs_free",
 	                     FREERDP_API void codecs_free(rdpCodecs* codecs));
 
-	WINPR_DEPRECATED_VAR("[since 3.6.0] Use freerdp_client_codecs_new",
-	                     WINPR_ATTR_MALLOC(codecs_free, 1)
-	                         FREERDP_API rdpCodecs* codecs_new(rdpContext* context));
+	WINPR_DEPRECATED_VAR(
+	    "[since 3.6.0] Use freerdp_client_codecs_new",
+	    WINPR_ATTR_MALLOC(codecs_free, 1)
+	        WINPR_ATTR_NODISCARD FREERDP_API rdpCodecs* codecs_new(rdpContext* context));
 #endif
+
+	/** @brief return a string representation of the given codecid
+	 * 	 *  @param id The codec to stringify
+	 *  @return The name of the codecid
+	 *  @since version 3.18.0
+	 */
+	FREERDP_API const char* freerdp_codec_id_to_str(UINT32 id);
 
 #ifdef __cplusplus
 }

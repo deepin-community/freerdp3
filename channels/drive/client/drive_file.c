@@ -129,29 +129,31 @@ static WCHAR* drive_file_combine_fullpath(const WCHAR* base_path, const WCHAR* p
 	if (!base_path || (!path && (PathWCharLength > 0)))
 		goto fail;
 
-	const size_t base_path_length = _wcsnlen(base_path, MAX_PATH);
-	const size_t length = base_path_length + PathWCharLength + 1;
-	fullpath = (WCHAR*)calloc(length, sizeof(WCHAR));
-
-	if (!fullpath)
-		goto fail;
-
-	CopyMemory(fullpath, base_path, base_path_length * sizeof(WCHAR));
-	if (path)
-		CopyMemory(&fullpath[base_path_length], path, PathWCharLength * sizeof(WCHAR));
-
-	if (!drive_file_fix_path(fullpath, length))
-		goto fail;
-
-	/* Ensure the path does not contain sequences like '..' */
-	if (contains_dotdot(&fullpath[base_path_length], base_path_length, PathWCharLength))
 	{
-		char abuffer[MAX_PATH] = { 0 };
-		(void)ConvertWCharToUtf8(&fullpath[base_path_length], abuffer, ARRAYSIZE(abuffer));
+		const size_t base_path_length = _wcsnlen(base_path, MAX_PATH);
+		const size_t length = base_path_length + PathWCharLength + 1;
+		fullpath = (WCHAR*)calloc(length, sizeof(WCHAR));
 
-		WLog_WARN(TAG, "[rdpdr] received invalid file path '%s' from server, aborting!",
-		          &abuffer[base_path_length]);
-		goto fail;
+		if (!fullpath)
+			goto fail;
+
+		CopyMemory(fullpath, base_path, base_path_length * sizeof(WCHAR));
+		if (path)
+			CopyMemory(&fullpath[base_path_length], path, PathWCharLength * sizeof(WCHAR));
+
+		if (!drive_file_fix_path(fullpath, length))
+			goto fail;
+
+		/* Ensure the path does not contain sequences like '..' */
+		if (contains_dotdot(&fullpath[base_path_length], base_path_length, PathWCharLength))
+		{
+			char abuffer[MAX_PATH] = { 0 };
+			(void)ConvertWCharToUtf8(&fullpath[base_path_length], abuffer, ARRAYSIZE(abuffer));
+
+			WLog_WARN(TAG, "[rdpdr] received invalid file path '%s' from server, aborting!",
+			          &abuffer[base_path_length]);
+			goto fail;
+		}
 	}
 
 	ok = TRUE;
@@ -587,7 +589,6 @@ BOOL drive_file_query_information(DRIVE_FILE* file, UINT32 FsInformationClass, w
 {
 	BY_HANDLE_FILE_INFORMATION fileInformation = { 0 };
 	BOOL status = 0;
-	HANDLE hFile = NULL;
 
 	if (!file || !output)
 		return FALSE;
@@ -597,30 +598,35 @@ BOOL drive_file_query_information(DRIVE_FILE* file, UINT32 FsInformationClass, w
 		return drive_file_query_from_handle_information(file, &fileInformation, FsInformationClass,
 		                                                output);
 
-	hFile = CreateFileW(file->fullpath, 0, FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
-	                    FILE_ATTRIBUTE_NORMAL, NULL);
-	if (hFile != INVALID_HANDLE_VALUE)
+	if (!file->is_dir)
 	{
-		status = GetFileInformationByHandle(hFile, &fileInformation);
-		(void)CloseHandle(hFile);
-		if (!status)
-			goto out_fail;
+		HANDLE hFile = CreateFileW(file->fullpath, 0, FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+		                           FILE_ATTRIBUTE_NORMAL, NULL);
+		if (hFile != INVALID_HANDLE_VALUE)
+		{
+			status = GetFileInformationByHandle(hFile, &fileInformation);
+			(void)CloseHandle(hFile);
+			if (!status)
+				goto out_fail;
 
-		if (!drive_file_query_from_handle_information(file, &fileInformation, FsInformationClass,
-		                                              output))
-			goto out_fail;
+			if (!drive_file_query_from_handle_information(file, &fileInformation,
+			                                              FsInformationClass, output))
+				goto out_fail;
 
-		return TRUE;
+			return TRUE;
+		}
 	}
 
 	/* If we failed before (i.e. if information for a drive is queried) fall back to
 	 * GetFileAttributesExW */
-	WIN32_FILE_ATTRIBUTE_DATA fileAttributes = { 0 };
-	if (!GetFileAttributesExW(file->fullpath, GetFileExInfoStandard, &fileAttributes))
-		goto out_fail;
+	{
+		WIN32_FILE_ATTRIBUTE_DATA fileAttributes = { 0 };
+		if (!GetFileAttributesExW(file->fullpath, GetFileExInfoStandard, &fileAttributes))
+			goto out_fail;
 
-	if (!drive_file_query_from_attributes(file, &fileAttributes, FsInformationClass, output))
-		goto out_fail;
+		if (!drive_file_query_from_attributes(file, &fileAttributes, FsInformationClass, output))
+			goto out_fail;
+	}
 
 	return TRUE;
 out_fail:
@@ -654,7 +660,7 @@ static BOOL drive_file_set_basic_information(DRIVE_FILE* file, UINT32 Length, wS
 		char fullpath[MAX_PATH] = { 0 };
 		(void)ConvertWCharToUtf8(file->fullpath, fullpath, sizeof(fullpath) - 1);
 
-		WLog_ERR(TAG, "Unable to set file time %s (%" PRId32 ")", fullpath, GetLastError());
+		WLog_ERR(TAG, "Unable to set file time %s (%" PRIu32 ")", fullpath, GetLastError());
 		return FALSE;
 	}
 
@@ -729,7 +735,7 @@ static BOOL drive_file_set_alloc_information(DRIVE_FILE* file, UINT32 Length, wS
 	{
 		char fullpath[MAX_PATH] = { 0 };
 		(void)ConvertWCharToUtf8(file->fullpath, fullpath, sizeof(fullpath));
-		WLog_ERR(TAG, "Unable to truncate %s to %" PRId64 " (%" PRId32 ")", fullpath, size,
+		WLog_ERR(TAG, "Unable to truncate %s to %" PRId64 " (%" PRIu32 ")", fullpath, size,
 		         GetLastError());
 		return FALSE;
 	}
@@ -740,7 +746,7 @@ static BOOL drive_file_set_alloc_information(DRIVE_FILE* file, UINT32 Length, wS
 	{
 		char fullpath[MAX_PATH] = { 0 };
 		(void)ConvertWCharToUtf8(file->fullpath, fullpath, sizeof(fullpath));
-		WLog_ERR(TAG, "Unable to truncate %s to %" PRId64 " (%" PRId32 ")", fullpath, size,
+		WLog_ERR(TAG, "Unable to truncate %s to %" PRId64 " (%" PRIu32 ")", fullpath, size,
 		         GetLastError());
 		return FALSE;
 	}
@@ -751,7 +757,7 @@ static BOOL drive_file_set_alloc_information(DRIVE_FILE* file, UINT32 Length, wS
 	{
 		char fullpath[MAX_PATH] = { 0 };
 		(void)ConvertWCharToUtf8(file->fullpath, fullpath, sizeof(fullpath));
-		WLog_ERR(TAG, "Unable to truncate %s to %" PRId64 " (%" PRId32 ")", fullpath, size,
+		WLog_ERR(TAG, "Unable to truncate %s to %" PRId64 " (%" PRIu32 ")", fullpath, size,
 		         GetLastError());
 		return FALSE;
 	}
@@ -775,10 +781,7 @@ static BOOL drive_file_set_disposition_information(DRIVE_FILE* file, UINT32 Leng
 	{
 		const uint32_t expect = 1;
 		if (Length != expect)
-		{
-			WLog_WARN(TAG, "Unexpected Length=%" PRIu32 ", expected %" PRIu32, Length, expect);
-			return FALSE;
-		}
+			WLog_DBG(TAG, "Unexpected Length=%" PRIu32 ", expected %" PRIu32, Length, expect);
 
 		delete_pending = Stream_Get_UINT8(input);
 	}

@@ -137,6 +137,7 @@ if(WITH_URIPARSER)
     winpr_library_add_private(${uriparser_LIBRARIES})
   endif()
   add_compile_definitions("WITH_URIPARSER")
+  winpr_pc_add_requires_private("liburiparser")
 endif()
 
 if(NOT IOS)
@@ -165,6 +166,7 @@ set(WINPR_CORE
     library
     file
     comm
+    credentials
     pipe
     interlocked
     security
@@ -245,8 +247,22 @@ target_compile_options(${MODULE_NAME} PRIVATE ${WINPR_COMPILE_OPTIONS})
 target_compile_definitions(${MODULE_NAME} PRIVATE ${WINPR_DEFINITIONS})
 
 target_link_libraries(${MODULE_NAME} PRIVATE ${WINPR_LIBS_PRIVATE} PUBLIC ${WINPR_LIBS_PUBLIC})
-install(TARGETS ${MODULE_NAME} COMPONENT libraries EXPORT WinPRTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+installwithrpath(
+  TARGETS
+  ${MODULE_NAME}
+  COMPONENT
+  libraries
+  EXPORT
+  WinPRTargets
+  ARCHIVE
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME
+  DESTINATION
+  ${CMAKE_INSTALL_BINDIR}
 )
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "WinPR/libwinpr")

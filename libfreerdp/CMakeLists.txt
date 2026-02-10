@@ -18,7 +18,6 @@
 set(MODULE_NAME "freerdp")
 set(MODULE_PREFIX "FREERDP")
 
-option(FREERDP_USE_VENDOR_PRODUCT_CONFIG_DIR "Use <vendor>/<product> path for resources" OFF)
 set(FREERDP_RESOURCE_ROOT ${CMAKE_INSTALL_FULL_DATAROOTDIR})
 if(FREERDP_USE_VENDOR_PRODUCT_CONFIG_DIR)
   string(APPEND FREERDP_RESOURCE_ROOT "/${VENDOR}")
@@ -28,6 +27,22 @@ string(APPEND FREERDP_RESOURCE_ROOT "/${PRODUCT}")
 if(WITH_RESOURCE_VERSIONING)
   string(APPEND FREERDP_RESOURCE_ROOT "${FREERDP_VERSION_MAJOR}")
 endif()
+
+set(FREERDP_PC_REQUIRES_PRIVATE "" CACHE INTERNAL "dependencies")
+macro(freerdp_pc_add_requires_private)
+  foreach(_lib ${ARGN})
+    list(APPEND FREERDP_PC_REQUIRES_PRIVATE " ${_lib}")
+  endforeach()
+  set(FREERDP_PC_REQUIRES_PRIVATE ${FREERDP_PC_REQUIRES_PRIVATE} CACHE INTERNAL "dependencies")
+endmacro()
+
+set(FREERDP_PC_LIBRARY_PRIVATE "" CACHE INTERNAL "dependencies")
+macro(freerdp_pc_add_library_private)
+  foreach(_lib ${ARGN})
+    list(APPEND FREERDP_PC_LIBRARY_PRIVATE ${_lib})
+  endforeach()
+  set(FREERDP_PC_LIBRARY_PRIVATE ${FREERDP_PC_LIBRARY_PRIVATE} CACHE INTERNAL "dependencies")
+endmacro()
 
 # CMake modules includes
 include(FindCairo)
@@ -122,6 +137,7 @@ if(WITH_FDK_AAC)
   endif()
 
   add_compile_definitions(WITH_FDK_AAC)
+  freerdp_pc_add_requires_private("fdk-aac")
 endif()
 
 set(OPUS_DEFAULT OFF)
@@ -152,13 +168,16 @@ if(WITH_OPUS)
     freerdp_include_directory_add(${OPUS_INCLUDE_DIRS})
     link_directories(${OPUS_LIBRARY_DIRS})
   endif()
+  freerdp_pc_add_requires_private("opus")
 endif()
 
 if(WITH_SWSCALE)
   find_package(FFmpeg REQUIRED COMPONENTS SWSCALE)
+  freerdp_pc_add_requires_private("libswscale")
 endif(WITH_SWSCALE)
 if(WITH_CAIRO)
   find_package(Cairo REQUIRED)
+  freerdp_pc_add_requires_private("cairo")
 endif(WITH_CAIRO)
 
 # Prefer SWScale over Cairo, both at the same time are not possible.
@@ -227,20 +246,46 @@ endif()
 target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include>)
 target_link_libraries(${MODULE_NAME} PRIVATE ${LIBFREERDP_LIBS})
 target_link_libraries(${MODULE_NAME} PUBLIC ${LIBFREERDP_PUB_LIBS})
-install(TARGETS ${MODULE_NAME} COMPONENT libraries EXPORT FreeRDPTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+installwithrpath(
+  TARGETS
+  ${MODULE_NAME}
+  COMPONENT
+  libraries
+  EXPORT
+  FreeRDPTargets
+  ARCHIVE
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME
+  DESTINATION
+  ${CMAKE_INSTALL_BINDIR}
 )
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "FreeRDP/libfreerdp")
 
 include(pkg-config-install-prefix)
-set(FREERDP_REQUIRES_PRIVATE "")
 
-if(WITH_SMARTCARD_EMULATE)
-  string(APPEND FREERDP_REQUIRES_PRIVATE " zlib")
-  list(APPEND FREERDP_PC_PRIVATE_LIBS "-lz")
+freerdp_pc_add_requires_private(winpr${FREERDP_API_VERSION})
+
+list(REMOVE_DUPLICATES FREERDP_PC_REQUIRES_PRIVATE)
+list(JOIN FREERDP_PC_REQUIRES_PRIVATE " " FREERDP_PC_REQUIRES_PRIVATE)
+
+list(REMOVE_DUPLICATES FREERDP_PC_LIBRARY_PRIVATE)
+list(JOIN FREERDP_PC_LIBRARY_PRIVATE " -l" FREERDP_PC_LIBRARY_PRIVATE)
+if(FREERDP_PC_LIBRARY_PRIVATE)
+  string(PREPEND FREERDP_PC_LIBRARY_PRIVATE "-l")
 endif()
-list(JOIN FREERDP_PC_PRIVATE_LIBS " " FREERDP_PC_PRIVATE_LIBS)
+
+# Do not set Requires.Private if not a static build
+if(BUILD_SHARED_LIBS)
+  set(FREERDP_PC_REQUIRES_PRIVATE "")
+  set(FREERDP_PC_LIBRARY_PRIVATE "")
+endif()
+set(FREERDP_PC_REQUIRES winpr${FREERDP_API_VERSION})
+
 cleaning_configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/freerdp.pc.in ${CMAKE_CURRENT_BINARY_DIR}/freerdp${FREERDP_VERSION_MAJOR}.pc @ONLY
 )
@@ -248,8 +293,6 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/freerdp${FREERDP_VERSION_MAJOR}.pc DES
 
 ## cmake project
 export(PACKAGE freerdp)
-
-setfreerdpcmakeinstalldir(FREERDP_CMAKE_INSTALL_DIR "FreeRDP${FREERDP_VERSION_MAJOR}")
 
 configure_package_config_file(
   FreeRDPConfig.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/FreeRDPConfig.cmake
@@ -263,5 +306,3 @@ write_basic_package_version_file(
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/FreeRDPConfig.cmake ${CMAKE_CURRENT_BINARY_DIR}/FreeRDPConfigVersion.cmake
         DESTINATION ${FREERDP_CMAKE_INSTALL_DIR}
 )
-
-install(EXPORT FreeRDPTargets DESTINATION ${FREERDP_CMAKE_INSTALL_DIR})

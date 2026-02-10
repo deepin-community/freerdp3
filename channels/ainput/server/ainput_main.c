@@ -436,21 +436,18 @@ void ainput_server_context_free(ainput_server_context* context)
 
 static UINT ainput_process_message(ainput_server* ainput)
 {
-	BOOL rc = 0;
 	UINT error = ERROR_INTERNAL_ERROR;
 	ULONG BytesReturned = 0;
 	ULONG ActualBytesReturned = 0;
-	UINT16 MessageId = 0;
-	wStream* s = NULL;
 
 	WINPR_ASSERT(ainput);
 	WINPR_ASSERT(ainput->ainput_channel);
 
-	s = ainput->buffer;
+	wStream* s = ainput->buffer;
 	WINPR_ASSERT(s);
 
 	Stream_SetPosition(s, 0);
-	rc = WTSVirtualChannelRead(ainput->ainput_channel, 0, NULL, 0, &BytesReturned);
+	const BOOL rc = WTSVirtualChannelRead(ainput->ainput_channel, 0, NULL, 0, &BytesReturned);
 	if (!rc)
 		goto out;
 
@@ -476,23 +473,25 @@ static UINT ainput_process_message(ainput_server* ainput)
 
 	if (BytesReturned != ActualBytesReturned)
 	{
-		WLog_ERR(TAG, "WTSVirtualChannelRead size mismatch %" PRId32 ", expected %" PRId32,
+		WLog_ERR(TAG, "WTSVirtualChannelRead size mismatch %" PRIu32 ", expected %" PRIu32,
 		         ActualBytesReturned, BytesReturned);
 		goto out;
 	}
 
 	Stream_SetLength(s, ActualBytesReturned);
-	Stream_Read_UINT16(s, MessageId);
-
-	switch (MessageId)
 	{
-		case MSG_AINPUT_MOUSE:
-			error = ainput_server_recv_mouse_event(ainput, s);
-			break;
+		const UINT16 MessageId = Stream_Get_UINT16(s);
 
-		default:
-			WLog_ERR(TAG, "audin_server_thread_func: unknown MessageId %" PRIu8 "", MessageId);
-			break;
+		switch (MessageId)
+		{
+			case MSG_AINPUT_MOUSE:
+				error = ainput_server_recv_mouse_event(ainput, s);
+				break;
+
+			default:
+				WLog_ERR(TAG, "audin_server_thread_func: unknown MessageId %" PRIu16 "", MessageId);
+				break;
+		}
 	}
 
 out:
@@ -576,7 +575,7 @@ UINT ainput_server_context_poll_int(ainput_server_context* context)
 			break;
 
 		default:
-			WLog_ERR(TAG, "AINPUT channel is in invalid state %d", ainput->state);
+			WLog_ERR(TAG, "AINPUT channel is in invalid state %u", ainput->state);
 			break;
 	}
 

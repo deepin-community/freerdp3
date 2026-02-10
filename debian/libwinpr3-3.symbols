@@ -183,6 +183,13 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  CreateWaitableTimerExA@Base 3.0.0
  CreateWaitableTimerExW@Base 3.0.0
  CreateWaitableTimerW@Base 3.0.0
+ CredFree@Base 3.17.0
+ CredIsMarshaledCredentialA@Base 3.17.0
+ CredIsMarshaledCredentialW@Base 3.17.0
+ CredMarshalCredentialA@Base 3.17.0
+ CredMarshalCredentialW@Base 3.17.0
+ CredUnmarshalCredentialA@Base 3.17.0
+ CredUnmarshalCredentialW@Base 3.17.0
  CryptBinaryToStringA@Base 3.0.0
  CryptBinaryToStringW@Base 3.0.0
  CryptProtectData@Base 3.0.0
@@ -1011,6 +1018,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  WINPR_JSON_AddArrayToObject@Base 3.6.2
  WINPR_JSON_AddBoolToObject@Base 3.6.2
  WINPR_JSON_AddFalseToObject@Base 3.6.2
+ WINPR_JSON_AddIntegerToObject@Base 3.18.0
  WINPR_JSON_AddItemToArray@Base 3.9.0
  WINPR_JSON_AddNullToObject@Base 3.6.2
  WINPR_JSON_AddNumberToObject@Base 3.6.2
@@ -1063,6 +1071,8 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  WLog_OpenAppender@Base 3.0.0
  WLog_PrintMessage@Base 3.0.0
  WLog_PrintMessageVA@Base 3.0.0
+ WLog_PrintTextMessage@Base 3.17.0
+ WLog_PrintTextMessageVA@Base 3.17.0
  WLog_SetContext@Base 3.0.0
  WLog_SetLogAppenderType@Base 3.0.0
  WLog_SetLogLevel@Base 3.0.0

@@ -64,21 +64,24 @@
 #define HTTP_EXTENDED_AUTH_BEARER 0x08    /* HTTP Bearer authentication. */
 
 /* HTTP packet types. */
-#define PKT_TYPE_HANDSHAKE_REQUEST 0x1
-#define PKT_TYPE_HANDSHAKE_RESPONSE 0x2
-#define PKT_TYPE_EXTENDED_AUTH_MSG 0x3
-#define PKT_TYPE_TUNNEL_CREATE 0x4
-#define PKT_TYPE_TUNNEL_RESPONSE 0x5
-#define PKT_TYPE_TUNNEL_AUTH 0x6
-#define PKT_TYPE_TUNNEL_AUTH_RESPONSE 0x7
-#define PKT_TYPE_CHANNEL_CREATE 0x8
-#define PKT_TYPE_CHANNEL_RESPONSE 0x9
-#define PKT_TYPE_DATA 0xA
-#define PKT_TYPE_SERVICE_MESSAGE 0xB
-#define PKT_TYPE_REAUTH_MESSAGE 0xC
-#define PKT_TYPE_KEEPALIVE 0xD
-#define PKT_TYPE_CLOSE_CHANNEL 0x10
-#define PKT_TYPE_CLOSE_CHANNEL_RESPONSE 0x11
+typedef enum
+{
+	PKT_TYPE_HANDSHAKE_REQUEST = 0x1,
+	PKT_TYPE_HANDSHAKE_RESPONSE = 0x2,
+	PKT_TYPE_EXTENDED_AUTH_MSG = 0x3,
+	PKT_TYPE_TUNNEL_CREATE = 0x4,
+	PKT_TYPE_TUNNEL_RESPONSE = 0x5,
+	PKT_TYPE_TUNNEL_AUTH = 0x6,
+	PKT_TYPE_TUNNEL_AUTH_RESPONSE = 0x7,
+	PKT_TYPE_CHANNEL_CREATE = 0x8,
+	PKT_TYPE_CHANNEL_RESPONSE = 0x9,
+	PKT_TYPE_DATA = 0xA,
+	PKT_TYPE_SERVICE_MESSAGE = 0xB,
+	PKT_TYPE_REAUTH_MESSAGE = 0xC,
+	PKT_TYPE_KEEPALIVE = 0xD,
+	PKT_TYPE_CLOSE_CHANNEL = 0x10,
+	PKT_TYPE_CLOSE_CHANNEL_RESPONSE = 0x11
+} RdgPktType;
 
 /* HTTP tunnel auth fields present flags. */
 // #define HTTP_TUNNEL_AUTH_FIELD_SOH 0x1
@@ -205,6 +208,35 @@ static const t_flag_mapping capabilities_enum[] = {
 	{ HTTP_CAPABILITY_REAUTH, "HTTP_CAPABILITY_REAUTH" },
 	{ HTTP_CAPABILITY_UDP_TRANSPORT, "HTTP_CAPABILITY_UDP_TRANSPORT" }
 };
+
+static const char* rdg_pkt_type_to_string(int type)
+{
+#define ENTRY(x) \
+	case x:      \
+		return "#x"
+
+	switch (type)
+	{
+		ENTRY(PKT_TYPE_HANDSHAKE_REQUEST);
+		ENTRY(PKT_TYPE_HANDSHAKE_RESPONSE);
+		ENTRY(PKT_TYPE_EXTENDED_AUTH_MSG);
+		ENTRY(PKT_TYPE_TUNNEL_CREATE);
+		ENTRY(PKT_TYPE_TUNNEL_RESPONSE);
+		ENTRY(PKT_TYPE_TUNNEL_AUTH);
+		ENTRY(PKT_TYPE_TUNNEL_AUTH_RESPONSE);
+		ENTRY(PKT_TYPE_CHANNEL_CREATE);
+		ENTRY(PKT_TYPE_CHANNEL_RESPONSE);
+		ENTRY(PKT_TYPE_DATA);
+		ENTRY(PKT_TYPE_SERVICE_MESSAGE);
+		ENTRY(PKT_TYPE_REAUTH_MESSAGE);
+		ENTRY(PKT_TYPE_KEEPALIVE);
+		ENTRY(PKT_TYPE_CLOSE_CHANNEL);
+		ENTRY(PKT_TYPE_CLOSE_CHANNEL_RESPONSE);
+		default:
+			return "PKT_TYPE_UNKNOWN";
+	}
+#undef ENTRY
+}
 
 static const char* flags_to_string(UINT32 flags, const t_flag_mapping* map, size_t elements)
 {
@@ -707,17 +739,15 @@ out:
 static BOOL rdg_recv_auth_token(wLog* log, rdpCredsspAuth* auth, HttpResponse* response)
 {
 	size_t len = 0;
-	const char* token64 = NULL;
 	size_t authTokenLength = 0;
 	BYTE* authTokenData = NULL;
 	SecBuffer authToken = { 0 };
-	long StatusCode = 0;
 	int rc = 0;
 
 	if (!auth || !response)
 		return FALSE;
 
-	StatusCode = http_response_get_status_code(response);
+	const UINT16 StatusCode = http_response_get_status_code(response);
 	switch (StatusCode)
 	{
 		case HTTP_STATUS_DENIED:
@@ -729,8 +759,7 @@ static BOOL rdg_recv_auth_token(wLog* log, rdpCredsspAuth* auth, HttpResponse* r
 			return FALSE;
 	}
 
-	token64 = http_response_get_auth_token(response, credssp_auth_pkg_name(auth));
-
+	const char* token64 = http_response_get_auth_token(response, credssp_auth_pkg_name(auth));
 	if (!token64)
 		return FALSE;
 
@@ -1000,7 +1029,7 @@ static BOOL rdg_process_extauth_sspi(rdpRdg* rdg, wStream* s)
 	if (errorCode != ERROR_SUCCESS)
 	{
 		WLog_Print(rdg->log, WLOG_ERROR, "EXTAUTH_SSPI_NTLM failed with error %s [0x%08X]",
-		           GetSecurityStatusString(errorCode), errorCode);
+		           GetSecurityStatusString(errorCode), WINPR_CXX_COMPAT_CAST(UINT32, errorCode));
 		return FALSE;
 	}
 
@@ -1084,7 +1113,7 @@ static BOOL rdg_process_packet(rdpRdg* rdg, wStream* s)
 
 	if (Stream_Length(s) < packetLength)
 	{
-		WLog_Print(rdg->log, WLOG_ERROR, "Short packet %" PRIuz ", expected %" PRIuz,
+		WLog_Print(rdg->log, WLOG_ERROR, "Short packet %" PRIuz ", expected %" PRIu32,
 		           Stream_Length(s), packetLength);
 		return FALSE;
 	}
@@ -1109,7 +1138,8 @@ static BOOL rdg_process_packet(rdpRdg* rdg, wStream* s)
 
 		case PKT_TYPE_DATA:
 			WLog_Print(rdg->log, WLOG_ERROR, "Unexpected packet type DATA");
-			return FALSE;
+			status = FALSE;
+			break;
 
 		case PKT_TYPE_EXTENDED_AUTH_MSG:
 			status = rdg_process_extauth_sspi(rdg, s);
@@ -1117,9 +1147,17 @@ static BOOL rdg_process_packet(rdpRdg* rdg, wStream* s)
 
 		default:
 			WLog_Print(rdg->log, WLOG_ERROR, "PKG TYPE 0x%x not implemented", type);
-			return FALSE;
+			status = FALSE;
+			break;
 	}
 
+	if (status)
+	{
+		const size_t rem = Stream_GetRemainingLength(s);
+		if (rem > 0)
+			WLog_Print(rdg->log, WLOG_WARN, "[%s] unparsed data detected: %" PRIuz " bytes",
+			           rdg_pkt_type_to_string(type), rem);
+	}
 	return status;
 }
 
@@ -1364,8 +1402,9 @@ static BOOL rdg_establish_data_connection(rdpRdg* rdg, rdpTls* tls, const char* 
 			return FALSE;
 		}
 
-		const long StatusCode = http_response_get_status_code(response);
+		(void)http_response_extract_cookies(response, rdg->http);
 
+		const UINT16 StatusCode = http_response_get_status_code(response);
 		switch (StatusCode)
 		{
 			case HTTP_STATUS_GONE:
@@ -1380,6 +1419,10 @@ static BOOL rdg_establish_data_connection(rdpRdg* rdg, rdpTls* tls, const char* 
 				return FALSE;
 			}
 			case HTTP_STATUS_OK:
+				break;
+
+			case HTTP_STATUS_DENIED:
+				http_response_log_error_status(rdg->log, WLOG_DEBUG, response);
 				break;
 
 			default:
@@ -1409,6 +1452,7 @@ static BOOL rdg_establish_data_connection(rdpRdg* rdg, rdpTls* tls, const char* 
 					*rpcFallback = TRUE;
 					return FALSE;
 				}
+				(void)http_response_extract_cookies(response, rdg->http);
 			}
 		}
 		credssp_auth_free(rdg->auth);
@@ -1430,9 +1474,10 @@ static BOOL rdg_establish_data_connection(rdpRdg* rdg, rdpTls* tls, const char* 
 			*rpcFallback = TRUE;
 			return FALSE;
 		}
+		(void)http_response_extract_cookies(response, rdg->http);
 	}
 
-	const long statusCode = http_response_get_status_code(response);
+	const UINT16 statusCode = http_response_get_status_code(response);
 	const size_t bodyLength = http_response_get_body_length(response);
 	const TRANSFER_ENCODING encoding = http_response_get_transfer_encoding(response);
 	const BOOL isWebsocket = http_response_is_websocket(rdg->http, response);
@@ -1559,6 +1604,7 @@ BOOL rdg_connect(rdpRdg* rdg, DWORD timeout, BOOL* rpcFallback)
 	BOOL rpcFallbackLocal = FALSE;
 
 	WINPR_ASSERT(rdg != NULL);
+	freerdp_set_last_error(rdg->context, ERROR_SUCCESS);
 	status = rdg_establish_data_connection(rdg, rdg->tlsOut, "RDG_OUT_DATA", NULL, timeout,
 	                                       &rpcFallbackLocal);
 
@@ -1773,7 +1819,8 @@ static BOOL rdg_process_unknown_packet(rdpRdg* rdg, int type)
 {
 	WINPR_UNUSED(rdg);
 	WINPR_UNUSED(type);
-	WLog_Print(rdg->log, WLOG_WARN, "Unknown Control Packet received: %X", type);
+	WLog_Print(rdg->log, WLOG_WARN, "Unknown Control Packet received: %" PRIX32,
+	           WINPR_CXX_COMPAT_CAST(UINT32, type));
 	return TRUE;
 }
 

@@ -7,6 +7,10 @@
 #include <winpr/assert.h>
 #include "../log.h"
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
+
 #define TAG WINPR_TAG("sync.pollset")
 
 #ifdef WINPR_HAVE_POLL_H
@@ -142,7 +146,23 @@ int pollset_poll(WINPR_POLL_SET* set, DWORD dwMilliseconds)
 
 		ret = poll(set->pollset, set->fillIndex, timeout);
 		if (ret >= 0)
+		{
+#if defined(__EMSCRIPTEN__)
+			/* If we have tried 10 times unsuccessfully we will yield in emscripten so pending event
+			 * handlers might be run */
+			if (ret == 0)
+			{
+				if (++set->yieldCounter > 10)
+				{
+					emscripten_sleep(0);
+					set->yieldCounter = 0;
+				}
+			}
+			else
+				set->yieldCounter = 0;
+#endif
 			return ret;
+		}
 
 		if (errno != EINTR)
 			return -1;
@@ -208,7 +228,7 @@ BOOL pollset_isSignaled(WINPR_POLL_SET* set, size_t idx)
 
 	if (idx > set->fillIndex)
 	{
-		WLog_ERR(TAG, "index=%d out of pollset(fillIndex=%" PRIuz ")", idx, set->fillIndex);
+		WLog_ERR(TAG, "index=%" PRIuz " out of pollset(fillIndex=%" PRIuz ")", idx, set->fillIndex);
 		return FALSE;
 	}
 
@@ -235,7 +255,7 @@ BOOL pollset_isReadSignaled(WINPR_POLL_SET* set, size_t idx)
 
 	if (idx > set->fillIndex)
 	{
-		WLog_ERR(TAG, "index=%d out of pollset(fillIndex=%" PRIuz ")", idx, set->fillIndex);
+		WLog_ERR(TAG, "index=%" PRIuz " out of pollset(fillIndex=%" PRIuz ")", idx, set->fillIndex);
 		return FALSE;
 	}
 
@@ -256,7 +276,7 @@ BOOL pollset_isWriteSignaled(WINPR_POLL_SET* set, size_t idx)
 
 	if (idx > set->fillIndex)
 	{
-		WLog_ERR(TAG, "index=%d out of pollset(fillIndex=%" PRIuz ")", idx, set->fillIndex);
+		WLog_ERR(TAG, "index=%" PRIuz " out of pollset(fillIndex=%" PRIuz ")", idx, set->fillIndex);
 		return FALSE;
 	}
 

@@ -99,10 +99,28 @@ if(WITH_CLIENT)
 endif()
 
 if(WITH_FUSE)
-  list(APPEND FREERDP_CLIENT_PC_PRIVATE_LIBS "-lfuse3")
+  freerdp_client_pc_add_requires_private("fuse3")
 endif()
 
-list(JOIN FREERDP_CLIENT_PC_PRIVATE_LIBS " " FREERDP_CLIENT_PC_PRIVATE_LIBS)
+freerdp_client_pc_add_requires_private("freerdp${FREERDP_API_VERSION}")
+freerdp_client_pc_add_library_private("dl;pthread")
+
+list(REMOVE_DUPLICATES FREERDP_CLIENT_PC_REQUIRES_PRIVATE)
+list(JOIN FREERDP_CLIENT_PC_REQUIRES_PRIVATE " " FREERDP_CLIENT_PC_REQUIRES_PRIVATE)
+
+list(REMOVE_DUPLICATES FREERDP_CLIENT_PC_LIBRARY_PRIVATE)
+list(JOIN FREERDP_CLIENT_PC_LIBRARY_PRIVATE " -l" FREERDP_CLIENT_PC_LIBRARY_PRIVATE)
+if(FREERDP_CLIENT_PC_LIBRARY_PRIVATE)
+  string(PREPEND FREERDP_CLIENT_PC_LIBRARY_PRIVATE "-l")
+endif()
+
+# Do not set Requires.Private if not a static build
+if(BUILD_SHARED_LIBS)
+  set(FREERDP_CLIENT_PC_REQUIRES_PRIVATE "")
+  set(FREERDP_CLIENT_PC_LIBRARY_PRIVATE "")
+endif()
+set(FREERDP_CLIENT_PC_REQUIRES freerdp${FREERDP_API_VERSION})
+
 include(pkg-config-install-prefix)
 cleaning_configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/freerdp-client.pc.in

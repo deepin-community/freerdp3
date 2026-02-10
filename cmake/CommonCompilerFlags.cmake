@@ -22,6 +22,7 @@ if(ENABLE_WARNING_VERBOSE)
       -Wno-covered-switch-default
       -Wno-disabled-macro-expansion
       -Wno-used-but-marked-unused
+      -Wno-implicit-void-ptr-cast
     )
   endif()
 endif()
@@ -31,6 +32,7 @@ if(ENABLE_WARNING_ERROR)
 endif()
 
 list(APPEND COMMON_COMPILER_FLAGS -fno-omit-frame-pointer -Wredundant-decls)
+list(APPEND COMMON_COMPILER_FLAGS -fsigned-char)
 
 include(ExportAllSymbols)
 include(CompilerSanitizerOptions)

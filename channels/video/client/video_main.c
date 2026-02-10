@@ -680,19 +680,17 @@ static UINT video_control_send_client_notification(VideoClientContext* context,
 static void video_timer(VideoClientContext* video, UINT64 now)
 {
 	PresentationContext* presentation = NULL;
-	VideoClientContextPriv* priv = NULL;
-	VideoFrame* peekFrame = NULL;
 	VideoFrame* frame = NULL;
 
 	WINPR_ASSERT(video);
 
-	priv = video->priv;
+	VideoClientContextPriv* priv = video->priv;
 	WINPR_ASSERT(priv);
 
 	EnterCriticalSection(&priv->framesLock);
 	do
 	{
-		peekFrame = (VideoFrame*)Queue_Peek(priv->frames);
+		VideoFrame* peekFrame = (VideoFrame*)Queue_Peek(priv->frames);
 		if (!peekFrame)
 			break;
 
@@ -845,8 +843,7 @@ static UINT video_VideoData(VideoClientContext* context, const TSMM_VIDEO_DATA* 
 	{
 		VideoSurface* surface = presentation->surface;
 		H264_CONTEXT* h264 = presentation->h264;
-		UINT64 startTime = GetTickCount64();
-		UINT64 timeAfterH264 = 0;
+		const UINT64 startTime = winpr_GetTickCount64NS();
 		MAPPED_GEOMETRY* geom = presentation->geometry;
 
 		const RECTANGLE_16 rect = { 0, 0, WINPR_ASSERTING_INT_CAST(UINT16, surface->alignedWidth),
@@ -854,14 +851,14 @@ static UINT video_VideoData(VideoClientContext* context, const TSMM_VIDEO_DATA* 
 		Stream_SealLength(presentation->currentSample);
 		Stream_SetPosition(presentation->currentSample, 0);
 
-		timeAfterH264 = GetTickCount64();
+		const UINT64 timeAfterH264 = winpr_GetTickCount64NS();
 		if (data->SampleNumber == 1)
 		{
 			presentation->lastPublishTime = startTime;
 		}
 
-		presentation->lastPublishTime += (data->hnsDuration / 10000);
-		if (presentation->lastPublishTime <= timeAfterH264 + 10)
+		presentation->lastPublishTime += 100ull * data->hnsDuration;
+		if (presentation->lastPublishTime <= (10000000ull + timeAfterH264))
 		{
 			int dropped = 0;
 
@@ -937,7 +934,7 @@ static UINT video_VideoData(VideoClientContext* context, const TSMM_VIDEO_DATA* 
 			}
 
 			// NOLINTNEXTLINE(clang-analyzer-unix.Malloc): Queue_Enqueue owns frame
-			WLog_DBG(TAG, "scheduling frame in %" PRIu32 " ms", (frame->publishTime - startTime));
+			WLog_DBG(TAG, "scheduling frame in %" PRIu64 " ms", (frame->publishTime - startTime));
 		}
 	}
 
@@ -1033,13 +1030,13 @@ static UINT video_control_on_new_channel_connection(IWTSListenerCallback* listen
                                                     IWTSVirtualChannelCallback** ppCallback)
 // NOLINTEND(readability-non-const-parameter)
 {
-	GENERIC_CHANNEL_CALLBACK* callback = NULL;
 	GENERIC_LISTENER_CALLBACK* listener_callback = (GENERIC_LISTENER_CALLBACK*)listenerCallback;
 
 	WINPR_UNUSED(Data);
 	WINPR_UNUSED(pbAccept);
 
-	callback = (GENERIC_CHANNEL_CALLBACK*)calloc(1, sizeof(GENERIC_CHANNEL_CALLBACK));
+	GENERIC_CHANNEL_CALLBACK* callback =
+	    (GENERIC_CHANNEL_CALLBACK*)calloc(1, sizeof(GENERIC_CHANNEL_CALLBACK));
 	if (!callback)
 	{
 		WLog_ERR(TAG, "calloc failed!");
@@ -1053,7 +1050,7 @@ static UINT video_control_on_new_channel_connection(IWTSListenerCallback* listen
 	callback->channel = channel;
 	listener_callback->channel_callback = callback;
 
-	*ppCallback = (IWTSVirtualChannelCallback*)callback;
+	*ppCallback = &callback->iface;
 
 	return CHANNEL_RC_OK;
 }
@@ -1085,7 +1082,7 @@ static UINT video_data_on_new_channel_connection(IWTSListenerCallback* pListener
 	callback->channel = pChannel;
 	listener_callback->channel_callback = callback;
 
-	*ppCallback = (IWTSVirtualChannelCallback*)callback;
+	*ppCallback = &callback->iface;
 
 	return CHANNEL_RC_OK;
 }
@@ -1160,7 +1157,7 @@ static UINT video_plugin_initialize(IWTSPlugin* plugin, IWTSVirtualChannelManage
 
 	if (status == CHANNEL_RC_OK)
 		video->context->priv->timerID =
-		    freerdp_timer_add(video->rdpcontext, 20000, timer_cb, video->context, true);
+		    freerdp_timer_add(video->rdpcontext, 20000000, timer_cb, video->context, true);
 	video->initialized = video->context->priv->timerID != 0;
 	if (!video->initialized)
 		status = ERROR_INTERNAL_ERROR;

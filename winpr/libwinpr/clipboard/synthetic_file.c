@@ -102,8 +102,10 @@ static struct synthetic_file* make_synthetic_file(const WCHAR* local_name, const
 	if (!file->remote_name)
 		goto fail;
 
-	const size_t len = _wcslen(file->remote_name);
-	PathCchConvertStyleW(file->remote_name, len, PATH_STYLE_WINDOWS);
+	{
+		const size_t len = _wcslen(file->remote_name);
+		PathCchConvertStyleW(file->remote_name, len, PATH_STYLE_WINDOWS);
+	}
 
 	file->dwFileAttributes = fd.dwFileAttributes;
 	file->ftCreationTime = fd.ftCreationTime;
@@ -156,7 +158,9 @@ static WCHAR* convert_local_name_component_to_remote(wClipboard* clipboard, cons
 	 */
 	if (!delegate->IsFileNameComponentValid(remote_name))
 	{
-		WLog_ERR(TAG, "invalid file name component: %s", local_name);
+		char name[MAX_PATH] = { 0 };
+		ConvertWCharToUtf8(local_name, name, sizeof(name) - 1);
+		WLog_ERR(TAG, "invalid file name component: %s", name);
 		goto error;
 	}
 
@@ -282,7 +286,7 @@ static BOOL add_directory_contents_to_list(wClipboard* clipboard, const WCHAR* l
 		const char* c;
 		const WCHAR* w;
 	} wildcard;
-	const char buffer[6] = "/\0*\0\0\0";
+	const char buffer[6] = { '/', '\0', '*', '\0', '\0', '\0' };
 	wildcard.c = buffer;
 	const size_t wildcardLen = ARRAYSIZE(buffer) / sizeof(WCHAR);
 
@@ -420,7 +424,7 @@ static BOOL process_uri_list(wClipboard* clipboard, const char* data, size_t len
 	WINPR_ASSERT(clipboard);
 	WINPR_ASSERT(data);
 
-	WLog_VRB(TAG, "processing URI list:\n%.*s", length, data);
+	WLog_VRB(TAG, "processing URI list:\n%.*s", WINPR_ASSERTING_INT_CAST(int, length), data);
 	ArrayList_Clear(clipboard->localFiles);
 
 	/*
@@ -590,18 +594,21 @@ static BOOL process_files(wClipboard* clipboard, const char* data, UINT32 pSize,
 	if (!copy)
 		goto fail;
 
-	char* endptr = NULL;
-	char* tok = strtok_s(copy, "\n", &endptr);
-	while (tok)
 	{
-		const size_t tok_len = strnlen(tok, pSize);
-		if (!process_uri(clipboard, tok, tok_len))
-			goto fail;
-		if (pSize < tok_len)
-			goto fail;
-		pSize -= WINPR_ASSERTING_INT_CAST(uint32_t, tok_len);
-		tok = strtok_s(NULL, "\n", &endptr);
+		char* endptr = NULL;
+		char* tok = strtok_s(copy, "\n", &endptr);
+		while (tok)
+		{
+			const size_t tok_len = strnlen(tok, pSize);
+			if (!process_uri(clipboard, tok, tok_len))
+				goto fail;
+			if (pSize < tok_len)
+				goto fail;
+			pSize -= WINPR_ASSERTING_INT_CAST(uint32_t, tok_len);
+			tok = strtok_s(NULL, "\n", &endptr);
+		}
 	}
+
 	rc = TRUE;
 
 fail:
@@ -1035,10 +1042,10 @@ UINT synthetic_file_read_close(struct synthetic_file* file, BOOL force)
 	file_get_size(file, &size);
 	if ((file->offset < 0) || ((UINT64)file->offset >= size) || force)
 	{
-		WLog_VRB(TAG, "close file %d", file->fd);
+		WLog_VRB(TAG, "close file %p", file->fd);
 		if (!CloseHandle(file->fd))
 		{
-			WLog_WARN(TAG, "failed to close fd %d: %" PRIu32, file->fd, GetLastError());
+			WLog_WARN(TAG, "failed to close fd %p: %" PRIu32, file->fd, GetLastError());
 		}
 
 		file->fd = INVALID_HANDLE_VALUE;
@@ -1066,17 +1073,21 @@ static UINT file_get_range(struct synthetic_file* file, UINT64 offset, UINT32 si
 		                       FILE_ATTRIBUTE_NORMAL, NULL);
 		if (INVALID_HANDLE_VALUE == file->fd)
 		{
+			char name[MAX_PATH] = { 0 };
+			ConvertWCharToUtf8(file->local_name, name, sizeof(name) - 1);
 			error = GetLastError();
-			WLog_ERR(TAG, "failed to open file %s: 0x%08" PRIx32, file->local_name, error);
+			WLog_ERR(TAG, "failed to open file %s: 0x%08" PRIx32, name, error);
 			return error;
 		}
 
 		if (!GetFileInformationByHandle(file->fd, &FileInfo))
 		{
+			char name[MAX_PATH] = { 0 };
+			ConvertWCharToUtf8(file->local_name, name, sizeof(name) - 1);
 			(void)CloseHandle(file->fd);
 			file->fd = INVALID_HANDLE_VALUE;
 			error = GetLastError();
-			WLog_ERR(TAG, "Get file [%s] information fail: 0x%08" PRIx32, file->local_name, error);
+			WLog_ERR(TAG, "Get file [%s] information fail: 0x%08" PRIx32, name, error);
 			return error;
 		}
 
@@ -1110,7 +1121,7 @@ static UINT file_get_range(struct synthetic_file* file, UINT64 offset, UINT32 si
 
 		if (file->offset != (INT64)offset)
 		{
-			WLog_DBG(TAG, "file %d force seeking to %" PRIu64 ", current %" PRIu64, file->fd,
+			WLog_DBG(TAG, "file %p force seeking to %" PRIu64 ", current %" PRId64, file->fd,
 			         offset, file->offset);
 
 			dwHigh = offset >> 32;
@@ -1139,7 +1150,7 @@ static UINT file_get_range(struct synthetic_file* file, UINT64 offset, UINT32 si
 
 		*actual_data = buffer;
 		file->offset += *actual_size;
-		WLog_VRB(TAG, "file %d actual read %" PRIu32 " bytes (offset %" PRIu64 ")", file->fd,
+		WLog_VRB(TAG, "file %p actual read %" PRIu32 " bytes (offset %" PRId64 ")", file->fd,
 		         *actual_size, file->offset);
 	} while (0);
 

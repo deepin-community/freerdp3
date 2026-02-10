@@ -145,7 +145,8 @@ static const struct xf_exit_code_map_t xf_exit_code_map[] = {
 	{ FREERDP_ERROR_CONNECT_ACCOUNT_RESTRICTION, XF_EXIT_CONNECT_ACCOUNT_RESTRICTION },
 	{ FREERDP_ERROR_CONNECT_ACCOUNT_EXPIRED, XF_EXIT_CONNECT_ACCOUNT_EXPIRED },
 	{ FREERDP_ERROR_CONNECT_LOGON_TYPE_NOT_GRANTED, XF_EXIT_CONNECT_LOGON_TYPE_NOT_GRANTED },
-	{ FREERDP_ERROR_CONNECT_NO_OR_MISSING_CREDENTIALS, XF_EXIT_CONNECT_NO_OR_MISSING_CREDENTIALS }
+	{ FREERDP_ERROR_CONNECT_NO_OR_MISSING_CREDENTIALS, XF_EXIT_CONNECT_NO_OR_MISSING_CREDENTIALS },
+	{ FREERDP_ERROR_CONNECT_TARGET_BOOTING, XF_EXIT_CONNECT_TARGET_BOOTING }
 };
 
 static BOOL xf_setup_x11(xfContext* xfc);
@@ -166,7 +167,6 @@ static int xf_map_error_to_exit_code(DWORD error)
 static int (*def_error_handler)(Display*, XErrorEvent*);
 static int xf_error_handler_ex(Display* d, XErrorEvent* ev);
 static void xf_check_extensions(xfContext* context);
-static void xf_window_free(xfContext* xfc);
 static BOOL xf_get_pixmap_info(xfContext* xfc);
 
 #ifdef WITH_XRENDER
@@ -304,7 +304,7 @@ void xf_draw_screen_(xfContext* xfc, int x, int y, int w, int h, const char* fkt
 {
 	if (!xfc)
 	{
-		WLog_DBG(TAG, "called from [%s] xfc=%p", fkt, xfc);
+		WLog_DBG(TAG, "called from [%s] xfc=NULL", fkt);
 		return;
 	}
 
@@ -316,7 +316,7 @@ void xf_draw_screen_(xfContext* xfc, int x, int y, int w, int h, const char* fkt
 
 	if (!xfc->window)
 	{
-		WLog_WARN(TAG, "invalid xfc->window=%p", xfc->window);
+		WLog_WARN(TAG, "invalid xfc->window=NULL");
 		return;
 	}
 
@@ -336,12 +336,11 @@ void xf_draw_screen_(xfContext* xfc, int x, int y, int w, int h, const char* fkt
 
 static BOOL xf_desktop_resize(rdpContext* context)
 {
-	rdpSettings* settings = NULL;
 	xfContext* xfc = (xfContext*)context;
 
 	WINPR_ASSERT(xfc);
 
-	settings = context->settings;
+	rdpSettings* settings = context->settings;
 	WINPR_ASSERT(settings);
 
 	if (xfc->primary)
@@ -437,16 +436,22 @@ static BOOL xf_paint(xfContext* xfc, const GDI_RGN* region)
 static BOOL xf_end_paint(rdpContext* context)
 {
 	xfContext* xfc = (xfContext*)context;
+	WINPR_ASSERT(xfc);
+
 	rdpGdi* gdi = context->gdi;
+	WINPR_ASSERT(gdi);
 
 	if (gdi->suppressOutput)
 		return TRUE;
 
 	HGDI_DC hdc = gdi->primary->hdc;
+	if (!hdc->hwnd)
+		return TRUE;
 
+	HGDI_WND hwnd = hdc->hwnd;
 	if (!xfc->complex_regions)
 	{
-		const GDI_RGN* rgn = hdc->hwnd->invalid;
+		const GDI_RGN* rgn = hwnd->invalid;
 		if (rgn->null)
 			return TRUE;
 		xf_lock_x11(xfc);
@@ -456,10 +461,10 @@ static BOOL xf_end_paint(rdpContext* context)
 	}
 	else
 	{
-		const INT32 ninvalid = hdc->hwnd->ninvalid;
-		const GDI_RGN* cinvalid = hdc->hwnd->cinvalid;
+		const INT32 ninvalid = hwnd->ninvalid;
+		const GDI_RGN* cinvalid = hwnd->cinvalid;
 
-		if (hdc->hwnd->ninvalid < 1)
+		if (hwnd->ninvalid < 1)
 			return TRUE;
 
 		xf_lock_x11(xfc);
@@ -475,25 +480,35 @@ static BOOL xf_end_paint(rdpContext* context)
 		xf_unlock_x11(xfc);
 	}
 
-	hdc->hwnd->invalid->null = TRUE;
-	hdc->hwnd->ninvalid = 0;
+	hwnd->invalid->null = TRUE;
+	hwnd->ninvalid = 0;
 	return TRUE;
 }
 
 static BOOL xf_sw_desktop_resize(rdpContext* context)
 {
+	WINPR_ASSERT(context);
+
 	rdpGdi* gdi = context->gdi;
+	WINPR_ASSERT(gdi);
+
 	xfContext* xfc = (xfContext*)context;
 	rdpSettings* settings = context->settings;
+	WINPR_ASSERT(settings);
+
 	BOOL ret = FALSE;
 
+	/* There is a possible race here.
+	 * Ensure that the drawing thread does not update the screen during a
+	 * resize. */
+	const BOOL suppress = gdi->suppressOutput;
+	gdi->suppressOutput = TRUE;
+
+	xf_lock_x11(xfc);
 	if (!gdi_resize(gdi, freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth),
 	                freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight)))
-		return FALSE;
+		goto out;
 
-	/* Do not lock during gdi_resize, there might still be drawing operations in progress.
-	 * locking will deadlock. */
-	xf_lock_x11(xfc);
 	if (xfc->image)
 	{
 		xfc->image->data = NULL;
@@ -516,6 +531,7 @@ static BOOL xf_sw_desktop_resize(rdpContext* context)
 	ret = xf_desktop_resize(context);
 out:
 	xf_unlock_x11(xfc);
+	gdi->suppressOutput = suppress;
 	return ret;
 }
 
@@ -747,7 +763,7 @@ BOOL xf_create_image(xfContext* xfc)
 	return TRUE;
 }
 
-static void xf_window_free(xfContext* xfc)
+void xf_destroy_window(xfContext* xfc)
 {
 	if (xfc->window)
 	{
@@ -896,12 +912,9 @@ static int xf_error_handler(Display* d, XErrorEvent* ev)
 {
 	char buf[256] = { 0 };
 	XGetErrorText(d, ev->error_code, buf, sizeof(buf));
-	WLog_ERR(TAG, "%s", buf);
+	const char* what = request_code_2_str(ev->request_code);
+	WLog_ERR(TAG, "%s: %s", what, buf);
 	winpr_log_backtrace(TAG, WLOG_ERROR, 20);
-
-	if (def_error_handler)
-		return def_error_handler(d, ev);
-
 	return 0;
 }
 
@@ -912,9 +925,10 @@ static int xf_error_handler_ex(Display* d, XErrorEvent* ev)
 	 * another window. This make xf_error_handler() a potential
 	 * debugger breakpoint.
 	 */
-
+#if defined(WITH_DEBUG_X11)
 	XUngrabKeyboard(d, CurrentTime);
 	XUngrabPointer(d, CurrentTime);
+#endif
 	return xf_error_handler(d, ev);
 }
 
@@ -1031,7 +1045,8 @@ static void xf_get_x11_button_map(xfContext* xfc, unsigned char* x11_map)
 		/* otherwise leave unchanged.                                            */
 		if (ptr_dev)
 		{
-			WLog_DBG(TAG, "Pointer device: %d", ptr_dev->device_id);
+			WLog_DBG(TAG, "Pointer device: %" PRIu32,
+			         WINPR_CXX_COMPAT_CAST(uint32_t, ptr_dev->device_id));
 			XGetDeviceButtonMapping(xfc->display, ptr_dev, x11_map, NUM_BUTTONS_MAPPED);
 			XCloseDevice(xfc->display, ptr_dev);
 		}
@@ -1504,7 +1519,7 @@ static void xf_post_disconnect(freerdp* instance)
 	freerdp_keyboard_remap_free(xfc->remap_table);
 	xfc->remap_table = NULL;
 
-	xf_window_free(xfc);
+	xf_destroy_window(xfc);
 }
 
 static void xf_post_final_disconnect(freerdp* instance)
@@ -1540,6 +1555,7 @@ static BOOL handle_window_events(freerdp* instance)
 	if (!xf_process_x_events(instance))
 	{
 		WLog_DBG(TAG, "Closed from X11");
+		freerdp_abort_connect_context(instance->context);
 		return FALSE;
 	}
 
@@ -1695,8 +1711,7 @@ end:
 
 int xf_exit_code_from_disconnect_reason(DWORD reason)
 {
-	if (reason == 0 ||
-	    (reason >= XF_EXIT_PARSE_ARGUMENTS && reason <= XF_EXIT_CONNECT_NO_OR_MISSING_CREDENTIALS))
+	if ((reason == 0) || ((reason >= XF_EXIT_PARSE_ARGUMENTS) && (reason <= XF_EXIT_CODE_LAST)))
 		return WINPR_ASSERTING_INT_CAST(int, reason);
 	/* License error set */
 	else if (reason >= 0x100 && reason <= 0x10A)

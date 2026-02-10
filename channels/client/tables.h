@@ -17,6 +17,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include <winpr/platform.h>
 #include <winpr/wtsapi.h>
 #include <freerdp/svc.h>
@@ -41,7 +43,7 @@ typedef struct
 	static_entry_vc_fn_t entry;
 } STATIC_ENTRY_VC;
 
-typedef BOOL(VCAPITYPE* static_entry_vcex_fn_t)(PCHANNEL_ENTRY_POINTS, PVOID);
+typedef BOOL(VCAPITYPE* static_entry_vcex_fn_t)(PCHANNEL_ENTRY_POINTS_EX, PVOID);
 typedef struct
 {
 	const char* name;

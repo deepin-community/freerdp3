@@ -40,6 +40,11 @@ include(CXXCompilerFlags)
 set(SRCS bitmap-filter.cpp)
 addtargetwithresourcefile(${PROJECT_NAME} FALSE "${PROJECT_VERSION}" SRCS FALSE)
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE $<$<BOOL:${BUILD_SHARED_LIBS}>:BUILD_SHARED_LIBS>)
 target_link_libraries(${PROJECT_NAME} winpr freerdp)
 
-install(TARGETS ${PROJECT_NAME} DESTINATION ${FREERDP_PROXY_PLUGINDIR})
+installwithrpath(TARGETS ${PROJECT_NAME} DESTINATION ${FREERDP_PROXY_PLUGINDIR})
+
+set(PROJECT_PC_REQUIRES_PRIVATE "winpr${FREERDP_API_VERSION} freerdp${FREERDP_API_VERSION}")
+include(ProxyModuleConfig)
+generate_proxy_module_config()

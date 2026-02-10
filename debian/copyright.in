@@ -57,25 +57,27 @@ Files: .clang-tidy
  client/SDL/SDL2/man/CMakeLists.txt
  client/SDL/SDL2/man/sdl2-freerdp.1.in
  client/SDL/SDL3/dialogs/font/README.txt
+ client/SDL/SDL3/dialogs/sdl_blend_mode_guard.cpp
  client/SDL/SDL3/dialogs/sdl_button.hpp
  client/SDL/SDL3/dialogs/sdl_buttons.cpp
  client/SDL/SDL3/dialogs/sdl_buttons.hpp
- client/SDL/SDL3/dialogs/sdl_input_widgets.cpp
- client/SDL/SDL3/dialogs/sdl_input_widgets.hpp
- client/SDL/SDL3/dialogs/sdl_selectlist.cpp
- client/SDL/SDL3/dialogs/sdl_selectlist.hpp
+ client/SDL/SDL3/dialogs/sdl_connection_dialog_hider.cpp
+ client/SDL/SDL3/dialogs/sdl_select_list.cpp
+ client/SDL/SDL3/dialogs/sdl_select_list.hpp
+ client/SDL/SDL3/dialogs/sdl_widget_list.cpp
+ client/SDL/SDL3/dialogs/sdl_widget_list.hpp
  client/SDL/SDL3/dialogs/test/CMakeLists.txt
- client/SDL/SDL3/dialogs/test/TestSDLDialogs.cpp
+ client/SDL/SDL3/dialogs/test/TestSDLDialogInput.cpp
+ client/SDL/SDL3/dialogs/test/TestSDLDialogSelectList.cpp
  client/SDL/SDL3/man/CMakeLists.txt
  client/SDL/SDL3/man/sdl3-freerdp.1.in
- client/SDL/common/aad/sdl_config.hpp.in
- client/SDL/common/aad/wrapper/README
  client/SDL/common/man/sdl-freerdp-config.1.in
  client/SDL/common/man/sdl-freerdp-examples.1.in
  client/SDL/common/res/resource.cpp.in
  client/SDL/common/res/resource.hpp.in
  client/SDL/common/test/CMakeLists.txt
  client/SDL/common/test/TestSDLPrefs.cpp
+ client/SDL/common/test/TestSDLWebview.cpp
  client/SDL/common/test/sdl-freerdp.json
  client/Sample/ModuleOptions.cmake
  client/Wayland/wlfreerdp.1.in
@@ -128,7 +130,6 @@ Files: .clang-tidy
  cmake/FindFAAD2.cmake
  cmake/FindFeature.cmake
  cmake/FindGSM.cmake
- cmake/FindJSONC.cmake
  cmake/FindKRB5.cmake
  cmake/FindLAME.cmake
  cmake/FindMbedTLS.cmake
@@ -160,42 +161,6 @@ Files: .clang-tidy
  cmake/oss-includes.h.in
  cmake/pkg-config-install-prefix.cmake
  cmake/today.cmake
- debian/.gitignore
- debian/changelog
- debian/freerdp3-dev.install
- debian/freerdp3-proxy-modules.install
- debian/freerdp3-proxy.install
- debian/freerdp3-sdl.install
- debian/freerdp3-shadow-x11.install
- debian/freerdp3-wayland.install
- debian/freerdp3-x11.install
- debian/gbp.conf
- debian/libfreerdp-client3-3.install
- debian/libfreerdp-client3-3.symbols
- debian/libfreerdp-server-proxy3-3.install
- debian/libfreerdp-server-proxy3-3.symbols
- debian/libfreerdp-server3-3.install
- debian/libfreerdp-server3-3.symbols
- debian/libfreerdp-shadow-subsystem3-3.install
- debian/libfreerdp-shadow-subsystem3-3.symbols
- debian/libfreerdp-shadow3-3.install
- debian/libfreerdp-shadow3-3.symbols
- debian/libfreerdp3-3.install
- debian/libfreerdp3-3.symbols
- debian/libwinpr-tools3-3.install
- debian/libwinpr-tools3-3.symbols
- debian/libwinpr3-3.docs
- debian/libwinpr3-3.install
- debian/libwinpr3-3.symbols
- debian/libwinpr3-dev.install
- debian/patches/README
- debian/rules
- debian/source/format
- debian/tests/connect
- debian/tests/control
- debian/upstream/metadata
- debian/watch
- debian/winpr3-utils.install
  docs/Doxyfile
  docs/PrintFormatSpecifiers.md
  docs/README.building
@@ -367,7 +332,6 @@ Files: .clang-tidy
  server/FreeRDP-ServerConfig.cmake.in
  server/Sample/ModuleOptions.cmake
  server/Sample/test_icon.bmp
- server/Sample/test_icon.jpg
  server/Sample/test_icon.png
  server/Sample/test_icon.ppm
  server/Sample/test_icon.webp
@@ -724,8 +688,6 @@ Files: channels/CMakeLists.txt
  client/X11/xf_window.h
  client/X11/xkb_layout_ids.c
  client/X11/xkb_layout_ids.h
- client/common/CMakeLists.txt
- client/common/client.c
  client/common/file.c
  cmake/FindPixman.cmake
  include/freerdp/addin.h
@@ -737,7 +699,6 @@ Files: channels/CMakeLists.txt
  include/freerdp/channels/rail.h
  include/freerdp/channels/rdpgfx.h
  include/freerdp/channels/remdesk.h
- include/freerdp/client.h
  include/freerdp/client/channels.h
  include/freerdp/client/cmdline.h
  include/freerdp/client/file.h
@@ -1169,9 +1130,16 @@ Files: channels/audin/client/ios/CMakeLists.txt
  client/SDL/SDL2/dialogs/sdl_button.cpp
  client/SDL/SDL2/sdl_window.cpp
  client/SDL/SDL2/sdl_window.hpp
+ client/SDL/SDL3/dialogs/sdl_blend_mode_guard.hpp
  client/SDL/SDL3/dialogs/sdl_button.cpp
  client/SDL/SDL3/dialogs/sdl_connection_dialog_wrapper.cpp
  client/SDL/SDL3/dialogs/sdl_connection_dialog_wrapper.hpp
+ client/SDL/SDL3/dialogs/sdl_input_widget.cpp
+ client/SDL/SDL3/dialogs/sdl_input_widget.hpp
+ client/SDL/SDL3/dialogs/sdl_input_widget_pair_list.cpp
+ client/SDL/SDL3/dialogs/sdl_input_widget_pair_list.hpp
+ client/SDL/SDL3/dialogs/sdl_selectable_widget.cpp
+ client/SDL/SDL3/dialogs/sdl_selectable_widget.hpp
  client/SDL/SDL3/sdl_clip.cpp
  client/SDL/SDL3/sdl_clip.hpp
  client/SDL/SDL3/sdl_window.cpp
@@ -1225,6 +1193,7 @@ Files: channels/audin/client/ios/CMakeLists.txt
  libfreerdp/utils/drdynvc.c
  libfreerdp/utils/gfx.c
  libfreerdp/utils/rdpdr_utils.c
+ libfreerdp/utils/smartcard_pack.h
  libfreerdp/utils/string.c
  rdtk/templates/version.h.in
  scripts/test-scard.cpp
@@ -1309,10 +1278,12 @@ Files: channels/ainput/CMakeLists.txt
  include/freerdp/channels/rdpewa.h
  include/freerdp/channels/scard.h
  include/freerdp/client/location.h
+ include/freerdp/client/rdpdr.h
  include/freerdp/crypto/certificate.h
  include/freerdp/crypto/privatekey.h
  include/freerdp/redirection.h
  include/freerdp/server/ainput.h
+ include/freerdp/timer.h
  include/freerdp/utils/aad.h
  include/freerdp/utils/helpers.h
  libfreerdp/codec/color.h
@@ -1326,6 +1297,8 @@ Files: channels/ainput/CMakeLists.txt
  libfreerdp/core/simd.h
  libfreerdp/core/state.c
  libfreerdp/core/state.h
+ libfreerdp/core/timer.c
+ libfreerdp/core/timer.h
  libfreerdp/crypto/cert_common.h
  libfreerdp/crypto/privatekey.h
  libfreerdp/primitives/benchmark/CMakeLists.txt
@@ -1413,10 +1386,11 @@ Files: client/SDL/SDL2/dialogs/res/sdl2_resource_manager.cpp
  client/SDL/SDL3/dialogs/res/sdl3_resource_manager.hpp
  client/SDL/SDL3/dialogs/sdl_connection_dialog.cpp
  client/SDL/SDL3/dialogs/sdl_connection_dialog.hpp
+ client/SDL/SDL3/dialogs/sdl_connection_dialog_hider.hpp
  client/SDL/SDL3/dialogs/sdl_dialogs.cpp
  client/SDL/SDL3/dialogs/sdl_dialogs.hpp
- client/SDL/SDL3/dialogs/sdl_input.cpp
- client/SDL/SDL3/dialogs/sdl_input.hpp
+ client/SDL/SDL3/dialogs/sdl_input_widget_pair.cpp
+ client/SDL/SDL3/dialogs/sdl_input_widget_pair.hpp
  client/SDL/SDL3/dialogs/sdl_select.cpp
  client/SDL/SDL3/dialogs/sdl_select.hpp
  client/SDL/SDL3/dialogs/sdl_widget.cpp
@@ -1835,24 +1809,6 @@ Copyright: 2011, Marc-Andre Moreau <marcandre.moreau@gmail.com>
 License: Apache-2.0
  FIXME
 
-Files: client/SDL/common/aad/qt/webview_impl.cpp
- client/SDL/common/aad/sdl_webview.cpp
- client/SDL/common/aad/sdl_webview.hpp
- client/SDL/common/aad/webview_impl.hpp
- client/SDL/common/aad/wrapper/webview_impl.cpp
- include/freerdp/utils/http.h
- libfreerdp/core/aad.c
- libfreerdp/core/aad.h
- libfreerdp/core/credssp_auth.h
- libfreerdp/utils/http.c
- winpr/libwinpr/sspi/Kerberos/krb5glue.h
- winpr/libwinpr/sspi/Kerberos/krb5glue_heimdal.c
- winpr/libwinpr/sspi/Kerberos/krb5glue_mit.c
-Copyright: 2022, Isaac Klein <fifthdegree@protonmail.com>
-  2023, Isaac Klein <fifthdegree@protonmail.com>
-License: Apache-2.0
- FIXME
-
 Files: channels/urbdrc/client/CMakeLists.txt
  channels/urbdrc/client/data_transfer.c
  channels/urbdrc/client/data_transfer.h
@@ -1867,6 +1823,23 @@ Files: channels/urbdrc/client/CMakeLists.txt
  channels/urbdrc/common/urbdrc_types.h
 Copyright: 2012, Alfred Liu <alfred.liu@atruscorp.com>
   2012, Atrust corp.
+License: Apache-2.0
+ FIXME
+
+Files: client/SDL/common/aad/sdl_webview.cpp
+ client/SDL/common/aad/sdl_webview.hpp
+ client/SDL/common/aad/webview_impl.cpp
+ client/SDL/common/aad/webview_impl.hpp
+ include/freerdp/utils/http.h
+ libfreerdp/core/aad.c
+ libfreerdp/core/aad.h
+ libfreerdp/core/credssp_auth.h
+ libfreerdp/utils/http.c
+ winpr/libwinpr/sspi/Kerberos/krb5glue.h
+ winpr/libwinpr/sspi/Kerberos/krb5glue_heimdal.c
+ winpr/libwinpr/sspi/Kerberos/krb5glue_mit.c
+Copyright: 2022, Isaac Klein <fifthdegree@protonmail.com>
+  2023, Isaac Klein <fifthdegree@protonmail.com>
 License: Apache-2.0
  FIXME
 
@@ -2292,6 +2265,16 @@ Copyright: 2019, Kobi Mizrachi <kmizrachi18@gmail.com>
 License: Apache-2.0
  FIXME
 
+Files: client/SDL/SDL3/sdl_config.hpp.in
+ debian/patches/client-sdl2-fix-build-with-webview.patch
+ libfreerdp/core/graphics.h
+Copyright: 2016, Armin Novak <armin.novak@thincast.com>
+  2016, Thinast Technologies GmbH
+  2025, Armin Novak <armin.novak@thincast.com>
+  2025, Thinast Technologies GmbH
+License: Apache-2.0
+ FIXME
+
 Files: include/freerdp/codec/rfx.h
  libfreerdp/codec/nsc_encode.c
  libfreerdp/codec/nsc_encode.h
@@ -2309,6 +2292,13 @@ Copyright: 2009-2012, Marc-Andre Moreau <marcandre.moreau@gmail.com>
   2012, Marc-Andre Moreau <marcandre.moreau@gmail.com>
   2013, Bernhard Miklautz <bernhard.miklautz@thincast.com>
   2023, Bernhard Miklautz <bernhard.miklautz@thincast.com>
+License: Apache-2.0
+ FIXME
+
+Files: client/common/sso_mib_tokens.c
+ client/common/sso_mib_tokens.h
+ cmake/FindSSO_MIB.cmake
+Copyright: Copyright 2025 Siemens
 License: Apache-2.0
  FIXME
 
@@ -2438,6 +2428,15 @@ Files: include/freerdp/rail.h
  libfreerdp/core/window.h
 Copyright: 2011, Marc-Andre Moreau <marcandre.moreau@gmail.com>
   2011, Roman Barabanov <romanbarabanov@gmail.com>
+License: Apache-2.0
+ FIXME
+
+Files: client/common/CMakeLists.txt
+ client/common/client.c
+ include/freerdp/client.h
+Copyright: 2012, Marc-Andre Moreau <marcandre.moreau@gmail.com>
+  2013, Marc-Andre Moreau <marcandre.moreau@gmail.com>
+  2025, Siemens
 License: Apache-2.0
  FIXME
 
@@ -3088,12 +3087,6 @@ Copyright: 2011, Vic Lee
 License: Apache-2.0
  FIXME
 
-Files: libfreerdp/core/graphics.h
-Copyright: 2016, Armin Novak <armin.novak@thincast.com>
-  2016, Thinast Technologies GmbH
-License: Apache-2.0
- FIXME
-
 Files: winpr/libwinpr/path/shell_ios.m
 Copyright: 2016, Armin Novak <armin.novak@thincast.om>
   2016, Thincast Technologies GmbH
@@ -3517,298 +3510,6 @@ Copyright: 2011, Samsung, Author Jiten Pathy
 License: Apache-2.0
  FIXME
 
-Files: debian/copyright.in
-Copyright: *No Copyright
-  2001, Alexander Peslyak and it is hereby released to the
-  2004-2012, Jay Sorg <jay.sorg@gmail.com>
-  2006, Andreas Schneider <mail@cynapses.org>
-  2006, Matthias Kretz <kretz@kde.org>
-  2008, Kristian HÃ¸gsberg
-  2008-2013, Kristian HÃ¸gsberg
-  2009, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2009-2011, Jay Sorg
-  2009-2012, Jay Sorg
-  2009-2012, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2010, Eduardo Fiss Beloni <beloni@ossystems.com.br>
-  2010, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2010, The Android Open Source Project
-  2010-2011, Vic Lee
-  2010-2012, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2011, Anthony Tong <atong@trustedcs.com>
-  2011, Eduardo Fiss Beloni <beloni@ossystems.com.br>
-  2011, Jay Sorg <jay.sorg@gmail.com>
-  2011, Jiten Pathy
-  2011, License: UNKNOWN
-  2011, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2011, Martin Fleisz <martin.fleisz@thincast.com>
-  2011, Norbert Federa <norbert.federa@thincast.com>
-  2011, Samsung, Author Jiten Pathy
-  2011, Shea Levy <shea@shealevy.com>
-  2011, Stephen Erisman
-  2011, The Android Open Source Project
-  2011, Vic Lee
-  2011-2012, Jiten Pathy
-  2011-2013, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2011-2014, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2012, Alfred Liu <alfred.liu@atruscorp.com>
-  2012, Bernhard Miklautz <bernhard.miklautz@thincast.com>
-  2012, Collabora, Ltd.
-  2012, Dmitrij Jasnov <dmitrij.jasnov@ts.fujitsu.com>
-  2012, Dmitry Baryshnikov <polimax at mail dot ru>
-  2012, Gerald Richter
-  2012, HP Development Company, LLC
-  2012, Hewlett-Packard Development Company, L.P.
-  2012, Laxmikant Rashinkar <LK.Rashinkar@gmail.com>
-  2012, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2012, Modelon AB
-  2012, Vic Lee
-  2012, Victor Lazzarini
-  2012-2013, A Tasty Pixel
-  2013, Armin Novak <armin.novak@gmail.com>
-  2013, BMW Car IT GmbH
-  2013, Bernhard Miklautz <bernhard.miklautz@thincast.com>
-  2013, Christian Hofstaedtler
-  2013, Corey Clayton <can.of.tuna@gmail.com>
-  2013, Dell Software <Mike.McDonald@software.dell.com>
-  2013, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2013, Martin Fleisz <martin.fleisz@thincast.com>
-  2013, Zhang Zhaolong <zhangzl2013@126.com>
-  2013-2016, Collabora, Ltd.
-  2014, Armin Novak <armin.novak@gmail.com>
-  2014, Armin Novak <armin.novak@thincast.com>
-  2014, Christian Plattner <ccpp@gmx.at>
-  2014, DI (FH) Martin Haimberger <martin.haimberger@thincast.com>
-  2014, David FORT <contact@hardening-consulting.com>
-  2014, David Fort <contact@hardening-consulting.com>
-  2014, Dell Software <Mike.McDonald@software.dell.com>
-  2014, Hardening <contact@hardening-consulting.com>
-  2014, Manuel Bachmann <tarnyko@tarnyko.net>
-  2014, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2014, Mike McDonald <Mike.McDonald@software.dell.com>
-  2014, Norbert Federa <norbert.federa@thincast.com>
-  2014, Thomas Erbesdobler
-  2014-2023, Belledonne Communications, Grenoble France
-  2015, ANSSI, Author Thomas Calderon
-  2015, Armin Novak <armin.novak@thincast.com>
-  2015, Bernhard Miklautz <bernhard.miklautz@thincast.com>
-  2015, DI (FH) Martin Haimberger <martin.haimberger@thincast.com>
-  2015, David FORT <contact@hardening-consulting.com>
-  2015, David Fort <contact@hardening-consulting.com>
-  2015, Dell Software <Mike.McDonald@software.dell.com>
-  2015, Denis Vincent <dvincent@devolutions.net>
-  2015, Hewlett-Packard Development Company, L.P.
-  2015, Jiang Zihao <zihao.jiang@yahoo.com>
-  2015, Martin Gräßlin
-  2015, Rozhuk Ivan <rozhuk.im@gmail.com>
-  2015, Thincast Technologies GmbH
-  2016, Armin Novak <armin.novak@gmail.com>
-  2016, Armin Novak <armin.novak@thincast.com>
-  2016, Armin Novak <armin.novak@thincast.om>
-  2016, Norbert Federa <norbert.federa@thincast.com>
-  2017, Alexei Lozovsky <a.lozovsky@gmail.com>
-  2017, Armin Novak <anovak@thincast.com>
-  2017, Artur Zaprzala
-  2017, Ben Cohen
-  2017, Red Hat Inc.
-  2017, Serge Zaitsev
-  2018, Armin Novak <armin.novak@thincast.com>
-  2018, David Fort <contact@hardening-consulting.com>
-  2018, Pascal Bourguignon <pjb@informatimago.com>
-  2018, Simon Ser
-  2019, Armin Novak <armin.novak@thincast.com>
-  2019, David Fort <contact@hardening-consulting.com>
-  2019, Idan Freiberg <speidy@gmail.com>
-  2019, Kobi Mizrachi <kmizrachi18@gmail.com>
-  2019, Mati Shabtay <matishabtay@gmail.com>
-  2020, Hideyuki Nagase <hideyukn@microsoft.com>
-  2020, Microsoft
-  2020, The Open Sans Project Authors (https://github.com/googlefonts/opensans)
-  2021, 2023, Thincast Technologies GmbH
-  2021, Armin Novak
-  2022, Armin Novak <anovak@thincast.com>
-  2022, David Fort <contact@hardening-consulting.com>
-  2022, Ely Ronnen <elyronnen@gmail.com>
-  2022, Isaac Klein <fifthdegree@protonmail.com>
-  2022, Pascal Nowack <Pascal.Nowack@gmx.de>
-  2023, David Fort <contact@hardening-consulting.com>
-  2023, Joan Torres <joan.torres@suse.com>
-  2023, Michael Saxl <mike@mwsys.mine.bz>
-  2024, Oleg Turovski <oleg2104@hotmail.com>
-  2024, ergnoorr
-  2025, Armin Novak <anoavk@thincast.com>
-  Copyright: *No copyright
-  Iowa State University 2009-2010.
-  License: OFL-1.1
-  NONE
-License: Apache-2.0 and/or BSD-2-clause and/or BSD-3-clause and/or BSL-1.0 and/or Expat and/or GPL-2 and/or HPND-sell-variant and/or LGPL-2.1 and/or OFL-1.1-RFN and/or Zlib and/or public-domain
- FIXME
-
-Files: debian/copyright
-Copyright: *No copyright
-  2001, Alexander Peslyak and it is hereby released to the
-  2004-2012, Jay Sorg <jay.sorg@gmail.com>
-  2006, Andreas Schneider <mail@cynapses.org>
-  2006, Matthias Kretz <kretz@kde.org>
-  2008, Kristian HÃ¸gsberg
-  2008-2013, Kristian HÃ¸gsberg
-  2009, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2009-2011, Jay Sorg
-  2009-2012, Jay Sorg
-  2009-2012, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2010, Eduardo Fiss Beloni <beloni@ossystems.com.br>
-  2010, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2010, The Android Open Source Project
-  2010-2011, Vic Lee
-  2010-2012, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2011, Anthony Tong <atong@trustedcs.com>
-  2011, Eduardo Fiss Beloni <beloni@ossystems.com.br>
-  2011, Jay Sorg <jay.sorg@gmail.com>
-  2011, Jiten Pathy
-  2011, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2011, Martin Fleisz <martin.fleisz@thincast.com>
-  2011, Norbert Federa <norbert.federa@thincast.com>
-  2011, Samsung, Author Jiten Pathy
-  2011, Shea Levy <shea@shealevy.com>
-  2011, Stephen Erisman
-  2011, The Android Open Source Project
-  2011, Vic Lee
-  2011-2012, Jiten Pathy
-  2011-2013, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2011-2014, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2012, Alfred Liu <alfred.liu@atruscorp.com>
-  2012, Bernhard Miklautz <bernhard.miklautz@thincast.com>
-  2012, Collabora, Ltd.
-  2012, Dmitrij Jasnov <dmitrij.jasnov@ts.fujitsu.com>
-  2012, Dmitry Baryshnikov <polimax at mail dot ru>
-  2012, Gerald Richter
-  2012, HP Development Company, LLC
-  2012, Hewlett-Packard Development Company, L.P.
-  2012, Laxmikant Rashinkar <LK.Rashinkar@gmail.com>
-  2012, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2012, Modelon AB
-  2012, Vic Lee
-  2012, Victor Lazzarini
-  2012-2013, A Tasty Pixel
-  2013, Armin Novak <armin.novak@gmail.com>
-  2013, BMW Car IT GmbH
-  2013, Bernhard Miklautz <bernhard.miklautz@thincast.com>
-  2013, Christian Hofstaedtler
-  2013, Corey Clayton <can.of.tuna@gmail.com>
-  2013, Dell Software <Mike.McDonald@software.dell.com>
-  2013, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2013, Martin Fleisz <martin.fleisz@thincast.com>
-  2013, Zhang Zhaolong <zhangzl2013@126.com>
-  2013-2016, Collabora, Ltd.
-  2014, Armin Novak <armin.novak@gmail.com>
-  2014, Armin Novak <armin.novak@thincast.com>
-  2014, Christian Plattner <ccpp@gmx.at>
-  2014, DI (FH) Martin Haimberger <martin.haimberger@thincast.com>
-  2014, David FORT <contact@hardening-consulting.com>
-  2014, David Fort <contact@hardening-consulting.com>
-  2014, Dell Software <Mike.McDonald@software.dell.com>
-  2014, Hardening <contact@hardening-consulting.com>
-  2014, Manuel Bachmann <tarnyko@tarnyko.net>
-  2014, Marc-Andre Moreau <marcandre.moreau@gmail.com>
-  2014, Mike McDonald <Mike.McDonald@software.dell.com>
-  2014, Norbert Federa <norbert.federa@thincast.com>
-  2014, Thomas Erbesdobler
-  2014-2023, Belledonne Communications, Grenoble France
-  2015, ANSSI, Author Thomas Calderon
-  2015, Armin Novak <armin.novak@thincast.com>
-  2015, Bernhard Miklautz <bernhard.miklautz@thincast.com>
-  2015, DI (FH) Martin Haimberger <martin.haimberger@thincast.com>
-  2015, David FORT <contact@hardening-consulting.com>
-  2015, David Fort <contact@hardening-consulting.com>
-  2015, Dell Software <Mike.McDonald@software.dell.com>
-  2015, Denis Vincent <dvincent@devolutions.net>
-  2015, Hewlett-Packard Development Company, L.P.
-  2015, Jiang Zihao <zihao.jiang@yahoo.com>
-  2015, Martin Gräßlin
-  2015, Rozhuk Ivan <rozhuk.im@gmail.com>
-  2015, Thincast Technologies GmbH
-  2015-2024, Bernhard Miklautz <bernhard.miklautz@thincast.com>
-  2016, Armin Novak <armin.novak@gmail.com>
-  2016, Armin Novak <armin.novak@thincast.com>
-  2016, Armin Novak <armin.novak@thincast.om>
-  2016, Norbert Federa <norbert.federa@thincast.com>
-  2017, Alexei Lozovsky <a.lozovsky@gmail.com>
-  2017, Armin Novak <anovak@thincast.com>
-  2017, Artur Zaprzala
-  2017, Ben Cohen
-  2017, Red Hat Inc.
-  2017, Serge Zaitsev
-  2018, Armin Novak <armin.novak@thincast.com>
-  2018, David Fort <contact@hardening-consulting.com>
-  2018, Pascal Bourguignon <pjb@informatimago.com>
-  2018, Simon Ser
-  2019, Armin Novak <armin.novak@thincast.com>
-  2019, David Fort <contact@hardening-consulting.com>
-  2019, Idan Freiberg <speidy@gmail.com>
-  2019, Kobi Mizrachi <kmizrachi18@gmail.com>
-  2019, Mati Shabtay <matishabtay@gmail.com>
-  2020, Hideyuki Nagase <hideyukn@microsoft.com>
-  2020, Microsoft
-  2020, The Open Sans Project Authors (https://github.com/googlefonts/opensans)
-  2021, 2023, Thincast Technologies GmbH
-  2021, Armin Novak
-  2022, Armin Novak <anovak@thincast.com>
-  2022, David Fort <contact@hardening-consulting.com>
-  2022, Ely Ronnen <elyronnen@gmail.com>
-  2022, Isaac Klein <fifthdegree@protonmail.com>
-  2022, Pascal Nowack <Pascal.Nowack@gmx.de>
-  2023, David Fort <contact@hardening-consulting.com>
-  2023, Joan Torres <joan.torres@suse.com>
-  2023, Michael Saxl <mike@mwsys.mine.bz>
-  2024, Oleg Turovski <oleg2104@hotmail.com>
-  2024, ergnoorr
-  2025, Armin Novak <anoavk@thincast.com>
-  Iowa State University 2009-2010.
-  NONE
-License: Apache-2.0 or bsd_-2-clause_clause and/or BSD-2-clause and/or BSD-3-clause and/or BSL-1.0 and/or Expat and/or GPL-2+ and/or HPND and/or HPND-sell-variant and/or LGPL-2.1+ and/or NTP~disclaimer and/or OFL-1.1-RFN and/or Zlib and/or public-domain
- FIXME
-
-Files: cmake/FindFFmpeg.cmake
-Copyright: 2006, Matthias Kretz <kretz@kde.org>
-  2008, Alexander Neundorf <neundorf@kde.org>
-  2011, Michael Jansen <kde@michael-jansen.biz>
-  2021, Stefan Brüns <stefan.bruens@rwth-aachen.de>
-  2024, Armin Novak <anovak@thincast.com>
-License: BSD-3-clause
- FIXME
-
-Files: cmake/Findlibusb-1.0.cmake
-Copyright: 2006, Andreas Schneider <mail@cynapses.org>
-  2008, Kyle Machulis <kyle@nonpolynomial.com>
-License: BSD-3-clause
- FIXME
-
-Files: client/SDL/common/aad/wrapper/webview.h
-Copyright: 2017, Serge Zaitsev
-  2022, Steffen André Langnes
-License: Expat
- FIXME
-
-Files: libfreerdp/codec/test/TestFuzzCodecs.c
-Copyright: 2024, ergnoorr
-License: Expat
- FIXME
-
-Files: uwac/libuwac/uwac-clipboard.c
-Copyright: 2018, Armin Novak <armin.novak@thincast.com>
-  2018, Thincast Technologies GmbH
-License: HPND-sell-variant and/or NTP~disclaimer
- FIXME
-
-Files: uwac/libuwac/uwac-os.c
-Copyright: 2012, Collabora, Ltd.
-License: HPND-sell-variant and/or NTP~disclaimer
- FIXME
-
-Files: uwac/libuwac/uwac-os.h
-Copyright: 2012, Collabora, Ltd.
-  2014, David FORT <contact@hardening-consulting.com>
-License: HPND-sell-variant and/or NTP~disclaimer
- FIXME
 
 Files: uwac/libuwac/uwac-utils.c
 Copyright: 2008, Kristian HÃ¸gsberg

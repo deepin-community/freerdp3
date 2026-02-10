@@ -1037,7 +1037,7 @@ void license_generate_randoms(rdpLicense* license)
 #ifdef LICENSE_NULL_CLIENT_RANDOM
 	ZeroMemory(license->ClientRandom, sizeof(license->ClientRandom)); /* ClientRandom */
 #else
-	winpr_RAND(license->ClientRandom, sizeof(license->ClientRandom));       /* ClientRandom */
+	winpr_RAND(license->ClientRandom, sizeof(license->ClientRandom)); /* ClientRandom */
 #endif
 
 	winpr_RAND(license->ServerRandom, sizeof(license->ServerRandom)); /* ServerRandom */
@@ -1185,8 +1185,8 @@ BOOL license_encrypt_premaster_secret(rdpLicense* license)
 	const rdpCertInfo* info = freerdp_certificate_get_info(license->certificate);
 	if (!info)
 	{
-		WLog_Print(license->log, WLOG_ERROR, "info=%p, license->certificate=%p", info,
-		           license->certificate);
+		WLog_Print(license->log, WLOG_ERROR, "info=%p, license->certificate=%p", (const void*)info,
+		           (void*)license->certificate);
 		return FALSE;
 	}
 
@@ -1202,7 +1202,7 @@ BOOL license_encrypt_premaster_secret(rdpLicense* license)
 	{
 		WLog_Print(license->log, WLOG_ERROR,
 		           "EncryptedPremasterSecret=%p, info->ModulusLength=%" PRIu32,
-		           EncryptedPremasterSecret, info->ModulusLength);
+		           (const void*)EncryptedPremasterSecret, info->ModulusLength);
 		return FALSE;
 	}
 
@@ -1215,9 +1215,8 @@ BOOL license_encrypt_premaster_secret(rdpLicense* license)
 		                              info, EncryptedPremasterSecret, info->ModulusLength);
 		if ((length < 0) || (length > UINT16_MAX))
 		{
-			WLog_Print(license->log, WLOG_ERROR,
-			           "RSA public encrypt length=%" PRIdz " < 0 || > %" PRIu16, length,
-			           UINT16_MAX);
+			WLog_Print(license->log, WLOG_ERROR, "RSA public encrypt length=%" PRIdz " < 0 || > %d",
+			           length, UINT16_MAX);
 			return FALSE;
 		}
 		license->EncryptedPremasterSecret->length = (UINT16)length;
@@ -1260,7 +1259,7 @@ static BOOL license_rc4_with_licenseKey(const rdpLicense* license, const BYTE* i
 
 error_buffer:
 	WLog_Print(license->log, WLOG_ERROR, "Failed to create/update RC4: len=%" PRIuz ", buffer=%p",
-	           len, buffer);
+	           len, (const void*)buffer);
 	winpr_RC4_Free(rc4);
 	return FALSE;
 }
@@ -1490,7 +1489,7 @@ BOOL license_read_binary_blob_data(wLog* log, LICENSE_BLOB* blob, UINT16 wBlobTy
 	 */
 	if ((blob->type != BB_ANY_BLOB) && (blob->length == 0))
 	{
-		WLog_Print(log, WLOG_WARN, "license binary blob::type %s, length=0, skipping.",
+		WLog_Print(log, WLOG_DEBUG, "license binary blob::type %s, length=0, skipping.",
 		           licencse_blob_type_string(blob->type));
 		return TRUE;
 	}
@@ -1502,7 +1501,7 @@ BOOL license_read_binary_blob_data(wLog* log, LICENSE_BLOB* blob, UINT16 wBlobTy
 	if (!blob->data)
 	{
 		WLog_Print(log, WLOG_ERROR, "license binary blob::length=%" PRIu16 ", blob::data=%p",
-		           blob->length, blob->data);
+		           blob->length, (const void*)blob->data);
 		return FALSE;
 	}
 	memcpy(blob->data, data, blob->length); /* blobData */
@@ -1577,7 +1576,7 @@ static BOOL license_write_encrypted_premaster_secret_blob(wLog* log, wStream* s,
 
 	if (!Stream_EnsureRemainingCapacity(s, length + 4))
 		return FALSE;
-	Stream_Write_UINT16(s, blob->type); /* wBlobType (2 bytes) */
+	Stream_Write_UINT16(s, blob->type);     /* wBlobType (2 bytes) */
 	Stream_Write_UINT16(s, (UINT16)length); /* wBlobLen (2 bytes) */
 
 	if (blob->length > 0)
@@ -1851,19 +1850,22 @@ BOOL license_read_license_info(rdpLicense* license, wStream* s)
 	Stream_Read(s, license->ClientRandom, sizeof(license->ClientRandom));
 
 	/* Licensing Binary Blob with EncryptedPreMasterSecret: */
-	UINT32 ModulusLength = 0;
-	if (!license_read_encrypted_premaster_secret_blob(
-	        license->log, s, license->EncryptedPremasterSecret, &ModulusLength))
-		goto error;
-
-	if (ModulusLength != info->ModulusLength)
 	{
-		WLog_Print(license->log, WLOG_WARN,
-		           "EncryptedPremasterSecret,::ModulusLength[%" PRIu32
-		           "] != rdpCertInfo::ModulusLength[%" PRIu32 "]",
-		           ModulusLength, info->ModulusLength);
-		goto error;
+		UINT32 ModulusLength = 0;
+		if (!license_read_encrypted_premaster_secret_blob(
+		        license->log, s, license->EncryptedPremasterSecret, &ModulusLength))
+			goto error;
+
+		if (ModulusLength != info->ModulusLength)
+		{
+			WLog_Print(license->log, WLOG_WARN,
+			           "EncryptedPremasterSecret,::ModulusLength[%" PRIu32
+			           "] != rdpCertInfo::ModulusLength[%" PRIu32 "]",
+			           ModulusLength, info->ModulusLength);
+			goto error;
+		}
 	}
+
 	/* Licensing Binary Blob with LicenseInfo: */
 	if (!license_read_binary_blob(license->log, s, license->LicenseInfo))
 		goto error;
@@ -2184,8 +2186,8 @@ BOOL license_read_new_or_upgrade_license_packet(rdpLicense* license, wStream* s)
 	if (!licenseStream)
 	{
 		WLog_Print(license->log, WLOG_ERROR,
-		           "license::blob::data=%p, license::blob::length=%" PRIu16, calBlob->data,
-		           calBlob->length);
+		           "license::blob::data=%p, license::blob::length=%" PRIu16,
+		           (const void*)calBlob->data, calBlob->length);
 		goto fail;
 	}
 
@@ -2387,7 +2389,7 @@ BOOL license_read_new_license_request_packet(rdpLicense* license, wStream* s)
 	if (!license_check_preferred_alg(license, PreferredKeyExchangeAlg, "new license request"))
 		return FALSE;
 
-	Stream_Read_UINT32(s, license->PlatformId);                  /* PlatformId (4 bytes) */
+	Stream_Read_UINT32(s, license->PlatformId); /* PlatformId (4 bytes) */
 	Stream_Read(s, license->ClientRandom,
 	            sizeof(license->ClientRandom)); /* ClientRandom (32 bytes) */
 
@@ -2906,8 +2908,8 @@ static BOOL license_set_string(wLog* log, const char* what, const char* value, B
 	*cnv.w = ConvertUtf8ToWCharAlloc(value, &len);
 	if (!*cnv.w || (len > UINT32_MAX / sizeof(WCHAR)))
 	{
-		WLog_Print(log, WLOG_ERROR, "license->ProductInfo: %s == %p || %" PRIu32 " > UINT32_MAX",
-		           what, *cnv.w, len);
+		WLog_Print(log, WLOG_ERROR, "license->ProductInfo: %s == %p || %" PRIuz " > UINT32_MAX",
+		           what, (void*)(*cnv.w), len);
 		return FALSE;
 	}
 	*dstLen = (UINT32)(len * sizeof(WCHAR));
@@ -2991,8 +2993,8 @@ BOOL license_server_configure(rdpLicense* license)
 		if ((length == 0) || (length > UINT16_MAX))
 		{
 			WLog_Print(license->log, WLOG_WARN,
-			           "%s: Invalid issuer at position %" PRIuz ": length 0 < %" PRIuz
-			           " <= %" PRIu16 " ['%s']",
+			           "Invalid issuer at position %" PRIuz ": length 0 < %" PRIuz " <= %d"
+			           " ['%s']",
 			           x, length, UINT16_MAX, name);
 			return FALSE;
 		}

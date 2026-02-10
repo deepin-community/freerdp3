@@ -65,9 +65,25 @@ typedef struct
 	BYTE val4;
 } FOUR_BYTE_FLOAT;
 
+static inline FOUR_BYTE_SIGNED_INTEGER FOUR_BYTE_SIGNED_INTEGER_init(void)
+{
+	const FOUR_BYTE_SIGNED_INTEGER empty = {
+		.c = ONE_BYTE_VAL, .s = POSITIVE_VAL, .val1 = 0, .val2 = 0, .val3 = 0, .val4 = 0
+	};
+	return empty;
+}
+
+static inline FOUR_BYTE_FLOAT FOUR_BYTE_FLOAT_init(void)
+{
+	const FOUR_BYTE_FLOAT empty = {
+		.c = ONE_BYTE_VAL, .s = POSITIVE_VAL, .e = 0, .val1 = 0, .val2 = 0, .val3 = 0, .val4 = 0
+	};
+	return empty;
+}
+
 BOOL freerdp_read_four_byte_signed_integer(wStream* s, INT32* value)
 {
-	FOUR_BYTE_SIGNED_INTEGER si = { 0 };
+	FOUR_BYTE_SIGNED_INTEGER si = FOUR_BYTE_SIGNED_INTEGER_init();
 	BYTE byte = 0;
 
 	WINPR_ASSERT(s);
@@ -80,8 +96,8 @@ BOOL freerdp_read_four_byte_signed_integer(wStream* s, INT32* value)
 
 	Stream_Read_UINT8(s, byte);
 
-	si.c = (byte & 0xC0) >> 6;
-	si.s = (byte & 0x20) >> 5;
+	si.c = (EncodedTypeByteCount)((byte & 0xC0) >> 6);
+	si.s = (EncodedTypeSign)((byte & 0x20) >> 5);
 	si.val1 = (byte & 0x1F);
 
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, si.c))
@@ -125,7 +141,7 @@ BOOL freerdp_read_four_byte_signed_integer(wStream* s, INT32* value)
 
 BOOL freerdp_write_four_byte_signed_integer(wStream* s, INT32 value)
 {
-	FOUR_BYTE_SIGNED_INTEGER si = { 0 };
+	FOUR_BYTE_SIGNED_INTEGER si = FOUR_BYTE_SIGNED_INTEGER_init();
 
 	WINPR_ASSERT(s);
 	if (value > FREERDP_FOUR_BYTE_SIGNED_INT_MAX)
@@ -212,7 +228,7 @@ BOOL freerdp_read_four_byte_float(wStream* s, double* value)
 
 BOOL freerdp_read_four_byte_float_exp(wStream* s, double* value, BYTE* exp)
 {
-	FOUR_BYTE_FLOAT f = { 0 };
+	FOUR_BYTE_FLOAT f = FOUR_BYTE_FLOAT_init();
 	UINT32 base = 0;
 	BYTE byte = 0;
 
@@ -226,8 +242,8 @@ BOOL freerdp_read_four_byte_float_exp(wStream* s, double* value, BYTE* exp)
 
 	Stream_Read_UINT8(s, byte);
 
-	f.c = (byte & 0xC0) >> 6;
-	f.s = (byte & 0x20) >> 5;
+	f.c = (EncodedTypeByteCount)((byte & 0xC0) >> 6);
+	f.s = (EncodedTypeSign)((byte & 0x20) >> 5);
 	f.e = (byte & 0x1C) >> 2;
 	f.val1 = (byte & 0x03);
 
@@ -278,7 +294,7 @@ BOOL freerdp_read_four_byte_float_exp(wStream* s, double* value, BYTE* exp)
 
 BOOL freerdp_write_four_byte_float(wStream* s, double value)
 {
-	FOUR_BYTE_FLOAT si = { 0 };
+	FOUR_BYTE_FLOAT si = FOUR_BYTE_FLOAT_init();
 
 	WINPR_ASSERT(s);
 
@@ -361,7 +377,7 @@ BOOL freerdp_write_four_byte_float(wStream* s, double value)
 	}
 	else
 	{
-		WLog_ERR(TAG, "Invalid byte count for value %ld", value);
+		WLog_ERR(TAG, "Invalid byte count for value %lf", value);
 		return FALSE;
 	}
 

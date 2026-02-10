@@ -81,7 +81,25 @@ static UINT audin_server_recv_version(audin_server_context* context, wStream* s,
 	if (!Stream_CheckAndLogRequiredLengthWLog(audin->log, s, 4))
 		return ERROR_NO_DATA;
 
-	Stream_Read_UINT32(s, pdu.Version);
+	{
+		const UINT32 version = Stream_Get_UINT32(s);
+		switch (version)
+		{
+			case SNDIN_VERSION_Version_1:
+				pdu.Version = SNDIN_VERSION_Version_1;
+				break;
+			case SNDIN_VERSION_Version_2:
+				pdu.Version = SNDIN_VERSION_Version_2;
+				break;
+			default:
+				pdu.Version = SNDIN_VERSION_Version_2;
+				WLog_Print(audin->log, WLOG_WARN,
+				           "Received unsupported channel version %" PRIu32
+				           ", using highest supported version %u",
+				           version, pdu.Version);
+				break;
+		}
+	}
 
 	IFCALLRET(context->ReceiveVersion, error, context, &pdu);
 	if (error)
@@ -128,11 +146,7 @@ static UINT audin_server_recv_formats(audin_server_context* context, wStream* s,
 		AUDIO_FORMAT* format = &pdu.SoundFormats[i];
 
 		if (!audio_format_read(s, format))
-		{
-			WLog_Print(audin->log, WLOG_ERROR, "Failed to read audio format");
-			audio_formats_free(pdu.SoundFormats, i + i);
-			return ERROR_INVALID_DATA;
-		}
+			goto fail;
 
 		audio_format_print(audin->log, WLOG_DEBUG, format);
 	}
@@ -814,7 +828,7 @@ static UINT audin_server_open_reply_default(audin_server_context* context,
 	WINPR_ASSERT(open_reply);
 
 	/* TODO: Implement failure handling */
-	WLog_Print(audin->log, WLOG_DEBUG, "Open Reply PDU: Result: %i", open_reply->Result);
+	WLog_Print(audin->log, WLOG_DEBUG, "Open Reply PDU: Result: %" PRIu32, open_reply->Result);
 	return CHANNEL_RC_OK;
 }
 

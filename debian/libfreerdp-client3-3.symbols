@@ -61,6 +61,7 @@ libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
  freerdp_client_pen_cancel_all@Base 3.0.0
  freerdp_client_populate_rdp_file_from_settings@Base 3.0.0
  freerdp_client_populate_settings_from_rdp_file@Base 3.0.0
+ freerdp_client_populate_settings_from_rdp_file_unchecked@Base 3.17.0
  freerdp_client_print_buildconfig@Base 3.0.0
  freerdp_client_print_buildconfig_ex@Base 3.10.2
  freerdp_client_print_command_line_help@Base 3.0.0

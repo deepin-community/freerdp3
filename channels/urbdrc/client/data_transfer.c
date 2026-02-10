@@ -393,7 +393,7 @@ static UINT urbdrc_process_internal_io_control(IUDEVICE* pdev, GENERIC_CHANNEL_C
 
 	if (4 > OutputBufferSize)
 	{
-		WLog_Print(urbdrc->log, WLOG_DEBUG, "out_size %" PRIu32 " > OutputBufferSize %" PRIu32, 4,
+		WLog_Print(urbdrc->log, WLOG_DEBUG, "out_size %" PRIu32 " > OutputBufferSize %" PRIu32, 4u,
 		           OutputBufferSize);
 		return ERROR_BAD_CONFIGURATION;
 	}
@@ -454,14 +454,12 @@ static void func_select_all_interface_for_msconfig(IUDEVICE* pdev,
                                                    MSUSB_CONFIG_DESCRIPTOR* MsConfig)
 {
 	MSUSB_INTERFACE_DESCRIPTOR** MsInterfaces = MsConfig->MsInterfaces;
-	BYTE InterfaceNumber = 0;
-	BYTE AlternateSetting = 0;
 	UINT32 NumInterfaces = MsConfig->NumInterfaces;
 
 	for (UINT32 inum = 0; inum < NumInterfaces; inum++)
 	{
-		InterfaceNumber = MsInterfaces[inum]->InterfaceNumber;
-		AlternateSetting = MsInterfaces[inum]->AlternateSetting;
+		const BYTE InterfaceNumber = MsInterfaces[inum]->InterfaceNumber;
+		const BYTE AlternateSetting = MsInterfaces[inum]->AlternateSetting;
 		pdev->select_interface(pdev, InterfaceNumber, AlternateSetting);
 	}
 }
@@ -664,10 +662,8 @@ static UINT urb_select_interface(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callb
 	MSUSB_CONFIG_DESCRIPTOR* MsConfig = pdev->get_MsConfig(pdev);
 	const uint8_t InterfaceNumber = MsInterface->InterfaceNumber;
 	if (!msusb_msinterface_replace(MsConfig, InterfaceNumber, MsInterface))
-	{
-		msusb_msconfig_free(MsConfig);
 		return ERROR_BAD_CONFIGURATION;
-	}
+
 	/* complete configuration setup */
 	if (!pdev->complete_msconfig_setup(pdev, MsConfig))
 		return ERROR_BAD_CONFIGURATION;
@@ -1314,7 +1310,7 @@ static UINT urb_pipe_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback,
 			                                PIPE_CANCEL);
 
 			if (rc < 0)
-				WLog_Print(urbdrc->log, WLOG_DEBUG, "PIPE SET HALT: error %d", ret);
+				WLog_Print(urbdrc->log, WLOG_DEBUG, "PIPE SET HALT: error %u", ret);
 			else
 				ret = USBD_STATUS_SUCCESS;
 
@@ -1327,7 +1323,7 @@ static UINT urb_pipe_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback,
 			                                PIPE_RESET);
 
 			if (rc < 0)
-				WLog_Print(urbdrc->log, WLOG_DEBUG, "PIPE RESET: error %d", ret);
+				WLog_Print(urbdrc->log, WLOG_DEBUG, "PIPE RESET: error %u", ret);
 			else
 				ret = USBD_STATUS_SUCCESS;
 
@@ -1409,7 +1405,8 @@ static UINT urb_get_current_frame_number(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBAC
 	const UINT32 OutputBufferSize = Stream_Get_UINT32(s);
 	if (OutputBufferSize != 0)
 	{
-		WLog_Print(urbdrc->log, WLOG_WARN, "OutputBufferSize=%" PRIu32 ", expected 0");
+		WLog_Print(urbdrc->log, WLOG_WARN, "OutputBufferSize=%" PRIu32 ", expected 0",
+		           OutputBufferSize);
 	}
 	/** Fixme: Need to fill actual frame number!!*/
 	const UINT32 dummy_frames = GetTickCount();
@@ -1673,7 +1670,7 @@ static UINT urbdrc_process_transfer_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALL
 		                          ? "2.2.6.7 Transfer In Request (TRANSFER_IN_REQUEST)"
 		                          : "2.2.6.8 Transfer Out Request (TRANSFER_OUT_REQUEST)";
 		WLog_ERR(TAG,
-		         "[MS-RDPEUSB] 2.2.9.1.1 TS_URB_HEADER::Size 0x04" PRIx16
+		         "[MS-RDPEUSB] 2.2.9.1.1 TS_URB_HEADER::Size 0x%04" PRIx16
 		         " != %s::CbTsUrb 0x%08" PRIx32,
 		         Size, section, CbTsUrb);
 		return ERROR_INVALID_DATA;

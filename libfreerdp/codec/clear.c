@@ -58,7 +58,7 @@ struct S_CLEAR_CONTEXT
 	NSC_CONTEXT* nsc;
 	UINT32 seqNumber;
 	BYTE* TempBuffer;
-	UINT32 TempSize;
+	size_t TempSize;
 	UINT32 nTempStep;
 	UINT32 TempFormat;
 	UINT32 format;
@@ -259,8 +259,7 @@ static BOOL clear_decompress_subcode_rlex(wStream* WINPR_RESTRICT s, UINT32 bitm
 		if ((pixelIndex + runLengthFactor) > pixelCount)
 		{
 			WLog_ERR(TAG,
-			         "pixelIndex %" PRIu32 " + runLengthFactor %" PRIu32 " > pixelCount %" PRIu32
-			         "",
+			         "pixelIndex %" PRIuz " + runLengthFactor %" PRIu32 " > pixelCount %" PRIu32 "",
 			         pixelIndex, runLengthFactor, pixelCount);
 			return FALSE;
 		}
@@ -285,7 +284,7 @@ static BOOL clear_decompress_subcode_rlex(wStream* WINPR_RESTRICT s, UINT32 bitm
 		if ((pixelIndex + (suiteDepth + 1)) > pixelCount)
 		{
 			WLog_ERR(TAG,
-			         "pixelIndex %" PRIu32 " + suiteDepth %" PRIu8 " + 1 > pixelCount %" PRIu32 "",
+			         "pixelIndex %" PRIuz " + suiteDepth %" PRIu8 " + 1 > pixelCount %" PRIu32 "",
 			         pixelIndex, suiteDepth, pixelCount);
 			return FALSE;
 		}
@@ -319,7 +318,7 @@ static BOOL clear_decompress_subcode_rlex(wStream* WINPR_RESTRICT s, UINT32 bitm
 
 	if (pixelIndex != pixelCount)
 	{
-		WLog_ERR(TAG, "pixelIndex %" PRIdz " != pixelCount %" PRIu32 "", pixelIndex, pixelCount);
+		WLog_ERR(TAG, "pixelIndex %" PRIuz " != pixelCount %" PRIu32 "", pixelIndex, pixelCount);
 		return FALSE;
 	}
 
@@ -328,25 +327,27 @@ static BOOL clear_decompress_subcode_rlex(wStream* WINPR_RESTRICT s, UINT32 bitm
 
 static BOOL clear_resize_buffer(CLEAR_CONTEXT* WINPR_RESTRICT clear, UINT32 width, UINT32 height)
 {
-	UINT32 size = 0;
-
 	if (!clear)
 		return FALSE;
 
-	size = ((width + 16) * (height + 16) * FreeRDPGetBytesPerPixel(clear->format));
+	const UINT64 size = 1ull * (width + 16ull) * (height + 16ull);
+	const size_t bpp = FreeRDPGetBytesPerPixel(clear->format);
+	if (size > UINT32_MAX / bpp)
+		return FALSE;
 
-	if (size > clear->TempSize)
+	if (size > clear->TempSize / bpp)
 	{
-		BYTE* tmp = (BYTE*)winpr_aligned_recalloc(clear->TempBuffer, size, sizeof(BYTE), 32);
+		BYTE* tmp = (BYTE*)winpr_aligned_recalloc(clear->TempBuffer,
+		                                          WINPR_ASSERTING_INT_CAST(size_t, size), bpp, 32);
 
 		if (!tmp)
 		{
-			WLog_ERR(TAG, "clear->TempBuffer winpr_aligned_recalloc failed for %" PRIu32 " bytes",
+			WLog_ERR(TAG, "clear->TempBuffer winpr_aligned_recalloc failed for %" PRIu64 " bytes",
 			         size);
 			return FALSE;
 		}
 
-		clear->TempSize = size;
+		clear->TempSize = WINPR_ASSERTING_INT_CAST(size_t, size* bpp);
 		clear->TempBuffer = tmp;
 	}
 
@@ -710,7 +711,7 @@ static BOOL clear_decompress_bands_data(CLEAR_CONTEXT* WINPR_RESTRICT clear,
 				{
 					WLog_ERR(TAG,
 					         "clear->ShortVBarStorageCursor %" PRIu32
-					         " >= CLEARCODEC_VBAR_SHORT_SIZE (%" PRIu32 ")",
+					         " >= CLEARCODEC_VBAR_SHORT_SIZE (%" PRId32 ")",
 					         clear->ShortVBarStorageCursor, CLEARCODEC_VBAR_SHORT_SIZE);
 					return FALSE;
 				}
@@ -772,7 +773,7 @@ static BOOL clear_decompress_bands_data(CLEAR_CONTEXT* WINPR_RESTRICT clear,
 				if (clear->VBarStorageCursor >= CLEARCODEC_VBAR_SIZE)
 				{
 					WLog_ERR(TAG,
-					         "clear->VBarStorageCursor %" PRIu32 " >= CLEARCODEC_VBAR_SIZE %" PRIu32
+					         "clear->VBarStorageCursor %" PRIu32 " >= CLEARCODEC_VBAR_SIZE %" PRId32
 					         "",
 					         clear->VBarStorageCursor, CLEARCODEC_VBAR_SIZE);
 					return FALSE;
@@ -875,12 +876,12 @@ static BOOL clear_decompress_bands_data(CLEAR_CONTEXT* WINPR_RESTRICT clear,
 				if (count > nHeight)
 					count = nHeight;
 
-				if (nXDstRel + i > nDstWidth)
+				if (nXDstRel + i >= nDstWidth)
 					return FALSE;
 
 				for (UINT32 y = 0; y < count; y++)
 				{
-					if (nYDstRel + y > nDstHeight)
+					if (nYDstRel + y >= nDstHeight)
 						return FALSE;
 
 					BYTE* pDstPixel8 =
@@ -1010,7 +1011,7 @@ static BOOL clear_decompress_glyph_data(CLEAR_CONTEXT* WINPR_RESTRICT clear,
 	return TRUE;
 }
 
-static INLINE BOOL updateContextFormat(CLEAR_CONTEXT* WINPR_RESTRICT clear, UINT32 DstFormat)
+static inline BOOL updateContextFormat(CLEAR_CONTEXT* WINPR_RESTRICT clear, UINT32 DstFormat)
 {
 	if (!clear || !clear->nsc)
 		return FALSE;
@@ -1138,8 +1139,56 @@ INT32 clear_decompress(CLEAR_CONTEXT* WINPR_RESTRICT clear, const BYTE* WINPR_RE
 
 	if (glyphData)
 	{
-		if (!freerdp_image_copy_no_overlap(glyphData, clear->format, 0, 0, 0, nWidth, nHeight,
-		                                   pDstData, DstFormat, nDstStep, nXDst, nYDst, palette,
+		uint32_t w = MIN(nWidth, nDstWidth);
+		if (nXDst > nDstWidth)
+		{
+			WLog_WARN(TAG, "glyphData copy area x exceeds destination: x=%" PRIu32 " > %" PRIu32,
+			          nXDst, nDstWidth);
+			w = 0;
+		}
+		else if (nXDst + w > nDstWidth)
+		{
+			WLog_WARN(TAG,
+			          "glyphData copy area x + width exceeds destination: x=%" PRIu32 " + %" PRIu32
+			          " > %" PRIu32,
+			          nXDst, w, nDstWidth);
+			w = nDstWidth - nXDst;
+		}
+
+		if (w != nWidth)
+		{
+			WLog_WARN(TAG,
+			          "glyphData copy area width truncated: requested=%" PRIu32
+			          ", truncated to %" PRIu32,
+			          nWidth, w);
+		}
+
+		uint32_t h = MIN(nHeight, nDstHeight);
+		if (nYDst > nDstHeight)
+		{
+			WLog_WARN(TAG, "glyphData copy area y exceeds destination: y=%" PRIu32 " > %" PRIu32,
+			          nYDst, nDstHeight);
+			h = 0;
+		}
+		else if (nYDst + h > nDstHeight)
+		{
+			WLog_WARN(TAG,
+			          "glyphData copy area y + height exceeds destination: x=%" PRIu32 " + %" PRIu32
+			          " > %" PRIu32,
+			          nYDst, h, nDstHeight);
+			h = nDstHeight - nYDst;
+		}
+
+		if (h != nHeight)
+		{
+			WLog_WARN(TAG,
+			          "glyphData copy area height truncated: requested=%" PRIu32
+			          ", truncated to %" PRIu32,
+			          nHeight, h);
+		}
+
+		if (!freerdp_image_copy_no_overlap(glyphData, clear->format, 0, 0, 0, w, h, pDstData,
+		                                   DstFormat, nDstStep, nXDst, nYDst, palette,
 		                                   FREERDP_KEEP_DST_ALPHA))
 			goto fail;
 	}

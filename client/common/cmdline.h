@@ -66,8 +66,11 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "Audio output mode" },
 	{ "auth-only", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueFalse, NULL, -1, NULL,
 	  "Authenticate only" },
-	{ "auth-pkg-list", COMMAND_LINE_VALUE_REQUIRED, "<!ntlm,kerberos>", NULL, NULL, -1, NULL,
-	  "Authentication package filter (comma-separated list, use '!' to exclude)" },
+	{ "auth-pkg-list", COMMAND_LINE_VALUE_REQUIRED, "[[none],]<!ntlm,kerberos,!u2u>", NULL, NULL,
+	  -1, NULL,
+	  "Authentication package filter (comma-separated list, use '!' to disable). By default "
+	  "all methods are enabled. Use explicit 'none' as first argument to disable all methods, "
+	  "selectively enabling only the ones following." },
 	{ "authentication", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueTrue, NULL, -1, NULL,
 	  "Authentication (experimental)" },
 	{ "auto-reconnect", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueFalse, NULL, -1, NULL,
@@ -401,8 +404,10 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "connecting to a buggy server" },
 	{ "restricted-admin", COMMAND_LINE_VALUE_FLAG, NULL, NULL, NULL, -1, "restrictedAdmin",
 	  "Restricted admin mode" },
+#ifdef CHANNEL_RDPEAR_CLIENT
 	{ "remoteGuard", COMMAND_LINE_VALUE_FLAG, NULL, NULL, NULL, -1, "remoteGuard",
 	  "Remote guard credentials" },
+#endif
 	{ "rfx", COMMAND_LINE_VALUE_FLAG, NULL, NULL, NULL, -1, NULL, "RemoteFX" },
 	{ "rfx-mode", COMMAND_LINE_VALUE_REQUIRED, "[image|video]", NULL, NULL, -1, NULL,
 	  "RemoteFX mode" },
@@ -413,8 +418,8 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	{ "scale-device", COMMAND_LINE_VALUE_REQUIRED, "100|140|180", "100", NULL, -1, NULL,
 	  "Scaling factor for app store applications" },
 	{ "sec", COMMAND_LINE_VALUE_REQUIRED,
-	  "[rdp[:[on|off]]|tls[:[on|off]]|nla[:[on|off]]|ext[:[on|off]]|aad[:[on|off]]]", NULL, NULL,
-	  -1, NULL,
+	  "rdp[:[on|off]]|tls[:[on|off]]|nla[:[on|off]]|ext[:[on|off]]|aad[:[on|off]]", NULL, NULL, -1,
+	  NULL,
 	  "Force specific protocol security. e.g. /sec:nla enables NLA and disables all others, while "
 	  "/sec:nla:[on|off] just toggles NLA" },
 #if defined(WITH_FREERDP_DEPRECATED_COMMANDLINE)
@@ -512,7 +517,8 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "Redirect USB device" },
 #endif
 	{ "v", COMMAND_LINE_VALUE_REQUIRED, "<server>[:port]", NULL, NULL, -1, NULL,
-	  "Server hostname|URL|IPv4|IPv6 or /some/path/to/pipe or |:1234 to pass a TCP socket to use" },
+	  "Server hostname|URL|IPv4|IPv6 or vsock://<number> or /some/path/to/pipe or |:1234 to pass a "
+	  "TCP socket to use" },
 	{ "vc", COMMAND_LINE_VALUE_REQUIRED, "<channel>[,<options>]", NULL, NULL, -1, NULL,
 	  "Static virtual channel" },
 	{ "version", COMMAND_LINE_VALUE_FLAG | COMMAND_LINE_PRINT_VERSION, NULL, NULL, NULL, -1, NULL,

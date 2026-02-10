@@ -171,7 +171,7 @@ static BOOL allocate_h264_metablock(UINT32 QP, RECTANGLE_16* rectangles,
 	return TRUE;
 }
 
-static INLINE BOOL diff_tile(const RECTANGLE_16* regionRect, BYTE* pYUVData[3],
+static inline BOOL diff_tile(const RECTANGLE_16* regionRect, BYTE* pYUVData[3],
                              BYTE* pOldYUVData[3], UINT32 const iStride[3])
 {
 	size_t size = 0;
@@ -800,8 +800,23 @@ BOOL h264_context_set_option(H264_CONTEXT* h264, H264_CONTEXT_OPTION option, UIN
 			h264->FrameRate = value;
 			return TRUE;
 		case H264_CONTEXT_OPTION_RATECONTROL:
-			h264->RateControlMode = value;
+		{
+			switch (value)
+			{
+				case H264_RATECONTROL_VBR:
+					h264->RateControlMode = H264_RATECONTROL_VBR;
+					return TRUE;
+				case H264_RATECONTROL_CQP:
+					h264->RateControlMode = H264_RATECONTROL_CQP;
+					return TRUE;
+				default:
+					WLog_Print(h264->log, WLOG_WARN,
+					           "Unknown H264_CONTEXT_OPTION_RATECONTROL value [0x%08" PRIx32 "]",
+					           value);
+					return FALSE;
+			}
 			return TRUE;
+		}
 		case H264_CONTEXT_OPTION_QP:
 			h264->QP = value;
 			return TRUE;

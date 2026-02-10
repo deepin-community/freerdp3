@@ -205,6 +205,8 @@ static BOOL tsmf_ffmpeg_init_stream(ITSMFDecoder* decoder, const TS_AM_MEDIA_TYP
 		/* Add a padding to avoid invalid memory read in some codec */
 		mdecoder->codec_context->extradata_size =
 		    WINPR_ASSERTING_INT_CAST(int, media_type->ExtraDataSize + 8);
+		if (mdecoder->codec_context->extradata_size == 0)
+			return FALSE;
 		mdecoder->codec_context->extradata = calloc(1, mdecoder->codec_context->extradata_size);
 
 		if (!mdecoder->codec_context->extradata)
@@ -635,7 +637,7 @@ static UINT32 tsmf_ffmpeg_get_decoded_format(ITSMFDecoder* decoder)
 			return RDP_PIXFMT_I420;
 
 		default:
-			WLog_ERR(TAG, "unsupported pixel format %u", mdecoder->codec_context->pix_fmt);
+			WLog_ERR(TAG, "unsupported pixel format %d", mdecoder->codec_context->pix_fmt);
 			return (UINT32)-1;
 	}
 }

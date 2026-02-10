@@ -296,7 +296,7 @@ RdpeiServerContext* rdpei_server_context_new(HANDLE vcm)
 		goto fail;
 
 	ret->priv->outputStream = Stream_New(NULL, 200);
-	if (!ret->priv->inputStream)
+	if (!ret->priv->outputStream)
 		goto fail;
 
 	ret->vcm = vcm;
@@ -350,16 +350,15 @@ void rdpei_server_context_reset(RdpeiServerContext* context)
 
 void rdpei_server_context_free(RdpeiServerContext* context)
 {
-	RdpeiServerPrivate* priv = NULL;
-
 	if (!context)
 		return;
-	priv = context->priv;
+	RdpeiServerPrivate* priv = context->priv;
 	if (priv)
 	{
 		if (priv->channelHandle && priv->channelHandle != INVALID_HANDLE_VALUE)
 			(void)WTSVirtualChannelClose(priv->channelHandle);
 		Stream_Free(priv->inputStream, TRUE);
+		Stream_Free(priv->outputStream, TRUE);
 	}
 	free(priv);
 	free(context);
@@ -745,7 +744,7 @@ UINT rdpei_server_handle_messages(RdpeiServerContext* context)
 		case EVENTID_CS_READY:
 			if (priv->automataState != STATE_WAITING_CLIENT_READY)
 			{
-				WLog_ERR(TAG, "not expecting a CS_READY packet in this state(%d)",
+				WLog_ERR(TAG, "not expecting a CS_READY packet in this state(%u)",
 				         priv->automataState);
 				return ERROR_INVALID_STATE;
 			}
@@ -801,7 +800,7 @@ UINT rdpei_server_send_sc_ready(RdpeiServerContext* context, UINT32 version, UIN
 
 	if (priv->automataState != STATE_INITIAL)
 	{
-		WLog_ERR(TAG, "called from unexpected state %d", priv->automataState);
+		WLog_ERR(TAG, "called from unexpected state %u", priv->automataState);
 		return ERROR_INVALID_STATE;
 	}
 
@@ -854,7 +853,7 @@ UINT rdpei_server_suspend(RdpeiServerContext* context)
 		case STATE_WAITING_FRAME:
 			break;
 		default:
-			WLog_ERR(TAG, "called from unexpected state %d", priv->automataState);
+			WLog_ERR(TAG, "called from unexpected state %u", priv->automataState);
 			return ERROR_INVALID_STATE;
 	}
 
@@ -900,7 +899,7 @@ UINT rdpei_server_resume(RdpeiServerContext* context)
 		case STATE_SUSPENDED:
 			break;
 		default:
-			WLog_ERR(TAG, "called from unexpected state %d", priv->automataState);
+			WLog_ERR(TAG, "called from unexpected state %u", priv->automataState);
 			return ERROR_INVALID_STATE;
 	}
 

@@ -20,17 +20,27 @@
 
 #include <sstream>
 
+#include <freerdp/freerdp.h>
+#include <freerdp/settings.h>
+#include <freerdp/log.h>
+
 #include "../sdl_utils.hpp"
 #include "sdl_connection_dialog.hpp"
 #include "sdl_connection_dialog_wrapper.hpp"
 
-SdlConnectionDialogWrapper::SdlConnectionDialogWrapper() = default;
+SdlConnectionDialogWrapper::SdlConnectionDialogWrapper(wLog* log) : _log(log)
+{
+}
 
 SdlConnectionDialogWrapper::~SdlConnectionDialogWrapper() = default;
 
 void SdlConnectionDialogWrapper::create(rdpContext* context)
 {
-	_connection_dialog = std::make_unique<SDLConnectionDialog>(context);
+	const auto enabled =
+	    freerdp_settings_get_bool(context->settings, FreeRDP_UseCommonStdioCallbacks);
+	_connection_dialog.reset();
+	if (!enabled)
+		_connection_dialog = std::make_unique<SDLConnectionDialog>(context);
 }
 
 void SdlConnectionDialogWrapper::destroy()
@@ -78,7 +88,7 @@ static std::string format(WINPR_FORMAT_ARG const char* fmt, va_list ap)
 
 	va_list ap2;
 	va_copy(ap2, ap);
-	(void)vsnprintf(msg.data(), msg.size(), fmt, ap2);
+	std::ignore = vsnprintf(msg.data(), msg.size(), fmt, ap2);
 	va_end(ap2);
 	return msg;
 }
@@ -154,12 +164,9 @@ void SdlConnectionDialogWrapper::handleShow()
 		auto arg = _queue.front();
 		_queue.pop();
 
-		if (!_connection_dialog)
-			continue;
-
-		if (arg.hasTitle())
+		if (arg.hasTitle() && _connection_dialog)
 		{
-			_connection_dialog->setTitle(arg.title().c_str());
+			std::ignore = _connection_dialog->setTitle(arg.title().c_str());
 		}
 
 		if (arg.hasType() && arg.hasMessage())
@@ -167,25 +174,34 @@ void SdlConnectionDialogWrapper::handleShow()
 			switch (arg.type())
 			{
 				case SdlConnectionDialogWrapper::MSG_INFO:
-					_connection_dialog->showInfo(arg.message().c_str());
+					if (_connection_dialog)
+						std::ignore = _connection_dialog->showInfo(arg.message().c_str());
+					else
+						WLog_Print(_log, WLOG_INFO, "%s", arg.message().c_str());
 					break;
 				case SdlConnectionDialogWrapper::MSG_WARN:
-					_connection_dialog->showWarn(arg.message().c_str());
+					if (_connection_dialog)
+						std::ignore = _connection_dialog->showWarn(arg.message().c_str());
+					else
+						WLog_Print(_log, WLOG_WARN, "%s", arg.message().c_str());
 					break;
 				case SdlConnectionDialogWrapper::MSG_ERROR:
-					_connection_dialog->showError(arg.message().c_str());
+					if (_connection_dialog)
+						std::ignore = _connection_dialog->showError(arg.message().c_str());
+					else
+						WLog_Print(_log, WLOG_ERROR, "%s", arg.message().c_str());
 					break;
 				default:
 					break;
 			}
 		}
 
-		if (arg.hasVisibility())
+		if (arg.hasVisibility() && _connection_dialog)
 		{
 			if (arg.visible())
-				_connection_dialog->show();
+				std::ignore = _connection_dialog->show();
 			else
-				_connection_dialog->hide();
+				std::ignore = _connection_dialog->hide();
 		}
 	}
 }

@@ -144,7 +144,8 @@ extern "C"
 		ALIGN64 FreeRDP_PenDevice pens[FREERDP_MAX_PEN_DEVICES];           /**< (offset 9) */
 
 		ALIGN64 MIBClientWrapper* mibClientWrapper; /**< (offset 10) @since version 3.16.0 */
-		UINT64 reserved[129 - 11];                  /**< (offset 11) */
+		ALIGN64 BOOL pressed_buttons[5];            /**< (offset 11) @since version 3.17.0 */
+		UINT64 reserved[129 - 16];                  /**< (offset 16) */
 	};
 
 	/* Common client functions */
@@ -152,6 +153,7 @@ extern "C"
 	FREERDP_API void freerdp_client_context_free(rdpContext* context);
 
 	WINPR_ATTR_MALLOC(freerdp_client_context_free, 1)
+	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpContext* freerdp_client_context_new(const RDP_CLIENT_ENTRY_POINTS* pEntryPoints);
 
 	FREERDP_API int freerdp_client_start(rdpContext* context);
@@ -263,6 +265,7 @@ extern "C"
 		FREERDP_TOUCH_DOWN = 0x01,
 		FREERDP_TOUCH_UP = 0x02,
 		FREERDP_TOUCH_MOTION = 0x04,
+		FREERDP_TOUCH_CANCEL = 0x08, /** @since version 3.22.0 */
 		FREERDP_TOUCH_HAS_PRESSURE = 0x100
 	} FreeRDPTouchEventType;
 
@@ -291,9 +294,6 @@ extern "C"
 	FREERDP_API BOOL freerdp_client_pen_cancel_all(rdpClientContext* cctx);
 
 	FREERDP_API BOOL freerdp_client_send_wheel_event(rdpClientContext* cctx, UINT16 mflags);
-
-	FREERDP_API BOOL freerdp_client_send_mouse_event(rdpClientContext* cctx, UINT64 mflags, INT32 x,
-	                                                 INT32 y);
 
 	/** @brief this function checks if relative mouse events are supported and enabled for this
 	 * session.
@@ -339,6 +339,7 @@ extern "C"
 	 *  @since version 3.16.0
 	 */
 	WINPR_ATTR_MALLOC(free, 1)
+	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_client_get_aad_url(rdpClientContext* cctx,
 	                                             freerdp_client_aad_type type, ...);
 

@@ -33,6 +33,8 @@
 #include <freerdp/crypto/certificate_data.h>
 
 #include "certificate.h"
+#include <freerdp/log.h>
+#define TAG FREERDP_TAG("crypto.certificate_data")
 
 struct rdp_certificate_data
 {
@@ -58,11 +60,34 @@ static char* ensure_lowercase(char* str, size_t length)
 		str[x] = (char)tolower(str[x]);
 	return str;
 }
+
+static char* ensure_valid_charset(char* str, size_t length)
+{
+	const size_t len = strnlen(str, length);
+	for (size_t x = 0; x < len; x++)
+	{
+		char cur = str[x];
+		switch (cur)
+		{
+			case ':':
+				str[x] = '.';
+				break;
+			case '/':
+			case '\\':
+				str[x] = '_';
+				break;
+			default:
+				break;
+		}
+	}
+	return str;
+}
+
 static const char* freerdp_certificate_data_hash_(const char* hostname, UINT16 port, char* name,
                                                   size_t length)
 {
 	(void)_snprintf(name, length, "%s_%" PRIu16 ".pem", hostname, port);
-	return ensure_lowercase(name, length);
+	return ensure_lowercase(ensure_valid_charset(name, length), length);
 }
 
 static BOOL freerdp_certificate_data_load_cache(rdpCertificateData* data)
@@ -72,23 +97,28 @@ static BOOL freerdp_certificate_data_load_cache(rdpCertificateData* data)
 	WINPR_ASSERT(data);
 
 	freerdp_certificate_data_hash_(data->hostname, data->port, data->cached_hash,
-	                               sizeof(data->cached_hash));
-	if (strnlen(data->cached_hash, sizeof(data->cached_hash)) == 0)
+	                               sizeof(data->cached_hash) - 1);
+	const size_t len = strnlen(data->cached_hash, sizeof(data->cached_hash));
+	if ((len == 0) || (len >= sizeof(data->cached_hash)))
 		goto fail;
 
 	data->cached_subject = freerdp_certificate_get_subject(data->cert);
 	if (!data->cached_subject)
 		data->cached_subject = calloc(1, 1);
 
-	size_t pemlen = 0;
-	data->cached_pem = freerdp_certificate_get_pem_ex(data->cert, &pemlen, FALSE);
+	{
+		size_t pemlen = 0;
+		data->cached_pem = freerdp_certificate_get_pem_ex(data->cert, &pemlen, FALSE);
+	}
 	if (!data->cached_pem)
 		goto fail;
 
-	size_t pemchainlen = 0;
-	data->cached_pem_chain = freerdp_certificate_get_pem_ex(data->cert, &pemchainlen, TRUE);
-	if (!data->cached_pem_chain)
-		goto fail;
+	{
+		size_t pemchainlen = 0;
+		data->cached_pem_chain = freerdp_certificate_get_pem_ex(data->cert, &pemchainlen, TRUE);
+		if (!data->cached_pem_chain)
+			goto fail;
+	}
 
 	data->cached_fingerprint = freerdp_certificate_get_fingerprint(data->cert);
 	if (!data->cached_fingerprint)
@@ -110,6 +140,11 @@ static rdpCertificateData* freerdp_certificate_data_new_nocopy(const char* hostn
 
 	if (!hostname || !xcert)
 		goto fail;
+	if (strnlen(hostname, MAX_PATH) >= MAX_PATH)
+	{
+		WLog_ERR(TAG, "hostname exceeds length limits");
+		goto fail;
+	}
 
 	certdata = (rdpCertificateData*)calloc(1, sizeof(rdpCertificateData));
 
@@ -272,5 +307,5 @@ char* freerdp_certificate_data_hash(const char* hostname, UINT16 port)
 {
 	char name[MAX_PATH + 10] = { 0 };
 	freerdp_certificate_data_hash_(hostname, port, name, sizeof(name));
-	return _strdup(name);
+	return strndup(name, sizeof(name));
 }

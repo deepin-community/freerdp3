@@ -59,6 +59,8 @@ if(WITH_FUSE)
   find_package(PkgConfig REQUIRED)
 
   pkg_check_modules(FUSE3 REQUIRED fuse3)
+  freerdp_client_pc_add_requires_private("fuse3")
+
   include_directories(SYSTEM ${FUSE3_INCLUDE_DIRS})
   add_compile_definitions(WITH_FUSE)
   list(APPEND LIBS ${FUSE3_LIBRARIES})
@@ -96,9 +98,22 @@ target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include>
 target_link_libraries(${MODULE_NAME} PRIVATE ${FREERDP_CHANNELS_CLIENT_LIBS})
 target_link_libraries(${MODULE_NAME} PUBLIC ${LIBS})
 
-install(TARGETS ${MODULE_NAME} COMPONENT libraries EXPORT FreeRDP-ClientTargets
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+installwithrpath(
+  TARGETS
+  ${MODULE_NAME}
+  COMPONENT
+  libraries
+  EXPORT
+  FreeRDP-ClientTargets
+  ARCHIVE
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY
+  DESTINATION
+  ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME
+  DESTINATION
+  ${CMAKE_INSTALL_BINDIR}
 )
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "Client/Common")

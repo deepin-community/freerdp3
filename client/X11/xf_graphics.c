@@ -130,7 +130,7 @@ static BOOL xf_Pointer_GetCursorForCurrentScale(rdpContext* context, rdpPointer*
 	const UINT32 xTargetSize = MAX(1, (UINT32)lround(1.0 * pointer->width * xscale));
 	const UINT32 yTargetSize = MAX(1, (UINT32)lround(1.0 * pointer->height * yscale));
 
-	WLog_DBG(TAG, "scaled: %" PRIu32 "x%" PRIu32 ", desktop: %" PRIu32 "x%" PRIu32,
+	WLog_DBG(TAG, "scaled: %" PRId32 "x%" PRId32 ", desktop: %" PRIu32 "x%" PRIu32,
 	         xfc->scaledWidth, xfc->scaledHeight,
 	         freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth),
 	         freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight));
@@ -289,7 +289,6 @@ static BOOL xf_Pointer_New(rdpContext* context, rdpPointer* pointer)
 
 #ifdef WITH_XCURSOR
 	UINT32 CursorFormat = 0;
-	size_t size = 0;
 	xfContext* xfc = (xfContext*)context;
 	xfPointer* xpointer = (xfPointer*)pointer;
 
@@ -304,32 +303,33 @@ static BOOL xf_Pointer_New(rdpContext* context, rdpPointer* pointer)
 	xpointer->nCursors = 0;
 	xpointer->mCursors = 0;
 
-	size = 1ull * pointer->height * pointer->width * FreeRDPGetBytesPerPixel(CursorFormat);
+	{
+		const size_t size =
+		    1ull * pointer->height * pointer->width * FreeRDPGetBytesPerPixel(CursorFormat);
 
-	if (!(xpointer->cursorPixels = (XcursorPixel*)winpr_aligned_malloc(size, 16)))
-		goto fail;
+		xpointer->cursorPixels = (XcursorPixel*)winpr_aligned_malloc(size, 16);
+		if (!xpointer->cursorPixels)
+			goto fail;
+	}
 
 	if (!freerdp_image_copy_from_pointer_data(
 	        (BYTE*)xpointer->cursorPixels, CursorFormat, 0, 0, 0, pointer->width, pointer->height,
 	        pointer->xorMaskData, pointer->lengthXorMask, pointer->andMaskData,
 	        pointer->lengthAndMask, pointer->xorBpp, &context->gdi->palette))
-	{
-		winpr_aligned_free(xpointer->cursorPixels);
 		goto fail;
-	}
 
 #endif
 
 	rc = TRUE;
 
 fail:
-	WLog_DBG(TAG, "%p", rc ? pointer : NULL);
+	WLog_DBG(TAG, "%p", WINPR_CXX_COMPAT_CAST(const void*, rc ? pointer : NULL));
 	return rc;
 }
 
 static void xf_Pointer_Free(rdpContext* context, rdpPointer* pointer)
 {
-	WLog_DBG(TAG, "%p", pointer);
+	WLog_DBG(TAG, "%p", WINPR_CXX_COMPAT_CAST(const void*, pointer));
 
 #ifdef WITH_XCURSOR
 	xfContext* xfc = (xfContext*)context;
@@ -356,7 +356,7 @@ static void xf_Pointer_Free(rdpContext* context, rdpPointer* pointer)
 
 static BOOL xf_Pointer_Set(rdpContext* context, rdpPointer* pointer)
 {
-	WLog_DBG(TAG, "%p", pointer);
+	WLog_DBG(TAG, "%p", WINPR_CXX_COMPAT_CAST(const void*, pointer));
 #ifdef WITH_XCURSOR
 	xfContext* xfc = (xfContext*)context;
 	Window handle = xf_Pointer_get_window(xfc);
@@ -378,7 +378,7 @@ static BOOL xf_Pointer_Set(rdpContext* context, rdpPointer* pointer)
 	}
 	else
 	{
-		WLog_WARN(TAG, "handle=%ld", handle);
+		WLog_WARN(TAG, "handle=%lu", handle);
 	}
 	xfc->isCursorHidden = false;
 #endif

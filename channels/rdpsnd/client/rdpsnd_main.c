@@ -117,6 +117,8 @@ struct rdpsnd_plugin
 	BOOL async;
 };
 
+static DWORD WINAPI play_thread(LPVOID arg);
+
 static const char* rdpsnd_is_dyn_str(BOOL dynamic)
 {
 	if (dynamic)
@@ -623,7 +625,7 @@ static UINT rdpsnd_treat_wave(rdpsndPlugin* rdpsnd, wStream* s, size_t size)
 	const BYTE* data = Stream_ConstPointer(s);
 	format = &rdpsnd->ClientFormats[rdpsnd->wCurrentFormatNo];
 	WLog_Print(rdpsnd->log, WLOG_DEBUG,
-	           "%s Wave: cBlockNo: %" PRIu8 " wTimeStamp: %" PRIu16 ", size: %" PRIdz,
+	           "%s Wave: cBlockNo: %" PRIu8 " wTimeStamp: %" PRIu16 ", size: %" PRIuz,
 	           rdpsnd_is_dyn_str(rdpsnd->dynamic), rdpsnd->cBlockNo, rdpsnd->wTimeStamp, size);
 
 	if (rdpsnd->device && rdpsnd->attached && !rdpsnd_detect_overrun(rdpsnd, format, size))
@@ -1278,6 +1280,23 @@ fail:
 	return CHANNEL_RC_NO_MEMORY;
 }
 
+static void rdpsnd_terminate_thread(rdpsndPlugin* rdpsnd)
+{
+	WINPR_ASSERT(rdpsnd);
+	if (rdpsnd->queue)
+		MessageQueue_PostQuit(rdpsnd->queue, 0);
+
+	if (rdpsnd->thread)
+	{
+		(void)WaitForSingleObject(rdpsnd->thread, INFINITE);
+		(void)CloseHandle(rdpsnd->thread);
+	}
+
+	MessageQueue_Free(rdpsnd->queue);
+	rdpsnd->thread = NULL;
+	rdpsnd->queue = NULL;
+}
+
 static void cleanup_internals(rdpsndPlugin* rdpsnd)
 {
 	if (!rdpsnd)
@@ -1358,6 +1377,7 @@ static void free_internals(rdpsndPlugin* rdpsnd)
 	if (rdpsnd->references > 0)
 		return;
 
+	rdpsnd_terminate_thread(rdpsnd);
 	freerdp_dsp_context_free(rdpsnd->dsp_context);
 	StreamPool_Free(rdpsnd->pool);
 	rdpsnd->pool = NULL;
@@ -1381,6 +1401,27 @@ static BOOL allocate_internals(rdpsndPlugin* rdpsnd)
 		if (!rdpsnd->dsp_context)
 			return FALSE;
 	}
+
+	if (rdpsnd->async)
+	{
+		if (!rdpsnd->queue)
+		{
+			wObject obj = { 0 };
+
+			obj.fnObjectFree = queue_free;
+			rdpsnd->queue = MessageQueue_New(&obj);
+			if (!rdpsnd->queue)
+				return CHANNEL_RC_NO_MEMORY;
+		}
+
+		if (!rdpsnd->thread)
+		{
+			rdpsnd->thread = CreateThread(NULL, 0, play_thread, rdpsnd, 0, NULL);
+			if (!rdpsnd->thread)
+				return CHANNEL_RC_INITIALIZATION_ERROR;
+		}
+	}
+
 	rdpsnd->references++;
 
 	return TRUE;
@@ -1436,20 +1477,6 @@ static UINT rdpsnd_virtual_channel_event_initialized(rdpsndPlugin* rdpsnd)
 	if (!rdpsnd)
 		return ERROR_INVALID_PARAMETER;
 
-	if (rdpsnd->async)
-	{
-		wObject obj = { 0 };
-
-		obj.fnObjectFree = queue_free;
-		rdpsnd->queue = MessageQueue_New(&obj);
-		if (!rdpsnd->queue)
-			return CHANNEL_RC_NO_MEMORY;
-
-		rdpsnd->thread = CreateThread(NULL, 0, play_thread, rdpsnd, 0, NULL);
-		if (!rdpsnd->thread)
-			return CHANNEL_RC_INITIALIZATION_ERROR;
-	}
-
 	if (!allocate_internals(rdpsnd))
 		return CHANNEL_RC_NO_MEMORY;
 
@@ -1460,16 +1487,6 @@ void rdpsnd_virtual_channel_event_terminated(rdpsndPlugin* rdpsnd)
 {
 	if (rdpsnd)
 	{
-		if (rdpsnd->queue)
-			MessageQueue_PostQuit(rdpsnd->queue, 0);
-
-		if (rdpsnd->thread)
-		{
-			(void)WaitForSingleObject(rdpsnd->thread, INFINITE);
-			(void)CloseHandle(rdpsnd->thread);
-		}
-		MessageQueue_Free(rdpsnd->queue);
-
 		free_internals(rdpsnd);
 		audio_formats_free(rdpsnd->fixed_format, 1);
 		free(rdpsnd->subsystem);
@@ -1567,8 +1584,8 @@ fail:
 	return NULL;
 }
 /* rdpsnd is always built-in */
-FREERDP_ENTRY_POINT(BOOL VCAPITYPE rdpsnd_VirtualChannelEntryEx(PCHANNEL_ENTRY_POINTS pEntryPoints,
-                                                                PVOID pInitHandle))
+FREERDP_ENTRY_POINT(BOOL VCAPITYPE rdpsnd_VirtualChannelEntryEx(
+    PCHANNEL_ENTRY_POINTS_EX pEntryPoints, PVOID pInitHandle))
 {
 	UINT rc = 0;
 	rdpsndPlugin* rdpsnd = NULL;
@@ -1691,13 +1708,13 @@ static UINT rdpsnd_on_close(IWTSVirtualChannelCallback* pChannelCallback)
 
 	cleanup_internals(rdpsnd);
 
+	free_internals(rdpsnd);
 	if (rdpsnd->device)
 	{
 		IFCALL(rdpsnd->device->Free, rdpsnd->device);
 		rdpsnd->device = NULL;
 	}
 
-	free_internals(rdpsnd);
 	free(pChannelCallback);
 	return CHANNEL_RC_OK;
 }

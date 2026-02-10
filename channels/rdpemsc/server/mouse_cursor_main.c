@@ -118,7 +118,6 @@ static BOOL read_cap_set(wStream* s, wArrayList* capsSets)
 {
 	RDP_MOUSE_CURSOR_CAPSET* capsSet = NULL;
 	UINT32 signature = 0;
-	RDP_MOUSE_CURSOR_CAPVERSION version = RDP_MOUSE_CURSOR_CAPVERSION_INVALID;
 	UINT32 size = 0;
 	size_t capsDataSize = 0;
 
@@ -126,7 +125,21 @@ static BOOL read_cap_set(wStream* s, wArrayList* capsSets)
 		return FALSE;
 
 	Stream_Read_UINT32(s, signature);
-	Stream_Read_UINT32(s, version);
+
+	RDP_MOUSE_CURSOR_CAPVERSION version = RDP_MOUSE_CURSOR_CAPVERSION_INVALID;
+	{
+		const UINT32 val = Stream_Get_UINT32(s);
+		switch (val)
+		{
+			case RDP_MOUSE_CURSOR_CAPVERSION_1:
+				version = RDP_MOUSE_CURSOR_CAPVERSION_1;
+				break;
+			default:
+				WLog_WARN(TAG, "Received caps set with unknown version %" PRIu32, val);
+				break;
+		}
+	}
+
 	Stream_Read_UINT32(s, size);
 
 	if (size < 12)
@@ -153,7 +166,6 @@ static BOOL read_cap_set(wStream* s, wArrayList* capsSets)
 			break;
 		}
 		default:
-			WLog_WARN(TAG, "Received caps set with unknown version %u", version);
 			Stream_Seek(s, capsDataSize);
 			return TRUE;
 	}
@@ -178,20 +190,21 @@ static UINT mouse_cursor_server_recv_cs_caps_advertise(MouseCursorServerContext*
                                                        wStream* s,
                                                        const RDP_MOUSE_CURSOR_HEADER* header)
 {
-	RDP_MOUSE_CURSOR_CAPS_ADVERTISE_PDU pdu = { 0 };
 	UINT error = CHANNEL_RC_OK;
 
 	WINPR_ASSERT(context);
 	WINPR_ASSERT(s);
 	WINPR_ASSERT(header);
 
-	pdu.header = *header;
-
 	/* There must be at least one capability set present */
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, 12))
 		return ERROR_NO_DATA;
 
-	pdu.capsSets = ArrayList_New(FALSE);
+	RDP_MOUSE_CURSOR_CAPS_ADVERTISE_PDU pdu = {
+		.header = *header,
+		.capsSets = ArrayList_New(FALSE),
+	};
+
 	if (!pdu.capsSets)
 	{
 		WLog_ERR(TAG, "Failed to allocate arraylist");
@@ -225,7 +238,6 @@ static UINT mouse_cursor_process_message(mouse_cursor_server* mouse_cursor)
 	BOOL rc = 0;
 	UINT error = ERROR_INTERNAL_ERROR;
 	ULONG BytesReturned = 0;
-	RDP_MOUSE_CURSOR_HEADER header = { 0 };
 	wStream* s = NULL;
 
 	WINPR_ASSERT(mouse_cursor);
@@ -263,19 +275,41 @@ static UINT mouse_cursor_process_message(mouse_cursor_server* mouse_cursor)
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, RDPEMSC_HEADER_SIZE))
 		return ERROR_NO_DATA;
 
-	Stream_Read_UINT8(s, header.pduType);
-	Stream_Read_UINT8(s, header.updateType);
-	Stream_Read_UINT16(s, header.reserved);
-
-	switch (header.pduType)
 	{
-		case PDUTYPE_CS_CAPS_ADVERTISE:
-			error = mouse_cursor_server_recv_cs_caps_advertise(&mouse_cursor->context, s, &header);
-			break;
-		default:
-			WLog_ERR(TAG, "mouse_cursor_process_message: unknown or invalid pduType %" PRIu8 "",
-			         header.pduType);
-			break;
+		const UINT8 pduType = Stream_Get_UINT8(s);
+		const UINT8 updateType = Stream_Get_UINT8(s);
+		switch (updateType)
+		{
+			case TS_UPDATETYPE_MOUSEPTR_SYSTEM_NULL:
+			case TS_UPDATETYPE_MOUSEPTR_SYSTEM_DEFAULT:
+			case TS_UPDATETYPE_MOUSEPTR_POSITION:
+			case TS_UPDATETYPE_MOUSEPTR_CACHED:
+			case TS_UPDATETYPE_MOUSEPTR_POINTER:
+			case TS_UPDATETYPE_MOUSEPTR_LARGE_POINTER:
+				break;
+			default:
+				WLog_ERR(TAG,
+				         "mouse_cursor_process_message: unknown or invalid updateType %" PRIu8 "",
+				         updateType);
+				return ERROR_INVALID_DATA;
+		}
+
+		RDP_MOUSE_CURSOR_HEADER header = { .updateType = (TS_UPDATETYPE_MOUSEPTR)updateType,
+			                               .reserved = Stream_Get_UINT16(s),
+			                               .pduType = PDUTYPE_EMSC_RESERVED };
+
+		switch (pduType)
+		{
+			case PDUTYPE_CS_CAPS_ADVERTISE:
+				header.pduType = PDUTYPE_CS_CAPS_ADVERTISE;
+				error =
+				    mouse_cursor_server_recv_cs_caps_advertise(&mouse_cursor->context, s, &header);
+				break;
+			default:
+				WLog_ERR(TAG, "mouse_cursor_process_message: unknown or invalid pduType %" PRIu8 "",
+				         pduType);
+				break;
+		}
 	}
 
 out:

@@ -25,6 +25,7 @@
 #include <string>
 #include <queue>
 
+#include <winpr/wlog.h>
 #include <winpr/platform.h>
 #include <freerdp/types.h>
 
@@ -44,7 +45,7 @@ class SdlConnectionDialogWrapper
 		MSG_DISCARD
 	};
 
-	SdlConnectionDialogWrapper();
+	explicit SdlConnectionDialogWrapper(wLog* log);
 	~SdlConnectionDialogWrapper();
 
 	SdlConnectionDialogWrapper(const SdlConnectionDialogWrapper& other) = delete;
@@ -56,10 +57,10 @@ class SdlConnectionDialogWrapper
 	void create(rdpContext* context);
 	void destroy();
 
-	bool isRunning() const;
-	bool isVisible() const;
+	[[nodiscard]] bool isRunning() const;
+	[[nodiscard]] bool isVisible() const;
 
-	bool handleEvent(const SDL_Event& event);
+	[[nodiscard]] bool handleEvent(const SDL_Event& event);
 
 	WINPR_ATTR_FORMAT_ARG(2, 3)
 	void setTitle(WINPR_FORMAT_ARG const char* fmt, ...);
@@ -117,4 +118,5 @@ class SdlConnectionDialogWrapper
 	mutable std::mutex _mux;
 	std::unique_ptr<SDLConnectionDialog> _connection_dialog;
 	std::queue<EventArg> _queue;
+	wLog* _log = nullptr;
 };

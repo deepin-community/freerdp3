@@ -22,6 +22,7 @@
 #include <openssl/objects.h>
 #include <openssl/x509v3.h>
 #include <openssl/pem.h>
+#include <openssl/rsa.h>
 #include <openssl/err.h>
 
 #include <freerdp/config.h>
@@ -48,14 +49,16 @@ BYTE* x509_utils_get_hash(const X509* xcert, const char* hash, size_t* length)
 	}
 	if (!xcert || !length)
 	{
-		WLog_ERR(TAG, "Invalid arguments: xcert=%p, length=%p", xcert, length);
+		WLog_ERR(TAG, "Invalid arguments: xcert=%p, length=%p",
+		         WINPR_CXX_COMPAT_CAST(const void*, xcert),
+		         WINPR_CXX_COMPAT_CAST(const void*, length));
 		return NULL;
 	}
 
 	fp = calloc(fp_len + 1, sizeof(BYTE));
 	if (!fp)
 	{
-		WLog_ERR(TAG, "could not allocate %" PRIuz " bytes", fp_len);
+		WLog_ERR(TAG, "could not allocate %" PRIu32 " bytes", fp_len);
 		return NULL;
 	}
 
@@ -105,7 +108,7 @@ char* x509_utils_get_subject(const X509* xcert)
 	char* subject = NULL;
 	if (!xcert)
 	{
-		WLog_ERR(TAG, "Invalid certificate %p", xcert);
+		WLog_ERR(TAG, "Invalid certificate NULL");
 		return NULL;
 	}
 	subject = crypto_print_name(X509_get_subject_name(xcert));
@@ -559,13 +562,24 @@ char* x509_utils_get_issuer(const X509* xcert)
 	char* issuer = NULL;
 	if (!xcert)
 	{
-		WLog_ERR(TAG, "Invalid certificate %p", xcert);
+		WLog_ERR(TAG, "Invalid certificate NULL");
 		return NULL;
 	}
 	issuer = crypto_print_name(X509_get_issuer_name(xcert));
 	if (!issuer)
 		WLog_WARN(TAG, "certificate does not have an issuer!");
 	return issuer;
+}
+
+static int asn1_object_cmp(const ASN1_OBJECT* const* a, const ASN1_OBJECT* const* b)
+{
+	if (!a || !b)
+		return (a == b) ? 0 : (a ? 1 : -1);
+
+	if (!*a || !*b)
+		return (*a == *b) ? 0 : (*a ? 1 : -1);
+
+	return OBJ_cmp(*a, *b);
 }
 
 BOOL x509_utils_check_eku(const X509* xcert, int nid)
@@ -585,6 +599,7 @@ BOOL x509_utils_check_eku(const X509* xcert, int nid)
 	if (!oid_stack)
 		return FALSE;
 
+	sk_ASN1_OBJECT_set_cmp_func(oid_stack, asn1_object_cmp);
 	if (sk_ASN1_OBJECT_find(oid_stack, oid) >= 0)
 		ret = TRUE;
 

@@ -53,9 +53,9 @@ static int fail_at_(const COMMAND_LINE_ARGUMENT_A* arg, int rc, const char* file
 	const DWORD level = WLOG_ERROR;
 	wLog* log = WLog_Get(TAG);
 	if (WLog_IsLevelActive(log, level))
-		WLog_PrintMessage(log, WLOG_MESSAGE_TEXT, level, line, file, fkt,
-		                  "Command line parsing failed at '%s' value '%s' [%d]", arg->Name,
-		                  arg->Value, rc);
+		WLog_PrintTextMessage(log, level, line, file, fkt,
+		                      "Command line parsing failed at '%s' value '%s' [%d]", arg->Name,
+		                      arg->Value, rc);
 	return rc;
 }
 
@@ -591,9 +591,10 @@ int shadow_server_parse_command_line(rdpShadowServer* server, int argc, char** a
 				const MONITOR_DEF* monitor = &monitors[index];
 				const INT64 width = monitor->right - monitor->left + 1;
 				const INT64 height = monitor->bottom - monitor->top + 1;
-				WLog_INFO(TAG, "      %s [%d] %" PRId64 "x%" PRId64 "\t+%" PRId32 "+%" PRId32 "",
-				          (monitor->flags == 1) ? "*" : " ", index, width, height, monitor->left,
-				          monitor->top);
+				WLog_INFO(
+				    TAG, "      %s [%" PRIu32 "] %" PRId64 "x%" PRId64 "\t+%" PRId32 "+%" PRId32 "",
+				    (monitor->flags == 1) ? "*" : " ", index, width, height, monitor->left,
+				    monitor->top);
 			}
 
 			status = COMMAND_LINE_STATUS_PRINT;
@@ -934,29 +935,35 @@ static BOOL shadow_server_init_certificate(rdpShadowServer* server)
 			goto out_fail;
 	}
 
-	rdpSettings* settings = server->settings;
-	WINPR_ASSERT(settings);
-
-	rdpPrivateKey* key = freerdp_key_new_from_file_enc(server->PrivateKeyFile, NULL);
-	if (!key)
-		goto out_fail;
-	if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerRsaKey, key, 1))
-		goto out_fail;
-
-	rdpCertificate* cert = freerdp_certificate_new_from_file(server->CertificateFile);
-	if (!cert)
-		goto out_fail;
-
-	if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerCertificate, cert, 1))
-		goto out_fail;
-
-	if (!freerdp_certificate_is_rdp_security_compatible(cert))
 	{
-		if (!freerdp_settings_set_bool(settings, FreeRDP_UseRdpSecurityLayer, FALSE))
-			goto out_fail;
-		if (!freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, FALSE))
-			goto out_fail;
+		rdpSettings* settings = server->settings;
+		WINPR_ASSERT(settings);
+
+		{
+			rdpPrivateKey* key = freerdp_key_new_from_file_enc(server->PrivateKeyFile, NULL);
+			if (!key)
+				goto out_fail;
+			if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerRsaKey, key, 1))
+				goto out_fail;
+		}
+		{
+			rdpCertificate* cert = freerdp_certificate_new_from_file(server->CertificateFile);
+			if (!cert)
+				goto out_fail;
+
+			if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerCertificate, cert, 1))
+				goto out_fail;
+
+			if (!freerdp_certificate_is_rdp_security_compatible(cert))
+			{
+				if (!freerdp_settings_set_bool(settings, FreeRDP_UseRdpSecurityLayer, FALSE))
+					goto out_fail;
+				if (!freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, FALSE))
+					goto out_fail;
+			}
+		}
 	}
+
 	ret = TRUE;
 out_fail:
 	free(filepath);

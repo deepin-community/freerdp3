@@ -1,1 +1,1 @@
-usr/lib/*/libwinpr-tools3.so.*
+usr/lib/${DEB_HOST_MULTIARCH}/libwinpr-tools3.so.*

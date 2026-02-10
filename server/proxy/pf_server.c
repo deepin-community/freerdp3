@@ -197,7 +197,7 @@ static BOOL pf_server_get_target_info(rdpContext* context, rdpSettings* settings
 			return freerdp_settings_set_uint32(settings, FreeRDP_ServerPort, ev.target_port);
 		}
 		default:
-			PROXY_LOG_ERR(TAG, ps, "unknown target fetch method: %d", ev.fetch_method);
+			PROXY_LOG_ERR(TAG, ps, "unknown target fetch method: %u", ev.fetch_method);
 			return FALSE;
 	}
 
@@ -423,36 +423,38 @@ static BOOL pf_server_receive_channel_data_hook(freerdp_peer* peer, UINT16 chann
 	if (!pc)
 		goto original_cb;
 
-	const pServerStaticChannelContext* channel =
-	    HashTable_GetItemValue(ps->channelsByFrontId, &channelId64);
-	if (!channel)
 	{
-		PROXY_LOG_ERR(TAG, ps, "channel id=%" PRIu64 " not registered here, dropping", channelId64);
-		return TRUE;
-	}
-
-	WINPR_ASSERT(channel->onFrontData);
-	switch (channel->onFrontData(pdata, channel, data, size, flags, totalSize))
-	{
-		case PF_CHANNEL_RESULT_PASS:
+		const pServerStaticChannelContext* channel =
+		    HashTable_GetItemValue(ps->channelsByFrontId, &channelId64);
+		if (!channel)
 		{
-			proxyChannelDataEventInfo ev = { 0 };
-
-			ev.channel_id = channelId;
-			ev.channel_name = channel->channel_name;
-			ev.data = data;
-			ev.data_len = size;
-			ev.flags = flags;
-			ev.total_size = totalSize;
-			return IFCALLRESULT(TRUE, pc->sendChannelData, pc, &ev);
-		}
-		case PF_CHANNEL_RESULT_DROP:
+			PROXY_LOG_ERR(TAG, ps, "channel id=%" PRIu64 " not registered here, dropping",
+			              channelId64);
 			return TRUE;
-		case PF_CHANNEL_RESULT_ERROR:
-		default:
-			return FALSE;
-	}
+		}
 
+		WINPR_ASSERT(channel->onFrontData);
+		switch (channel->onFrontData(pdata, channel, data, size, flags, totalSize))
+		{
+			case PF_CHANNEL_RESULT_PASS:
+			{
+				proxyChannelDataEventInfo ev = { 0 };
+
+				ev.channel_id = channelId;
+				ev.channel_name = channel->channel_name;
+				ev.data = data;
+				ev.data_len = size;
+				ev.flags = flags;
+				ev.total_size = totalSize;
+				return IFCALLRESULT(TRUE, pc->sendChannelData, pc, &ev);
+			}
+			case PF_CHANNEL_RESULT_DROP:
+				return TRUE;
+			case PF_CHANNEL_RESULT_ERROR:
+			default:
+				return FALSE;
+		}
+	}
 original_cb:
 	WINPR_ASSERT(pdata->server_receive_channel_data_original);
 	return pdata->server_receive_channel_data_original(peer, channelId, data, size, flags,
@@ -585,7 +587,9 @@ static DWORD WINAPI pf_server_handle_peer(LPVOID arg)
 	proxyServer* server = (proxyServer*)client->ContextExtra;
 	WINPR_ASSERT(server);
 
+	ArrayList_Lock(server->peer_list);
 	size_t count = ArrayList_Count(server->peer_list);
+	ArrayList_Unlock(server->peer_list);
 
 	if (!pf_context_init_server_context(client))
 		goto out_free_peer;
@@ -763,12 +767,19 @@ static BOOL pf_server_start_peer(freerdp_peer* client)
 
 	hThread = CreateThread(NULL, 0, pf_server_handle_peer, args, CREATE_SUSPENDED, NULL);
 	if (!hThread)
+	{
+		free(args);
 		return FALSE;
+	}
 
 	args->thread = hThread;
-	if (!ArrayList_Append(server->peer_list, hThread))
+	ArrayList_Lock(server->peer_list);
+	const BOOL appended = ArrayList_Append(server->peer_list, hThread);
+	ArrayList_Unlock(server->peer_list);
+	if (!appended)
 	{
 		(void)CloseHandle(hThread);
+		free(args);
 		return FALSE;
 	}
 

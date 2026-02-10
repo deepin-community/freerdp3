@@ -25,7 +25,6 @@ Build-Depends:
  libopus-dev,
  libpam0g-dev,
  libpcsclite-dev,
- libpkcs11-helper1-dev,
  libpng-dev,
  libpulse-dev,
  libsdl2-dev <pkg.freerdp3.sdl2>,
@@ -192,6 +191,7 @@ Depends:
  libfreerdp-shadow3-3 (= ${binary:Version}),
  libfreerdp3-3 (= ${binary:Version}),
  libwinpr3-dev (= ${binary:Version}),
+ libwinpr3-3 (= ${binary:Version}),
  libfuse3-dev,
  winpr3-utils (= ${binary:Version}),
  ${misc:Depends},
@@ -271,6 +271,7 @@ Depends:
  ${misc:Depends},
  ${shlibs:Depends},
  libfreerdp-client3-3 (= ${binary:Version}),
+ libwinpr3-3 (= ${binary:Version}),
 Description: RDP client for Windows Terminal Services (wayland client)
  FreeRDP is a libre client/server implementation of the Remote
  Desktop Protocol (RDP).

@@ -302,7 +302,7 @@ static UINT drive_process_irp_read(DRIVE_DEVICE* drive, IRP* irp)
 		Length = 0;
 	}
 
-	if (!Stream_EnsureRemainingCapacity(irp->output, Length + 4))
+	if (!Stream_EnsureRemainingCapacity(irp->output, 4ull + Length))
 	{
 		WLog_ERR(TAG, "Stream_EnsureRemainingCapacity failed!");
 		return ERROR_INTERNAL_ERROR;
@@ -942,8 +942,10 @@ static UINT drive_register_drive_path(PDEVICE_SERVICE_ENTRY_POINTS pEntryPoints,
 
 	if (!pEntryPoints || !name || !path)
 	{
-		WLog_ERR(TAG, "[%s] Invalid parameters: pEntryPoints=%p, name=%p, path=%p", pEntryPoints,
-		         name, path);
+		WLog_ERR(TAG, "Invalid parameters: pEntryPoints=%p, name=%p, path=%p",
+		         WINPR_CXX_COMPAT_CAST(const void*, pEntryPoints),
+		         WINPR_CXX_COMPAT_CAST(const void*, name),
+		         WINPR_CXX_COMPAT_CAST(const void*, path));
 		return ERROR_INVALID_PARAMETER;
 	}
 
@@ -1095,8 +1097,7 @@ static UINT handle_all_drives(RDPDR_DRIVE* drive, PDEVICE_SERVICE_ENTRY_POINTS p
 	if (rc >= dlen)
 		goto fail;
 
-	size_t len = 0;
-	for (size_t offset = 0; offset < rc; offset += len + 1)
+	for (size_t offset = 0, len = 0; offset < rc; offset += len + 1)
 	{
 		len = _wcsnlen(&devlist[offset], rc - offset);
 

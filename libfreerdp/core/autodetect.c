@@ -237,8 +237,8 @@ autodetect_send_bandwidth_measure_payload(rdpAutoDetect* autodetect,
 
 	if (!Stream_EnsureRemainingCapacity(s, 8 + payloadLength))
 	{
-		WLog_Print(autodetect->log, WLOG_ERROR, "Failed to ensure %" PRIuz " bytes in stream",
-		           8ull + payloadLength);
+		WLog_Print(autodetect->log, WLOG_ERROR, "Failed to ensure %lu bytes in stream",
+		           8ul + payloadLength);
 		Stream_Release(s);
 		return FALSE;
 	}
@@ -298,7 +298,7 @@ static BOOL autodetect_send_bandwidth_measure_stop(rdpAutoDetect* autodetect,
 			if (!Stream_EnsureRemainingCapacity(s, payloadLength))
 			{
 				WLog_Print(autodetect->log, WLOG_ERROR,
-				           "Failed to ensure %" PRIuz " bytes in stream", payloadLength);
+				           "Failed to ensure %" PRIu16 " bytes in stream", payloadLength);
 				Stream_Release(s);
 				return FALSE;
 			}
@@ -710,7 +710,9 @@ static BOOL autodetect_recv_netchar_sync(rdpAutoDetect* autodetect, RDP_TRANSPOR
 static BOOL autodetect_recv_netchar_request(rdpAutoDetect* autodetect, RDP_TRANSPORT_TYPE transport,
                                             wStream* s, const AUTODETECT_REQ_PDU* autodetectReqPdu)
 {
-	rdpNetworkCharacteristicsResult result = { 0 };
+	rdpNetworkCharacteristicsResult result = {
+		.type = RDP_NETCHAR_RESERVED, .baseRTT = 0, .averageRTT = 0, .bandwidth = 0
+	};
 	BOOL success = TRUE;
 
 	WINPR_ASSERT(autodetect);
