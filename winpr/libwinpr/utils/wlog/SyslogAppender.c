@@ -51,18 +51,12 @@ static int getSyslogLevel(DWORD level)
 
 static BOOL WLog_SyslogAppender_Open(wLog* log, wLogAppender* appender)
 {
-	if (!log || !appender)
-		return FALSE;
-
-	return TRUE;
+	return !(!log || !appender);
 }
 
 static BOOL WLog_SyslogAppender_Close(wLog* log, wLogAppender* appender)
 {
-	if (!log || !appender)
-		return FALSE;
-
-	return TRUE;
+	return !(!log || !appender);
 }
 
 static BOOL WLog_SyslogAppender_WriteMessage(wLog* log, wLogAppender* appender,
@@ -120,7 +114,7 @@ wLogAppender* WLog_SyslogAppender_New(WINPR_ATTR_UNUSED wLog* log)
 {
 	wLogSyslogAppender* appender = (wLogSyslogAppender*)calloc(1, sizeof(wLogSyslogAppender));
 	if (!appender)
-		return NULL;
+		return nullptr;
 
 	appender->common.Type = WLOG_APPENDER_SYSLOG;
 

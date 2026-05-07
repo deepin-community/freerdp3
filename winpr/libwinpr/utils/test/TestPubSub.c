@@ -32,7 +32,7 @@ static wEventType Node_Events[] = { DEFINE_EVENT_ENTRY(MouseMotion),
 
 int TestPubSub(int argc, char* argv[])
 {
-	wPubSub* node = NULL;
+	wPubSub* node = nullptr;
 
 	WINPR_UNUSED(argc);
 	WINPR_UNUSED(argv);
@@ -43,8 +43,10 @@ int TestPubSub(int argc, char* argv[])
 
 	PubSub_AddEventTypes(node, Node_Events, NODE_EVENT_COUNT);
 
-	PubSub_SubscribeMouseMotion(node, MouseMotionEventHandler);
-	PubSub_SubscribeMouseButton(node, MouseButtonEventHandler);
+	if (PubSub_SubscribeMouseMotion(node, MouseMotionEventHandler) < 0)
+		return -1;
+	if (PubSub_SubscribeMouseButton(node, MouseButtonEventHandler) < 0)
+		return -1;
 
 	/* Call Event Handler */
 	{
@@ -53,7 +55,8 @@ int TestPubSub(int argc, char* argv[])
 		e.x = 64;
 		e.y = 128;
 
-		PubSub_OnMouseMotion(node, NULL, &e);
+		if (PubSub_OnMouseMotion(node, nullptr, &e) < 0)
+			return -1;
 	}
 
 	{
@@ -64,7 +67,8 @@ int TestPubSub(int argc, char* argv[])
 		e.flags = 7;
 		e.button = 1;
 
-		PubSub_OnMouseButton(node, NULL, &e);
+		if (PubSub_OnMouseButton(node, nullptr, &e) < 0)
+			return -1;
 	}
 
 	PubSub_Free(node);

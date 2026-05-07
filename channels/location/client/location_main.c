@@ -103,18 +103,19 @@ static UINT location_channel_send(IWTSVirtualChannel* channel, wStream* s)
 	if (len > UINT32_MAX)
 		return ERROR_INTERNAL_ERROR;
 
-	Stream_SetPosition(s, 2);
+	if (!Stream_SetPosition(s, 2))
+		return ERROR_INVALID_DATA;
 	Stream_Write_UINT32(s, (UINT32)len);
 
 	WINPR_ASSERT(channel);
 	WINPR_ASSERT(channel->Write);
-	return channel->Write(channel, (UINT32)len, Stream_Buffer(s), NULL);
+	return channel->Write(channel, (UINT32)len, Stream_Buffer(s), nullptr);
 }
 
 static UINT location_send_client_ready_pdu(const LOCATION_CALLBACK* callback)
 {
-	wStream sbuffer = { 0 };
-	BYTE buffer[32] = { 0 };
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
+	BYTE buffer[32] = WINPR_C_ARRAY_INIT;
 	wStream* s = Stream_StaticInit(&sbuffer, buffer, sizeof(buffer));
 	WINPR_ASSERT(s);
 
@@ -128,7 +129,7 @@ static UINT location_send_client_ready_pdu(const LOCATION_CALLBACK* callback)
 
 static const char* location_version_str(UINT32 version, char* buffer, size_t size)
 {
-	const char* str = NULL;
+	const char* str = nullptr;
 	switch (version)
 	{
 		case RDPLOCATION_PROTOCOL_VERSION_100:
@@ -187,8 +188,8 @@ static UINT location_on_data_received(IWTSVirtualChannelCallback* pChannelCallba
 			}
 
 			{
-				char cbuffer[64] = { 0 };
-				char sbuffer[64] = { 0 };
+				char cbuffer[64] = WINPR_C_ARRAY_INIT;
+				char sbuffer[64] = WINPR_C_ARRAY_INIT;
 				WLog_Print(plugin->baseDynPlugin.log, WLOG_DEBUG,
 				           "Server version %s, client version %s",
 				           location_version_str(callback->serverVersion, sbuffer, sizeof(sbuffer)),
@@ -198,7 +199,7 @@ static UINT location_on_data_received(IWTSVirtualChannelCallback* pChannelCallba
 			if (!plugin->context.LocationStart)
 			{
 				WLog_Print(plugin->baseDynPlugin.log, WLOG_WARN,
-				           "LocationStart=NULL, no location data will be sent");
+				           "LocationStart=nullptr, no location data will be sent");
 				return CHANNEL_RC_OK;
 			}
 
@@ -218,8 +219,8 @@ static UINT location_on_data_received(IWTSVirtualChannelCallback* pChannelCallba
 static UINT location_send_base_location3d(IWTSVirtualChannel* channel,
                                           const RDPLOCATION_BASE_LOCATION3D_PDU* pdu)
 {
-	wStream sbuffer = { 0 };
-	BYTE buffer[32] = { 0 };
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
+	BYTE buffer[32] = WINPR_C_ARRAY_INIT;
 	wStream* s = Stream_StaticInit(&sbuffer, buffer, sizeof(buffer));
 	WINPR_ASSERT(s);
 	WINPR_ASSERT(channel);
@@ -260,8 +261,8 @@ static UINT location_send_base_location3d(IWTSVirtualChannel* channel,
 static UINT location_send_location2d_delta(IWTSVirtualChannel* channel,
                                            const RDPLOCATION_LOCATION2D_DELTA_PDU* pdu)
 {
-	wStream sbuffer = { 0 };
-	BYTE buffer[32] = { 0 };
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
+	BYTE buffer[32] = WINPR_C_ARRAY_INIT;
 	wStream* s = Stream_StaticInit(&sbuffer, buffer, sizeof(buffer));
 	WINPR_ASSERT(s);
 
@@ -297,8 +298,8 @@ static UINT location_send_location2d_delta(IWTSVirtualChannel* channel,
 static UINT location_send_location3d_delta(IWTSVirtualChannel* channel,
                                            const RDPLOCATION_LOCATION3D_DELTA_PDU* pdu)
 {
-	wStream sbuffer = { 0 };
-	BYTE buffer[32] = { 0 };
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
+	BYTE buffer[32] = WINPR_C_ARRAY_INIT;
 	wStream* s = Stream_StaticInit(&sbuffer, buffer, sizeof(buffer));
 	WINPR_ASSERT(s);
 
@@ -352,7 +353,7 @@ static UINT location_send(LocationClientContext* context, LOCATION_PDUTYPE type,
 	WINPR_ASSERT(callback);
 
 	UINT32 res = ERROR_INTERNAL_ERROR;
-	va_list ap = { 0 };
+	va_list ap = WINPR_C_ARRAY_INIT;
 	va_start(ap, count);
 	switch (type)
 	{
@@ -368,10 +369,10 @@ static UINT location_send(LocationClientContext* context, LOCATION_PDUTYPE type,
 				RDPLOCATION_BASE_LOCATION3D_PDU pdu = { .latitude = va_arg(ap, double),
 					                                    .longitude = va_arg(ap, double),
 					                                    .altitude = va_arg(ap, INT32),
-					                                    .speed = NULL,
-					                                    .heading = NULL,
-					                                    .horizontalAccuracy = NULL,
-					                                    .source = NULL };
+					                                    .speed = nullptr,
+					                                    .heading = nullptr,
+					                                    .horizontalAccuracy = nullptr,
+					                                    .source = nullptr };
 
 				if ((count > 3) && (callback->clientVersion >= RDPLOCATION_PROTOCOL_VERSION_200))
 				{
@@ -394,8 +395,8 @@ static UINT location_send(LocationClientContext* context, LOCATION_PDUTYPE type,
 			{
 				RDPLOCATION_LOCATION2D_DELTA_PDU pdu = { .latitudeDelta = va_arg(ap, double),
 					                                     .longitudeDelta = va_arg(ap, double),
-					                                     .speedDelta = NULL,
-					                                     .headingDelta = NULL };
+					                                     .speedDelta = nullptr,
+					                                     .headingDelta = nullptr };
 
 				double speedDelta = FP_NAN;
 				double headingDelta = FP_NAN;
@@ -420,8 +421,8 @@ static UINT location_send(LocationClientContext* context, LOCATION_PDUTYPE type,
 				RDPLOCATION_LOCATION3D_DELTA_PDU pdu = { .latitudeDelta = va_arg(ap, double),
 					                                     .longitudeDelta = va_arg(ap, double),
 					                                     .altitudeDelta = va_arg(ap, INT32),
-					                                     .speedDelta = NULL,
-					                                     .headingDelta = NULL };
+					                                     .speedDelta = nullptr,
+					                                     .headingDelta = nullptr };
 				if ((count > 3) && (callback->clientVersion >= RDPLOCATION_PROTOCOL_VERSION_200))
 				{
 					speedDelta = va_arg(ap, double);
@@ -476,8 +477,8 @@ static UINT location_init(GENERIC_DYNVC_PLUGIN* plugin, WINPR_ATTR_UNUSED rdpCon
 }
 
 static const IWTSVirtualChannelCallback location_callbacks = { location_on_data_received,
-	                                                           NULL, /* Open */
-	                                                           location_on_close, NULL };
+	                                                           nullptr, /* Open */
+	                                                           location_on_close, nullptr };
 
 /**
  * Function description
@@ -488,5 +489,5 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE location_DVCPluginEntry(IDRDYNVC_ENTRY_POINTS
 {
 	return freerdp_generic_DVCPluginEntry(pEntryPoints, TAG, LOCATION_DVC_CHANNEL_NAME,
 	                                      sizeof(LOCATION_PLUGIN), sizeof(LOCATION_CALLBACK),
-	                                      &location_callbacks, location_init, NULL);
+	                                      &location_callbacks, location_init, nullptr);
 }

@@ -27,6 +27,8 @@
 #include <winpr/path.h>
 #include <winpr/file.h>
 
+#include "../utils.h"
+
 #if defined(WITH_RESOURCE_VERSIONING)
 #define STR(x) #x
 #endif
@@ -716,9 +718,7 @@ HRESULT PathCchStripPrefixA(PSTR pszPath, size_t cchPath)
 		return E_INVALIDARG;
 
 	hasPrefix = ((pszPath[0] == '\\') && (pszPath[1] == '\\') && (pszPath[2] == '?') &&
-	             (pszPath[3] == '\\'))
-	                ? TRUE
-	                : FALSE;
+	             (pszPath[3] == '\\'));
 
 	if (hasPrefix)
 	{
@@ -727,7 +727,9 @@ HRESULT PathCchStripPrefixA(PSTR pszPath, size_t cchPath)
 
 		if (IsCharAlpha(pszPath[4]) && (pszPath[5] == ':')) /* like C: */
 		{
-			memmove_s(pszPath, cchPath, &pszPath[4], cchPath - 4);
+			if (memmove_s(pszPath, cchPath, &pszPath[4], cchPath - 4) < 0)
+				return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+
 			/* since the passed pszPath must not necessarily be null terminated
 			 * and we always have enough space after the strip we can always
 			 * ensure the null termination of the stripped result
@@ -751,9 +753,7 @@ HRESULT PathCchStripPrefixW(PWSTR pszPath, size_t cchPath)
 		return E_INVALIDARG;
 
 	hasPrefix = ((pszPath[0] == '\\') && (pszPath[1] == '\\') && (pszPath[2] == '?') &&
-	             (pszPath[3] == '\\'))
-	                ? TRUE
-	                : FALSE;
+	             (pszPath[3] == '\\'));
 
 	if (hasPrefix)
 	{
@@ -766,7 +766,8 @@ HRESULT PathCchStripPrefixW(PWSTR pszPath, size_t cchPath)
 
 		if (IsCharAlphaW(pszPath[4]) && (pszPath[5] == L':')) /* like C: */
 		{
-			wmemmove_s(pszPath, cchPath, &pszPath[4], cchPath - 4);
+			if (wmemmove_s(pszPath, cchPath, &pszPath[4], cchPath - 4) < 0)
+				return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
 			/* since the passed pszPath must not necessarily be null terminated
 			 * and we always have enough space after the strip we can always
 			 * ensure the null termination of the stripped result
@@ -1022,13 +1023,11 @@ PCSTR PathGetSharedLibraryExtensionA(unsigned long dwFlags)
 		return SharedLibraryExtensionSoA;
 #endif
 	}
-
-	return NULL;
 }
 
 PCWSTR PathGetSharedLibraryExtensionW(unsigned long dwFlags)
 {
-	static WCHAR buffer[6][16] = { 0 };
+	static WCHAR buffer[6][16] = WINPR_C_ARRAY_INIT;
 	const WCHAR* SharedLibraryExtensionDotDllW = InitializeConstWCharFromUtf8(
 	    SharedLibraryExtensionDotDllA, buffer[0], ARRAYSIZE(buffer[0]));
 	const WCHAR* SharedLibraryExtensionDotSoW =
@@ -1094,8 +1093,6 @@ PCWSTR PathGetSharedLibraryExtensionW(unsigned long dwFlags)
 		return SharedLibraryExtensionSoW;
 #endif
 	}
-
-	return NULL;
 }
 
 const char* GetKnownPathIdString(int id)
@@ -1126,7 +1123,7 @@ static char* concat(const char* path, size_t pathlen, const char* name, size_t n
 	const size_t strsize = pathlen + namelen + 2;
 	char* str = calloc(strsize, sizeof(char));
 	if (!str)
-		return NULL;
+		return nullptr;
 
 	winpr_str_append(path, str, strsize, "");
 	winpr_str_append(name, str, strsize, "");
@@ -1154,7 +1151,7 @@ BOOL winpr_RemoveDirectory_RecursiveA(LPCSTR lpPathName)
 		goto fail;
 
 	{
-		WIN32_FIND_DATAA findFileData = { 0 };
+		WIN32_FIND_DATAA findFileData = WINPR_C_ARRAY_INIT;
 		dir = FindFirstFileA(path_slash, &findFileData);
 
 		if (dir == INVALID_HANDLE_VALUE)
@@ -1210,7 +1207,7 @@ fail:
 
 BOOL winpr_RemoveDirectory_RecursiveW(LPCWSTR lpPathName)
 {
-	char* name = ConvertWCharToUtf8Alloc(lpPathName, NULL);
+	char* name = ConvertWCharToUtf8Alloc(lpPathName, nullptr);
 	if (!name)
 		return FALSE;
 	const BOOL rc = winpr_RemoveDirectory_RecursiveA(name);
@@ -1218,32 +1215,47 @@ BOOL winpr_RemoveDirectory_RecursiveW(LPCWSTR lpPathName)
 	return rc;
 }
 
-char* winpr_GetConfigFilePath(BOOL system, const char* filename)
+char* winpr_GetConfigFilePathVA(BOOL system, WINPR_FORMAT_ARG const char* filename, va_list ap)
 {
 	eKnownPathTypes id = system ? KNOWN_PATH_SYSTEM_CONFIG_HOME : KNOWN_PATH_XDG_CONFIG_HOME;
+	const char* vendor = winpr_getApplicationDetailsVendor();
+	const char* product = winpr_getApplicationDetailsProduct();
+	const SSIZE_T version = winpr_getApplicationDetailsVersion();
 
-#if defined(WINPR_USE_VENDOR_PRODUCT_CONFIG_DIR)
-	char* vendor = GetKnownSubPath(id, WINPR_VENDOR_STRING);
-	if (!vendor)
-		return NULL;
-#if defined(WITH_RESOURCE_VERSIONING)
-	const char* prod = WINPR_PRODUCT_STRING STR(WINPR_VERSION_MAJOR);
-#else
-	const char* prod = WINPR_PRODUCT_STRING;
-#endif
-	char* base = GetCombinedPath(vendor, prod);
-	free(vendor);
-#else
-	char* base = GetKnownSubPath(id, "winpr");
-#endif
+	if (!vendor || !product)
+		return nullptr;
+
+	char* config = GetKnownSubPathV(id, "%s", vendor);
+	if (!config)
+		return nullptr;
+
+	char* base = nullptr;
+	if (version < 0)
+		base = GetCombinedPathV(config, "%s", product);
+	else
+		base = GetCombinedPathV(config, "%s%" PRIdz, product, version);
+	free(config);
 
 	if (!base)
-		return NULL;
-	if (!filename)
-		return base;
-
-	char* path = GetCombinedPath(base, filename);
+		return nullptr;
+	char* path = GetCombinedPathVA(base, filename, ap);
 	free(base);
 
 	return path;
+}
+
+char* winpr_GetConfigFilePath(BOOL system, const char* filename)
+{
+	if (!filename)
+		return winpr_GetConfigFilePathV(system, "%s", "");
+	return winpr_GetConfigFilePathV(system, "%s", filename);
+}
+
+char* winpr_GetConfigFilePathV(BOOL system, const char* filename, ...)
+{
+	va_list ap = WINPR_C_ARRAY_INIT;
+	va_start(ap, filename);
+	char* str = winpr_GetConfigFilePathVA(system, filename, ap);
+	va_end(ap);
+	return str;
 }

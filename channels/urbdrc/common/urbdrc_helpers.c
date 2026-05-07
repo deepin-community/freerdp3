@@ -398,7 +398,7 @@ void urbdrc_dump_message(wLog* log, BOOL client, BOOL write, wStream* s)
 	if (write)
 	{
 		length = pos;
-		Stream_SetPosition(s, 0);
+		Stream_ResetPosition(s);
 	}
 	else
 		length = Stream_GetRemainingLength(s);
@@ -409,7 +409,8 @@ void urbdrc_dump_message(wLog* log, BOOL client, BOOL write, wStream* s)
 	Stream_Read_UINT32(s, InterfaceId);
 	Stream_Read_UINT32(s, MessageId);
 	Stream_Read_UINT32(s, FunctionId);
-	Stream_SetPosition(s, pos);
+	if (!Stream_SetPosition(s, pos))
+		WLog_Print(log, WLOG_ERROR, "Stream_SetPosition(%" PRIuz ") failed", pos);
 
 	WLog_Print(log, WLOG_DEBUG,
 	           "[%-5s] %s [%08" PRIx32 "] InterfaceId=%08" PRIx32 ", MessageId=%08" PRIx32
@@ -442,9 +443,13 @@ BOOL write_shared_message_header_with_functionid(wStream* s, UINT32 InterfaceId,
 wStream* create_shared_message_header_with_functionid(UINT32 InterfaceId, UINT32 MessageId,
                                                       UINT32 FunctionId, size_t OutputSize)
 {
-	wStream* out = Stream_New(NULL, 12ULL + OutputSize);
+	wStream* out = Stream_New(nullptr, 12ULL + OutputSize);
 	if (!out)
-		return NULL;
-	(void)write_shared_message_header_with_functionid(out, InterfaceId, MessageId, FunctionId);
+		return nullptr;
+	if (!write_shared_message_header_with_functionid(out, InterfaceId, MessageId, FunctionId))
+	{
+		Stream_Free(out, TRUE);
+		return nullptr;
+	}
 	return out;
 }

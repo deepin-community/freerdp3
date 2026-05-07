@@ -19,19 +19,24 @@
  */
 #include <limits>
 #include <sstream>
+#include <cmath>
 
 #include "sdl_window.hpp"
 #include "sdl_utils.hpp"
 
-SdlWindow::SdlWindow(const std::string& title, Sint32 startupX, Sint32 startupY, Sint32 width,
-                     Sint32 height, [[maybe_unused]] Uint32 flags)
+#include <freerdp/utils/string.h>
+
+SdlWindow::SdlWindow(SDL_DisplayID id, const std::string& title, const SDL_Rect& rect,
+                     [[maybe_unused]] Uint32 flags)
+    : _initialW(rect.w), _initialH(rect.h), _displayID(id)
 {
 	auto props = SDL_CreateProperties();
 	SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, title.c_str());
-	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, startupX);
-	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, startupY);
-	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, width);
-	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, height);
+	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, rect.x);
+	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, rect.y);
+	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, rect.w);
+	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, rect.h);
+	SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
 
 	if (flags & SDL_WINDOW_HIGH_PIXEL_DENSITY)
 		SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
@@ -44,25 +49,39 @@ SdlWindow::SdlWindow(const std::string& title, Sint32 startupX, Sint32 startupY,
 
 	_window = SDL_CreateWindowWithProperties(props);
 	SDL_DestroyProperties(props);
-
-	auto sc = scale();
-	const int iscale = static_cast<int>(sc * 100.0f);
-	auto w = 100 * width / iscale;
-	auto h = 100 * height / iscale;
-	std::ignore = resize({ w, h });
 	SDL_SetHint(SDL_HINT_APP_NAME, "");
 	std::ignore = SDL_SyncWindow(_window);
+
+	_renderer = SDL_CreateRenderer(_window, nullptr);
+
+	std::ignore = resizeToScale();
+
+	_monitor = query(_window, id, true);
 }
 
 SdlWindow::SdlWindow(SdlWindow&& other) noexcept
-    : _window(other._window), _offset_x(other._offset_x), _offset_y(other._offset_y)
+    : _window(other._window), _renderer(other._renderer), _renderTarget(other._renderTarget),
+      _gdiTexture(other._gdiTexture), _gdiTextureW(other._gdiTextureW),
+      _gdiTextureH(other._gdiTextureH), _initialW(other._initialW), _initialH(other._initialH),
+      _displayID(other._displayID), _offset_x(other._offset_x), _offset_y(other._offset_y),
+      _monitor(other._monitor)
 {
 	other._window = nullptr;
+	other._renderer = nullptr;
+	other._renderTarget = nullptr;
+	other._gdiTexture = nullptr;
 }
 
 SdlWindow::~SdlWindow()
 {
-	SDL_DestroyWindow(_window);
+	if (_gdiTexture)
+		SDL_DestroyTexture(_gdiTexture);
+	if (_renderTarget)
+		SDL_DestroyTexture(_renderTarget);
+	if (_renderer)
+		SDL_DestroyRenderer(_renderer);
+	if (_window)
+		SDL_DestroyWindow(_window);
 }
 
 SDL_WindowID SdlWindow::id() const
@@ -81,13 +100,7 @@ SDL_DisplayID SdlWindow::displayIndex() const
 
 SDL_Rect SdlWindow::rect() const
 {
-	SDL_Rect rect = {};
-	if (_window)
-	{
-		SDL_GetWindowPosition(_window, &rect.x, &rect.y);
-		SDL_GetWindowSizeInPixels(_window, &rect.w, &rect.h);
-	}
-	return rect;
+	return rect(_window);
 }
 
 SDL_Rect SdlWindow::bounds() const
@@ -95,8 +108,10 @@ SDL_Rect SdlWindow::bounds() const
 	SDL_Rect rect = {};
 	if (_window)
 	{
-		SDL_GetWindowPosition(_window, &rect.x, &rect.y);
-		SDL_GetWindowSize(_window, &rect.w, &rect.h);
+		if (!SDL_GetWindowPosition(_window, &rect.x, &rect.y))
+			return {};
+		if (!SDL_GetWindowSize(_window, &rect.w, &rect.h))
+			return {};
 	}
 	return rect;
 }
@@ -104,6 +119,11 @@ SDL_Rect SdlWindow::bounds() const
 SDL_Window* SdlWindow::window() const
 {
 	return _window;
+}
+
+SDL_Renderer* SdlWindow::renderer() const
+{
+	return _renderer;
 }
 
 Sint32 SdlWindow::offsetX() const
@@ -128,42 +148,18 @@ Sint32 SdlWindow::offsetY() const
 
 rdpMonitor SdlWindow::monitor(bool isPrimary) const
 {
-	rdpMonitor mon{};
-
-	const auto factor = scale();
-	const auto dsf = static_cast<UINT32>(100 * factor);
-	mon.attributes.desktopScaleFactor = dsf;
-	mon.attributes.deviceScaleFactor = 100;
-
-	const auto r = rect();
-	mon.width = r.w;
-	mon.height = r.h;
-
-	mon.attributes.physicalWidth = WINPR_ASSERTING_INT_CAST(uint32_t, r.w);
-	mon.attributes.physicalHeight = WINPR_ASSERTING_INT_CAST(uint32_t, r.h);
-
-	SDL_Rect rect = {};
-	auto did = SDL_GetDisplayForWindow(_window);
-	auto rc = SDL_GetDisplayBounds(did, &rect);
-
-	if (rc)
+	auto m = _monitor;
+	if (isPrimary)
 	{
-		mon.x = rect.x;
-		mon.y = rect.y;
+		m.x = 0;
+		m.y = 0;
 	}
+	return m;
+}
 
-	const auto orient = orientation();
-	mon.attributes.orientation = sdl::utils::orientaion_to_rdp(orient);
-
-	auto primary = SDL_GetPrimaryDisplay();
-	mon.is_primary = isPrimary || (SDL_GetWindowID(_window) == primary);
-	mon.orig_screen = did;
-	if (mon.is_primary)
-	{
-		mon.x = 0;
-		mon.y = 0;
-	}
-	return mon;
+void SdlWindow::setMonitor(rdpMonitor monitor)
+{
+	_monitor = monitor;
 }
 
 float SdlWindow::scale() const
@@ -212,8 +208,18 @@ void SdlWindow::resizeable(bool use)
 	std::ignore = SDL_SyncWindow(_window);
 }
 
-void SdlWindow::fullscreen(bool enter)
+void SdlWindow::fullscreen(bool enter, bool forceOriginalDisplay)
 {
+	if (enter && forceOriginalDisplay && _displayID != 0)
+	{
+		/* Move the window to the desired display. We should not wait
+		 * for the window to be moved, because some backends can refuse
+		 * the move. The intent of moving the window is enough for SDL
+		 * to decide which display will be used for fullscreen. */
+		SDL_Rect rect = {};
+		std::ignore = SDL_GetDisplayBounds(_displayID, &rect);
+		std::ignore = SDL_SetWindowPosition(_window, rect.x, rect.y);
+	}
 	std::ignore = SDL_SetWindowFullscreen(_window, enter);
 	std::ignore = SDL_SyncWindow(_window);
 }
@@ -224,9 +230,64 @@ void SdlWindow::minimize()
 	std::ignore = SDL_SyncWindow(_window);
 }
 
+bool SdlWindow::resizeToScale()
+{
+	if (!_window || _initialW <= 0 || _initialH <= 0)
+		return false;
+	if ((SDL_GetWindowFlags(_window) & SDL_WINDOW_FULLSCREEN) != 0)
+		return true;
+
+	float pd = SDL_GetWindowPixelDensity(_window);
+	if (pd <= 0.0f)
+		pd = 1.0f;
+
+	const int targetW = static_cast<int>(std::ceil(static_cast<float>(_initialW) / pd));
+	const int targetH = static_cast<int>(std::ceil(static_cast<float>(_initialH) / pd));
+
+	int curW = 0;
+	int curH = 0;
+	if (!SDL_GetWindowSize(_window, &curW, &curH))
+		return false;
+
+	if (curW == targetW && curH == targetH)
+		return true;
+
+	return resize({ targetW, targetH });
+}
+
 bool SdlWindow::resize(const SDL_Point& size)
 {
 	return SDL_SetWindowSize(_window, size.x, size.y);
+}
+
+void SdlWindow::ensureRenderTarget()
+{
+	if (!_renderer)
+		return;
+
+	int w = 0;
+	int h = 0;
+	SDL_GetWindowSizeInPixels(_window, &w, &h);
+	if (w <= 0 || h <= 0)
+		return;
+
+	/* Recreate if missing or if window size changed */
+	if (_renderTarget)
+	{
+		float tw = 0;
+		float th = 0;
+		if (!SDL_GetTextureSize(_renderTarget, &tw, &th))
+			return;
+		if (static_cast<int>(tw) == w && static_cast<int>(th) == h)
+			return;
+		SDL_DestroyTexture(_renderTarget);
+	}
+
+	_renderTarget =
+	    SDL_CreateTexture(_renderer, SDL_PIXELFORMAT_BGRA32, SDL_TEXTUREACCESS_TARGET, w, h);
+	if (!_renderTarget)
+		SDL_LogError(SDL_LOG_CATEGORY_RENDER, "SDL_CreateTexture (render target): %s",
+		             SDL_GetError());
 }
 
 bool SdlWindow::drawRect(SDL_Surface* surface, SDL_Point offset, const SDL_Rect& srcRect)
@@ -279,28 +340,198 @@ bool SdlWindow::drawScaledRects(SDL_Surface* surface, const SDL_FPoint& scale,
 
 bool SdlWindow::fill(Uint8 r, Uint8 g, Uint8 b, Uint8 a)
 {
-	auto surface = SDL_GetWindowSurface(_window);
+	if (_renderer)
+	{
+		ensureRenderTarget();
+		if (!SDL_SetRenderTarget(_renderer, _renderTarget))
+			return false;
+		if (!SDL_SetRenderDrawColor(_renderer, r, g, b, a))
+			return false;
+		return SDL_RenderClear(_renderer);
+	}
+	return fill(_window, r, g, b, a);
+}
+
+bool SdlWindow::fill(SDL_Window* window, Uint8 r, Uint8 g, Uint8 b, Uint8 a)
+{
+	auto surface = SDL_GetWindowSurface(window);
 	if (!surface)
 		return false;
 	SDL_Rect rect = { 0, 0, surface->w, surface->h };
 	auto color = SDL_MapSurfaceRGBA(surface, r, g, b, a);
 
-	SDL_FillSurfaceRect(surface, &rect, color);
-	return true;
+	return SDL_FillSurfaceRect(surface, &rect, color);
+}
+
+rdpMonitor SdlWindow::query(SDL_Window* window, SDL_DisplayID id, bool forceAsPrimary)
+{
+	if (!window)
+		return {};
+
+	const auto& r = rect(window, forceAsPrimary);
+	const float factor = SDL_GetWindowDisplayScale(window);
+	const float dpi = std::roundf(factor * 100.0f);
+
+	WINPR_ASSERT(r.w > 0);
+	WINPR_ASSERT(r.h > 0);
+
+	const auto primary = SDL_GetPrimaryDisplay();
+	const auto orientation = SDL_GetCurrentDisplayOrientation(id);
+	const auto rdp_orientation = sdl::utils::orientaion_to_rdp(orientation);
+
+	rdpMonitor monitor{};
+	monitor.orig_screen = id;
+	monitor.x = r.x;
+	monitor.y = r.y;
+	monitor.width = r.w;
+	monitor.height = r.h;
+	monitor.is_primary = forceAsPrimary || (id == primary);
+	monitor.attributes.desktopScaleFactor = static_cast<UINT32>(dpi);
+	monitor.attributes.deviceScaleFactor = 100;
+	monitor.attributes.orientation = rdp_orientation;
+	monitor.attributes.physicalWidth = WINPR_ASSERTING_INT_CAST(uint32_t, r.w);
+	monitor.attributes.physicalHeight = WINPR_ASSERTING_INT_CAST(uint32_t, r.h);
+
+	const auto cat = SDL_LOG_CATEGORY_APPLICATION;
+	SDL_LogDebug(cat, "monitor.orig_screen                   %" PRIu32, monitor.orig_screen);
+	SDL_LogDebug(cat, "monitor.x                             %" PRId32, monitor.x);
+	SDL_LogDebug(cat, "monitor.y                             %" PRId32, monitor.y);
+	SDL_LogDebug(cat, "monitor.width                         %" PRId32, monitor.width);
+	SDL_LogDebug(cat, "monitor.height                        %" PRId32, monitor.height);
+	SDL_LogDebug(cat, "monitor.is_primary                    %" PRIu32, monitor.is_primary);
+	SDL_LogDebug(cat, "monitor.attributes.desktopScaleFactor %" PRIu32,
+	             monitor.attributes.desktopScaleFactor);
+	SDL_LogDebug(cat, "monitor.attributes.deviceScaleFactor  %" PRIu32,
+	             monitor.attributes.deviceScaleFactor);
+	SDL_LogDebug(cat, "monitor.attributes.orientation        %s",
+	             freerdp_desktop_rotation_flags_to_string(monitor.attributes.orientation));
+	SDL_LogDebug(cat, "monitor.attributes.physicalWidth      %" PRIu32,
+	             monitor.attributes.physicalWidth);
+	SDL_LogDebug(cat, "monitor.attributes.physicalHeight     %" PRIu32,
+	             monitor.attributes.physicalHeight);
+	return monitor;
+}
+
+SDL_Rect SdlWindow::rect(SDL_Window* window, bool forceAsPrimary)
+{
+	SDL_Rect rect = {};
+	if (!window)
+		return {};
+
+	if (!forceAsPrimary)
+	{
+		if (!SDL_GetWindowPosition(window, &rect.x, &rect.y))
+			return {};
+	}
+
+	if (!SDL_GetWindowSizeInPixels(window, &rect.w, &rect.h))
+		return {};
+
+	const auto flags = SDL_GetWindowFlags(window);
+	const auto mask = SDL_WINDOW_FULLSCREEN;
+	const auto fs = (flags & mask) == mask;
+	if (tryFallback(fs))
+	{
+		/* On wlroots compositors (Sway, river, etc.), windows that are hidden/unmapped
+		 * don't get their actual display dimensions. The dummy window returns its creation size
+		 * (64x64) instead of the display size. This causes validation errors since we require >=
+		 * 200px. Workaround: If we got dimensions that are too small, query the display directly.
+		 */
+
+		const auto displayID = SDL_GetDisplayForWindow(window);
+		SDL_Rect displayBounds = {};
+		if (SDL_GetDisplayBounds(displayID, &displayBounds))
+		{
+			if (forceAsPrimary)
+			{
+				rect.x = 0;
+				rect.y = 0;
+			}
+			rect.w = displayBounds.w;
+			rect.h = displayBounds.h;
+
+			const float contentScale = SDL_GetDisplayContentScale(displayID);
+			if (contentScale > 1.0f)
+			{
+				const auto fw = static_cast<float>(rect.w);
+				const auto fh = static_cast<float>(rect.h);
+				rect.w = static_cast<int>(std::roundf(fw * contentScale));
+				rect.h = static_cast<int>(std::roundf(fh * contentScale));
+			}
+		}
+	}
+
+	return rect;
+}
+
+SdlWindow::HighDPIMode SdlWindow::isHighDPIWindowsMode(SDL_Window* window)
+{
+	if (!window)
+		return MODE_INVALID;
+
+	const auto id = SDL_GetDisplayForWindow(window);
+	if (id == 0)
+		return MODE_INVALID;
+
+	const auto cs = SDL_GetDisplayContentScale(id);
+	const auto ds = SDL_GetWindowDisplayScale(window);
+	const auto pd = SDL_GetWindowPixelDensity(window);
+
+	/* mac os x style, but no HighDPI display */
+	if ((cs == 1.0f) && (ds == 1.0f) && (pd == 1.0f))
+		return MODE_NONE;
+
+	/* mac os x style HighDPI */
+	if ((cs == 1.0f) && (ds > 1.0f) && (pd > 1.0f))
+		return MODE_MACOS;
+
+	/* rest is windows style */
+	return MODE_WINDOWS;
 }
 
 bool SdlWindow::blit(SDL_Surface* surface, const SDL_Rect& srcRect, SDL_Rect& dstRect)
 {
-	auto screen = SDL_GetWindowSurface(_window);
-	if (!screen || !surface)
+	if (!_renderer || !surface)
 		return false;
-	if (!SDL_SetSurfaceClipRect(surface, &srcRect))
-		return true;
-	if (!SDL_SetSurfaceClipRect(screen, &dstRect))
-		return true;
-	if (!SDL_BlitSurfaceScaled(surface, &srcRect, screen, &dstRect, SDL_SCALEMODE_LINEAR))
+
+	/* Lazily create or recreate the persistent GDI texture */
+	if (!_gdiTexture || _gdiTextureW != surface->w || _gdiTextureH != surface->h)
 	{
-		SDL_LogError(SDL_LOG_CATEGORY_RENDER, "SDL_BlitScaled: %s", SDL_GetError());
+		if (_gdiTexture)
+			SDL_DestroyTexture(_gdiTexture);
+		_gdiTexture = SDL_CreateTexture(_renderer, surface->format, SDL_TEXTUREACCESS_STREAMING,
+		                                surface->w, surface->h);
+		if (!_gdiTexture)
+		{
+			SDL_LogError(SDL_LOG_CATEGORY_RENDER, "SDL_CreateTexture: %s", SDL_GetError());
+			return false;
+		}
+		_gdiTextureW = surface->w;
+		_gdiTextureH = surface->h;
+	}
+
+	/* Upload only the dirty region */
+	const auto* details = SDL_GetPixelFormatDetails(surface->format);
+	const int bpp = details ? details->bytes_per_pixel : 4;
+	const auto* pixels = static_cast<const uint8_t*>(surface->pixels) +
+	                     (1ll * srcRect.y * surface->pitch) + (1ll * srcRect.x * bpp);
+	if (!SDL_UpdateTexture(_gdiTexture, &srcRect, pixels, surface->pitch))
+	{
+		SDL_LogError(SDL_LOG_CATEGORY_RENDER, "SDL_UpdateTexture: %s", SDL_GetError());
+		return false;
+	}
+
+	/* Render onto persistent render target to accumulate dirty rects */
+	if (!SDL_SetRenderTarget(_renderer, _renderTarget))
+		return false;
+
+	SDL_FRect fsrc = { static_cast<float>(srcRect.x), static_cast<float>(srcRect.y),
+		               static_cast<float>(srcRect.w), static_cast<float>(srcRect.h) };
+	SDL_FRect fdst = { static_cast<float>(dstRect.x), static_cast<float>(dstRect.y),
+		               static_cast<float>(dstRect.w), static_cast<float>(dstRect.h) };
+	if (!SDL_RenderTexture(_renderer, _gdiTexture, &fsrc, &fdst))
+	{
+		SDL_LogError(SDL_LOG_CATEGORY_RENDER, "SDL_RenderTexture: %s", SDL_GetError());
 		return false;
 	}
 	return true;
@@ -308,39 +539,166 @@ bool SdlWindow::blit(SDL_Surface* surface, const SDL_Rect& srcRect, SDL_Rect& ds
 
 void SdlWindow::updateSurface()
 {
-	SDL_UpdateWindowSurface(_window);
+	if (!_renderer)
+		return;
+
+	ensureRenderTarget();
+
+	/* Copy accumulated render target to screen and present */
+	if (!SDL_SetRenderTarget(_renderer, nullptr))
+		return;
+	if (!SDL_RenderTexture(_renderer, _renderTarget, nullptr, nullptr))
+		return;
+	if (!SDL_RenderPresent(_renderer))
+		return;
 }
 
 SdlWindow SdlWindow::create(SDL_DisplayID id, const std::string& title, Uint32 flags, Uint32 width,
                             Uint32 height)
 {
 	flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
-	auto startupX = static_cast<int>(SDL_WINDOWPOS_CENTERED_DISPLAY(id));
-	auto startupY = static_cast<int>(SDL_WINDOWPOS_CENTERED_DISPLAY(id));
+
+	SDL_Rect rect = { static_cast<int>(SDL_WINDOWPOS_CENTERED_DISPLAY(id)),
+		              static_cast<int>(SDL_WINDOWPOS_CENTERED_DISPLAY(id)), static_cast<int>(width),
+		              static_cast<int>(height) };
 
 	if ((flags & SDL_WINDOW_FULLSCREEN) != 0)
 	{
-		SDL_Rect rect = {};
-		SDL_GetDisplayBounds(id, &rect);
-		startupX = rect.x;
-		startupY = rect.y;
-		width = static_cast<Uint32>(rect.w);
-		height = static_cast<Uint32>(rect.h);
+		std::ignore = SDL_GetDisplayBounds(id, &rect);
 	}
 
-	std::stringstream ss;
-	ss << title << ":" << id;
-	SdlWindow window{
-		ss.str(), startupX, startupY, static_cast<int>(width), static_cast<int>(height), flags
-	};
+	SdlWindow window{ id, title, rect, flags };
 
-	if ((flags & (SDL_WINDOW_FULLSCREEN)) != 0)
+	if ((flags & SDL_WINDOW_FULLSCREEN) != 0)
 	{
-		SDL_Rect rect = {};
-		SDL_GetDisplayBounds(id, &rect);
 		window.setOffsetX(rect.x);
 		window.setOffsetY(rect.y);
 	}
 
 	return window;
+}
+
+static SDL_Window* createDummy(SDL_DisplayID id)
+{
+	const auto x = SDL_WINDOWPOS_CENTERED_DISPLAY(id);
+	const auto y = SDL_WINDOWPOS_CENTERED_DISPLAY(id);
+	const int w = 64;
+	const int h = 64;
+
+	auto props = SDL_CreateProperties();
+	std::stringstream ss;
+	ss << "SdlWindow::query(" << id << ")";
+	SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, ss.str().c_str());
+	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, x);
+	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, y);
+	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, w);
+	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, h);
+
+	SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
+	SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, false);
+	SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN, true);
+	SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, false);
+
+	auto window = SDL_CreateWindowWithProperties(props);
+	SDL_DestroyProperties(props);
+
+	/* Workaround: we need to properly position the window on the correct monitor
+	 * before going fullscreen. Otherwise we will get the primary monitor details.
+	 */
+	if (window)
+	{
+		SDL_Rect rect = {};
+		std::ignore = SDL_GetDisplayBounds(id, &rect);
+		std::ignore = SDL_SetWindowPosition(window, rect.x, rect.y);
+		std::ignore = SDL_SetWindowFullscreen(window, true);
+	}
+	return window;
+}
+
+rdpMonitor SdlWindow::query(SDL_DisplayID id, bool forceAsPrimary)
+{
+	std::unique_ptr<SDL_Window, void (*)(SDL_Window*)> window(createDummy(id), SDL_DestroyWindow);
+	if (!window)
+		return {};
+
+	std::unique_ptr<SDL_Renderer, void (*)(SDL_Renderer*)> renderer(
+	    SDL_CreateRenderer(window.get(), nullptr), SDL_DestroyRenderer);
+
+	if (!SDL_SyncWindow(window.get()))
+		return {};
+
+	SDL_Event event{};
+	while (SDL_PollEvent(&event))
+		;
+
+	return query(window.get(), id, forceAsPrimary);
+}
+
+SDL_Rect SdlWindow::rect(SDL_DisplayID id, bool forceAsPrimary)
+{
+	std::unique_ptr<SDL_Window, void (*)(SDL_Window*)> window(createDummy(id), SDL_DestroyWindow);
+	if (!window)
+		return {};
+
+	std::unique_ptr<SDL_Renderer, void (*)(SDL_Renderer*)> renderer(
+	    SDL_CreateRenderer(window.get(), nullptr), SDL_DestroyRenderer);
+
+	if (!SDL_SyncWindow(window.get()))
+		return {};
+
+	SDL_Event event{};
+	while (SDL_PollEvent(&event))
+		;
+
+	return rect(window.get(), forceAsPrimary);
+}
+
+bool SdlWindow::tryFallback(bool isFullscreen)
+{
+	/* If we define a custom env variable to use the wlroots hack
+	 * then enable/disable according to this setting only.
+	 */
+	const auto wlroots_hack = SDL_getenv("FREERDP_WLROOTS_HACK");
+	if (wlroots_hack != nullptr)
+	{
+		const auto enabled = strcmp(wlroots_hack, "0") != 0;
+		if (strcmp(wlroots_hack, "force") == 0)
+			isFullscreen = true;
+		return enabled && isFullscreen;
+	}
+
+	const auto platform = SDL_GetPlatform();
+	if ((platform == nullptr) || (strcmp(platform, "Linux") != 0))
+		return false;
+
+	const auto driver = SDL_GetCurrentVideoDriver();
+	if ((driver == nullptr) || (strcmp(driver, "wayland") != 0))
+		return false;
+
+	/* Check XDG_SESSION_DESKTOP and XDG_CURRENT_DESKTOP for wlroots-based
+	 * compositors. The original check only matched Sway, but other wlroots
+	 * compositors (Hyprland, river, etc.) have the same dummy-window sizing
+	 * behavior where hidden/unmapped windows return 64x64 instead of the
+	 * display size. Use strstr for substring matching since XDG_CURRENT_DESKTOP
+	 * can be a colon-separated list (e.g. "sway:wlroots", "Hyprland").
+	 */
+	auto isWlrootsCompositor = [](const char* value) -> bool
+	{
+		if (!value)
+			return false;
+		if (strstr(value, "sway") || strstr(value, "Sway") || strstr(value, "Hyprland") ||
+		    strstr(value, "hyprland") || strstr(value, "river") || strstr(value, "wlroots"))
+			return true;
+		return false;
+	};
+
+	const auto xdg_session = SDL_getenv("XDG_SESSION_DESKTOP");
+	if (isWlrootsCompositor(xdg_session))
+		return isFullscreen;
+
+	const auto xdg_desktop = SDL_getenv("XDG_CURRENT_DESKTOP");
+	if (isWlrootsCompositor(xdg_desktop))
+		return isFullscreen;
+
+	return false;
 }

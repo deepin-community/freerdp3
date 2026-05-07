@@ -125,7 +125,7 @@ static inline pstatus_t general_ChromaV1ToYUV444(const BYTE* WINPR_RESTRICT pSrc
 	for (size_t y = 0; y < padHeigth; y++)
 	{
 		const BYTE* Ya = pSrc[0] + y * srcStep[0];
-		BYTE* pX = NULL;
+		BYTE* pX = nullptr;
 
 		if ((y) % mod < (mod + 1) / 2)
 		{
@@ -657,7 +657,7 @@ static inline void BGRX_fillYUV(size_t offset, const BYTE* WINPR_RESTRICT pRGB[2
 			BYTE G = 0;
 			BYTE R = 0;
 			const UINT32 color = FreeRDPReadColor(&pRGB[i][(offset + j) * bpp], SrcFormat);
-			FreeRDPSplitColor(color, SrcFormat, &R, &G, &B, NULL, NULL);
+			FreeRDPSplitColor(color, SrcFormat, &R, &G, &B, nullptr, nullptr);
 			pY[i][offset + j] = RGB2Y(R, G, B);
 			pU[i][offset + j] = RGB2U(R, G, B);
 			pV[i][offset + j] = RGB2V(R, G, B);
@@ -689,7 +689,7 @@ static inline void BGRX_fillYUV_single(size_t offset, const BYTE* WINPR_RESTRICT
 		BYTE G = 0;
 		BYTE R = 0;
 		const UINT32 color = FreeRDPReadColor(&pRGB[(offset + j) * bpp], SrcFormat);
-		FreeRDPSplitColor(color, SrcFormat, &R, &G, &B, NULL, NULL);
+		FreeRDPSplitColor(color, SrcFormat, &R, &G, &B, nullptr, nullptr);
 		pY[offset + j] = RGB2Y(R, G, B);
 		pU[offset + j] = RGB2U(R, G, B);
 		pV[offset + j] = RGB2V(R, G, B);
@@ -774,7 +774,7 @@ static inline void fillYUV(size_t offset, const BYTE* WINPR_RESTRICT pRGB[2], UI
 			BYTE G = 0;
 			BYTE R = 0;
 			const UINT32 color = FreeRDPReadColor(&pRGB[i][(offset + j) * bpp], SrcFormat);
-			FreeRDPSplitColor(color, SrcFormat, &R, &G, &B, NULL, NULL);
+			FreeRDPSplitColor(color, SrcFormat, &R, &G, &B, nullptr, nullptr);
 			const BYTE y = RGB2Y(R, G, B);
 			const BYTE u = RGB2U(R, G, B);
 			const BYTE v = RGB2V(R, G, B);
@@ -810,7 +810,7 @@ static inline void fillYUV_single(size_t offset, const BYTE* WINPR_RESTRICT pRGB
 		BYTE G = 0;
 		BYTE R = 0;
 		const UINT32 color = FreeRDPReadColor(&pRGB[(offset + j) * bpp], SrcFormat);
-		FreeRDPSplitColor(color, SrcFormat, &R, &G, &B, NULL, NULL);
+		FreeRDPSplitColor(color, SrcFormat, &R, &G, &B, nullptr, nullptr);
 		const BYTE y = RGB2Y(R, G, B);
 		const BYTE u = RGB2U(R, G, B);
 		const BYTE v = RGB2V(R, G, B);
@@ -889,6 +889,73 @@ static pstatus_t general_RGBToYUV444_8u_P3AC4R(const BYTE* WINPR_RESTRICT pSrc, 
 			return general_RGBToYUV444_8u_P3AC4R_BGRX(pSrc, srcStep, pDst, dstStep, roi);
 		default:
 			return general_RGBToYUV444_8u_P3AC4R_RGB(pSrc, SrcFormat, srcStep, pDst, dstStep, roi);
+	}
+}
+
+static inline void fillI444_single(size_t offset, const BYTE* WINPR_RESTRICT pRGB, UINT32 SrcFormat,
+                                   BYTE* WINPR_RESTRICT pY, BYTE* WINPR_RESTRICT pU,
+                                   BYTE* WINPR_RESTRICT pV)
+{
+	WINPR_ASSERT(pRGB);
+	WINPR_ASSERT(pY);
+	WINPR_ASSERT(pU);
+	WINPR_ASSERT(pV);
+
+	const UINT32 bpp = FreeRDPGetBytesPerPixel(SrcFormat);
+
+	BYTE B = 0;
+	BYTE G = 0;
+	BYTE R = 0;
+	const UINT32 color = FreeRDPReadColor(&pRGB[offset * bpp], SrcFormat);
+	FreeRDPSplitColor(color, SrcFormat, &R, &G, &B, nullptr, nullptr);
+	const BYTE y = RGB2Y(R, G, B);
+	const BYTE u = RGB2U(R, G, B);
+	const BYTE v = RGB2V(R, G, B);
+	pY[offset] = y;
+	pU[offset] = u;
+	pV[offset] = v;
+}
+
+static inline void general_RGBToI444_SINGLE_ROW(const BYTE* WINPR_RESTRICT pRGB, UINT32 SrcFormat,
+                                                BYTE* WINPR_RESTRICT pY, BYTE* WINPR_RESTRICT pU,
+                                                BYTE* WINPR_RESTRICT pV, UINT32 nWidth)
+{
+	for (size_t x = 0; x < nWidth; x++)
+	{
+		fillI444_single(x, pRGB, SrcFormat, pY, pU, pV);
+	}
+}
+
+static inline pstatus_t general_RGBToI444_8u_RGB(const BYTE* WINPR_RESTRICT pSrc, UINT32 SrcFormat,
+                                                 const UINT32 srcStep, BYTE* WINPR_RESTRICT pDst[3],
+                                                 const UINT32 dstStep[3],
+                                                 const prim_size_t* WINPR_RESTRICT roi)
+{
+	const UINT32 nWidth = roi->width;
+	const UINT32 nHeight = roi->height;
+
+	for (size_t y = 0; y < nHeight; y++)
+	{
+		const BYTE* pRGB = pSrc + y * srcStep;
+		BYTE* pY = &pDst[0][y * dstStep[0]];
+		BYTE* pU = &pDst[1][y * dstStep[1]];
+		BYTE* pV = &pDst[2][y * dstStep[2]];
+
+		general_RGBToI444_SINGLE_ROW(pRGB, SrcFormat, pY, pU, pV, nWidth);
+	}
+
+	return PRIMITIVES_SUCCESS;
+}
+
+static pstatus_t general_RGBToI444_8u(const BYTE* WINPR_RESTRICT pSrc, UINT32 SrcFormat,
+                                      const UINT32 srcStep, BYTE* WINPR_RESTRICT pDst[3],
+                                      const UINT32 dstStep[3],
+                                      const prim_size_t* WINPR_RESTRICT roi)
+{
+	switch (SrcFormat)
+	{
+		default:
+			return general_RGBToI444_8u_RGB(pSrc, SrcFormat, srcStep, pDst, dstStep, roi);
 	}
 }
 
@@ -1163,7 +1230,7 @@ static inline pstatus_t general_RGBToYUV420_ANY(const BYTE* WINPR_RESTRICT pSrc,
 			UINT32 color = 0;
 			/* row 1, pixel 1 */
 			color = FreeRDPReadColor(src + x1, srcFormat);
-			FreeRDPSplitColor(color, srcFormat, &R, &G, &B, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &R, &G, &B, nullptr, nullptr);
 			Ra = R;
 			Ga = G;
 			Ba = B;
@@ -1173,7 +1240,7 @@ static inline pstatus_t general_RGBToYUV420_ANY(const BYTE* WINPR_RESTRICT pSrc,
 			{
 				/* row 1, pixel 2 */
 				color = FreeRDPReadColor(src + x2, srcFormat);
-				FreeRDPSplitColor(color, srcFormat, &R, &G, &B, NULL, NULL);
+				FreeRDPSplitColor(color, srcFormat, &R, &G, &B, nullptr, nullptr);
 				Ra += R;
 				Ga += G;
 				Ba += B;
@@ -1182,7 +1249,7 @@ static inline pstatus_t general_RGBToYUV420_ANY(const BYTE* WINPR_RESTRICT pSrc,
 
 			/* row 2, pixel 1 */
 			color = FreeRDPReadColor(src + x3, srcFormat);
-			FreeRDPSplitColor(color, srcFormat, &R, &G, &B, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &R, &G, &B, nullptr, nullptr);
 			Ra += R;
 			Ga += G;
 			Ba += B;
@@ -1192,7 +1259,7 @@ static inline pstatus_t general_RGBToYUV420_ANY(const BYTE* WINPR_RESTRICT pSrc,
 			{
 				/* row 2, pixel 2 */
 				color = FreeRDPReadColor(src + x4, srcFormat);
-				FreeRDPSplitColor(color, srcFormat, &R, &G, &B, NULL, NULL);
+				FreeRDPSplitColor(color, srcFormat, &R, &G, &B, nullptr, nullptr);
 				Ra += R;
 				Ga += G;
 				Ba += B;
@@ -1223,7 +1290,7 @@ static inline pstatus_t general_RGBToYUV420_ANY(const BYTE* WINPR_RESTRICT pSrc,
 			BYTE B = 0;
 			/* row 1, pixel 1 */
 			UINT32 color = FreeRDPReadColor(src + x1, srcFormat);
-			FreeRDPSplitColor(color, srcFormat, &R, &G, &B, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &R, &G, &B, nullptr, nullptr);
 			INT32 Ra = R;
 			INT32 Ga = G;
 			INT32 Ba = B;
@@ -1233,7 +1300,7 @@ static inline pstatus_t general_RGBToYUV420_ANY(const BYTE* WINPR_RESTRICT pSrc,
 			{
 				/* row 1, pixel 2 */
 				color = FreeRDPReadColor(src + x2, srcFormat);
-				FreeRDPSplitColor(color, srcFormat, &R, &G, &B, NULL, NULL);
+				FreeRDPSplitColor(color, srcFormat, &R, &G, &B, nullptr, nullptr);
 				Ra += R;
 				Ga += G;
 				Ba += B;
@@ -1431,8 +1498,8 @@ static inline pstatus_t general_RGBToAVC444YUV_BGRX(const BYTE* WINPR_RESTRICT p
 		BYTE* b3 = pDst1[2] + 1ULL * (y / 2) * dst1Step[2];
 		BYTE* b6 = pDst2[1] + 1ULL * (y / 2) * dst2Step[1];
 		BYTE* b7 = pDst2[2] + 1ULL * (y / 2) * dst2Step[2];
-		int_general_RGBToAVC444YUV_BGRX_DOUBLE_ROW(0, srcEven, NULL, b1Even, NULL, b2, b3, NULL,
-		                                           NULL, b6, b7, roi->width);
+		int_general_RGBToAVC444YUV_BGRX_DOUBLE_ROW(0, srcEven, nullptr, b1Even, nullptr, b2, b3,
+		                                           nullptr, nullptr, b6, b7, roi->width);
 	}
 
 	return PRIMITIVES_SUCCESS;
@@ -1566,7 +1633,7 @@ static inline pstatus_t general_RGBToAVC444YUV_RGBX(const BYTE* WINPR_RESTRICT p
 		const size_t i = y >> 1;
 		const size_t n = (i & (size_t)~7) + i;
 		BYTE* b1Even = pDst1[0] + 1ULL * y * dst1Step[0];
-		BYTE* b1Odd = !last ? (b1Even + dst1Step[0]) : NULL;
+		BYTE* b1Odd = !last ? (b1Even + dst1Step[0]) : nullptr;
 		BYTE* b2 = pDst1[1] + 1ULL * (y / 2) * dst1Step[1];
 		BYTE* b3 = pDst1[2] + 1ULL * (y / 2) * dst1Step[2];
 		BYTE* b4 = pDst2[0] + 1ULL * dst2Step[0] * n;
@@ -1584,8 +1651,8 @@ static inline pstatus_t general_RGBToAVC444YUV_RGBX(const BYTE* WINPR_RESTRICT p
 		BYTE* b3 = pDst1[2] + 1ULL * (y / 2) * dst1Step[2];
 		BYTE* b6 = pDst2[1] + 1ULL * (y / 2) * dst2Step[1];
 		BYTE* b7 = pDst2[2] + 1ULL * (y / 2) * dst2Step[2];
-		general_RGBToAVC444YUV_RGBX_DOUBLE_ROW(srcEven, NULL, b1Even, NULL, b2, b3, NULL, NULL, b6,
-		                                       b7, roi->width);
+		general_RGBToAVC444YUV_RGBX_DOUBLE_ROW(srcEven, nullptr, b1Even, nullptr, b2, b3, nullptr,
+		                                       nullptr, b6, b7, roi->width);
 	}
 	return PRIMITIVES_SUCCESS;
 }
@@ -1619,7 +1686,7 @@ static inline void general_RGBToAVC444YUV_ANY_DOUBLE_ROW(
 			BYTE b = 0;
 			const UINT32 color = FreeRDPReadColor(srcEven, srcFormat);
 			srcEven += bpp;
-			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, nullptr, nullptr);
 			Y1e = Y2e = Y1o = Y2o = RGB2Y(r, g, b);
 			U1e = U2e = U1o = U2o = RGB2U(r, g, b);
 			V1e = V2e = V1o = V2o = RGB2V(r, g, b);
@@ -1632,7 +1699,7 @@ static inline void general_RGBToAVC444YUV_ANY_DOUBLE_ROW(
 			BYTE b = 0;
 			const UINT32 color = FreeRDPReadColor(srcEven, srcFormat);
 			srcEven += bpp;
-			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, nullptr, nullptr);
 			Y2e = RGB2Y(r, g, b);
 			U2e = RGB2U(r, g, b);
 			V2e = RGB2V(r, g, b);
@@ -1645,7 +1712,7 @@ static inline void general_RGBToAVC444YUV_ANY_DOUBLE_ROW(
 			BYTE b = 0;
 			const UINT32 color = FreeRDPReadColor(srcOdd, srcFormat);
 			srcOdd += bpp;
-			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, nullptr, nullptr);
 			Y1o = Y2o = RGB2Y(r, g, b);
 			U1o = U2o = RGB2U(r, g, b);
 			V1o = V2o = RGB2V(r, g, b);
@@ -1658,7 +1725,7 @@ static inline void general_RGBToAVC444YUV_ANY_DOUBLE_ROW(
 			BYTE b = 0;
 			const UINT32 color = FreeRDPReadColor(srcOdd, srcFormat);
 			srcOdd += bpp;
-			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, nullptr, nullptr);
 			Y2o = RGB2Y(r, g, b);
 			U2o = RGB2U(r, g, b);
 			V2o = RGB2V(r, g, b);
@@ -1782,7 +1849,7 @@ general_RGBToAVC444YUV_ANY(const BYTE* WINPR_RESTRICT pSrc, UINT32 srcFormat, UI
 		const UINT32 i = (UINT32)y >> 1;
 		const UINT32 n = (i & (uint32_t)~7) + i;
 		BYTE* b1Even = pDst1[0] + y * dst1Step[0];
-		BYTE* b1Odd = !last ? (b1Even + dst1Step[0]) : NULL;
+		BYTE* b1Odd = !last ? (b1Even + dst1Step[0]) : nullptr;
 		BYTE* b2 = pDst1[1] + (y / 2) * dst1Step[1];
 		BYTE* b3 = pDst1[2] + (y / 2) * dst1Step[2];
 		BYTE* b4 = pDst2[0] + 1ULL * dst2Step[0] * n;
@@ -1871,7 +1938,7 @@ static inline void general_RGBToAVC444YUVv2_ANY_DOUBLE_ROW(
 			BYTE r = 0;
 			const UINT32 color = FreeRDPReadColor(srcEven, srcFormat);
 			srcEven += bpp;
-			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, nullptr, nullptr);
 			Ya = RGB2Y(r, g, b);
 			Ua = RGB2U(r, g, b);
 			Va = RGB2V(r, g, b);
@@ -1884,7 +1951,7 @@ static inline void general_RGBToAVC444YUVv2_ANY_DOUBLE_ROW(
 			BYTE r = 0;
 			const UINT32 color = FreeRDPReadColor(srcEven, srcFormat);
 			srcEven += bpp;
-			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, nullptr, nullptr);
 			Yb = RGB2Y(r, g, b);
 			Ub = RGB2U(r, g, b);
 			Vb = RGB2V(r, g, b);
@@ -1903,7 +1970,7 @@ static inline void general_RGBToAVC444YUVv2_ANY_DOUBLE_ROW(
 			BYTE r = 0;
 			const UINT32 color = FreeRDPReadColor(srcOdd, srcFormat);
 			srcOdd += bpp;
-			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, nullptr, nullptr);
 			Yc = RGB2Y(r, g, b);
 			Uc = RGB2U(r, g, b);
 			Vc = RGB2V(r, g, b);
@@ -1922,7 +1989,7 @@ static inline void general_RGBToAVC444YUVv2_ANY_DOUBLE_ROW(
 			BYTE r = 0;
 			const UINT32 color = FreeRDPReadColor(srcOdd, srcFormat);
 			srcOdd += bpp;
-			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, NULL, NULL);
+			FreeRDPSplitColor(color, srcFormat, &r, &g, &b, nullptr, nullptr);
 			Yd = RGB2Y(r, g, b);
 			Ud = RGB2U(r, g, b);
 			Vd = RGB2V(r, g, b);
@@ -2045,7 +2112,7 @@ general_RGBToAVC444YUVv2_ANY(const BYTE* WINPR_RESTRICT pSrc, UINT32 srcFormat, 
 	for (; y < roi->height - roi->height % 2; y += 2)
 	{
 		const BYTE* srcEven = (pSrc + y * srcStep);
-		const BYTE* srcOdd = (y < roi->height - 1) ? (srcEven + srcStep) : NULL;
+		const BYTE* srcOdd = (y < roi->height - 1) ? (srcEven + srcStep) : nullptr;
 		BYTE* dstLumaYEven = (pDst1[0] + y * dst1Step[0]);
 		BYTE* dstLumaYOdd = (dstLumaYEven + dst1Step[0]);
 		BYTE* dstLumaU = (pDst1[1] + (y / 2) * dst1Step[1]);
@@ -2072,8 +2139,8 @@ general_RGBToAVC444YUVv2_ANY(const BYTE* WINPR_RESTRICT pSrc, UINT32 srcFormat, 
 		BYTE* dstEvenChromaY1 = (pDst2[0] + y * dst2Step[0]);
 		BYTE* dstEvenChromaY2 = dstEvenChromaY1 + roi->width / 2;
 		general_RGBToAVC444YUVv2_ANY_DOUBLE_ROW(
-		    srcEven, NULL, srcFormat, dstLumaYEven, NULL, dstLumaU, dstLumaV, dstEvenChromaY1,
-		    dstEvenChromaY2, NULL, NULL, NULL, NULL, NULL, NULL, roi->width);
+		    srcEven, nullptr, srcFormat, dstLumaYEven, nullptr, dstLumaU, dstLumaV, dstEvenChromaY1,
+		    dstEvenChromaY2, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, roi->width);
 	}
 
 	return PRIMITIVES_SUCCESS;
@@ -2097,7 +2164,7 @@ static inline void int_general_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 	for (size_t x = offset; x < width; x += 2)
 	{
 		const BYTE* srcEven = &pSrcEven[4ULL * x];
-		const BYTE* srcOdd = pSrcOdd ? &pSrcOdd[4ULL * x] : NULL;
+		const BYTE* srcOdd = pSrcOdd ? &pSrcOdd[4ULL * x] : nullptr;
 		BYTE Ya = 0;
 		BYTE Ua = 0;
 		BYTE Va = 0;
@@ -2275,8 +2342,8 @@ static inline pstatus_t general_RGBToAVC444YUVv2_BGRX(const BYTE* WINPR_RESTRICT
 		BYTE* dstEvenChromaY1 = (pDst2[0] + y * dst2Step[0]);
 		BYTE* dstEvenChromaY2 = dstEvenChromaY1 + roi->width / 2;
 		int_general_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
-		    0, srcEven, NULL, dstLumaYEven, NULL, dstLumaU, dstLumaV, dstEvenChromaY1,
-		    dstEvenChromaY2, NULL, NULL, NULL, NULL, NULL, NULL, roi->width);
+		    0, srcEven, nullptr, dstLumaYEven, nullptr, dstLumaU, dstLumaV, dstEvenChromaY1,
+		    dstEvenChromaY2, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, roi->width);
 	}
 
 	return PRIMITIVES_SUCCESS;
@@ -2309,6 +2376,7 @@ void primitives_init_YUV(primitives_t* WINPR_RESTRICT prims)
 	prims->YUV444ToRGB_8u_P3AC4R = general_YUV444ToRGB_8u_P3AC4R;
 	prims->RGBToYUV420_8u_P3AC4R = general_RGBToYUV420_8u_P3AC4R;
 	prims->RGBToYUV444_8u_P3AC4R = general_RGBToYUV444_8u_P3AC4R;
+	prims->RGBToI444_8u = general_RGBToI444_8u;
 	prims->YUV420CombineToYUV444 = general_YUV420CombineToYUV444;
 	prims->YUV444SplitToYUV420 = general_YUV444SplitToYUV420;
 	prims->RGBToAVC444YUV = general_RGBToAVC444YUV;

@@ -86,6 +86,7 @@ struct xf_floatbar
 	Window root_window;
 	char* title;
 	XFontSet fontSet;
+	BOOL entered;
 };
 
 static xfFloatbarButton* xf_floatbar_new_button(xfFloatbar* floatbar, int type);
@@ -100,7 +101,7 @@ static BOOL xf_floatbar_button_onclick_close(xfFloatbar* floatbar)
 
 static BOOL xf_floatbar_button_onclick_minimize(xfFloatbar* floatbar)
 {
-	xfContext* xfc = NULL;
+	xfContext* xfc = nullptr;
 
 	if (!floatbar || !floatbar->xfc)
 		return FALSE;
@@ -124,7 +125,7 @@ static BOOL xf_floatbar_button_onclick_locked(xfFloatbar* floatbar)
 	if (!floatbar)
 		return FALSE;
 
-	floatbar->locked = (floatbar->locked) ? FALSE : TRUE;
+	floatbar->locked = !((floatbar->locked));
 	return xf_floatbar_hide_and_show(floatbar);
 }
 
@@ -139,7 +140,7 @@ BOOL xf_floatbar_set_root_y(xfFloatbar* floatbar, int y)
 
 BOOL xf_floatbar_hide_and_show(xfFloatbar* floatbar)
 {
-	xfContext* xfc = NULL;
+	xfContext* xfc = nullptr;
 
 	if (!floatbar || !floatbar->xfc)
 		return FALSE;
@@ -173,9 +174,9 @@ BOOL xf_floatbar_hide_and_show(xfFloatbar* floatbar)
 
 static BOOL create_floatbar(xfFloatbar* floatbar)
 {
-	xfContext* xfc = NULL;
+	xfContext* xfc = nullptr;
 	Status status = 0;
-	XWindowAttributes attr = { 0 };
+	XWindowAttributes attr = WINPR_C_ARRAY_INIT;
 
 	WINPR_ASSERT(floatbar);
 	if (floatbar->created)
@@ -199,7 +200,7 @@ static BOOL create_floatbar(xfFloatbar* floatbar)
 
 	floatbar->handle = LogDynAndXCreateWindow(
 	    xfc->log, xfc->display, floatbar->root_window, floatbar->x, 0, FLOATBAR_DEFAULT_WIDTH,
-	    FLOATBAR_HEIGHT, 0, CopyFromParent, InputOutput, CopyFromParent, 0, NULL);
+	    FLOATBAR_HEIGHT, 0, CopyFromParent, InputOutput, CopyFromParent, 0, nullptr);
 	floatbar->width = FLOATBAR_DEFAULT_WIDTH;
 	floatbar->height = FLOATBAR_HEIGHT;
 	floatbar->mode = XF_FLOATBAR_MODE_NONE;
@@ -219,7 +220,7 @@ BOOL xf_floatbar_toggle_fullscreen(xfFloatbar* floatbar, bool fullscreen)
 {
 	int size = 0;
 	bool visible = False;
-	xfContext* xfc = NULL;
+	xfContext* xfc = nullptr;
 
 	if (!floatbar || !floatbar->xfc)
 		return FALSE;
@@ -267,7 +268,7 @@ BOOL xf_floatbar_toggle_fullscreen(xfFloatbar* floatbar, bool fullscreen)
 
 xfFloatbarButton* xf_floatbar_new_button(xfFloatbar* floatbar, int type)
 {
-	xfFloatbarButton* button = NULL;
+	xfFloatbarButton* button = nullptr;
 
 	WINPR_ASSERT(floatbar);
 	WINPR_ASSERT(floatbar->xfc);
@@ -308,36 +309,36 @@ xfFloatbarButton* xf_floatbar_new_button(xfFloatbar* floatbar, int type)
 	button->handle =
 	    LogDynAndXCreateWindow(floatbar->xfc->log, floatbar->xfc->display, floatbar->handle,
 	                           button->x, 0, FLOATBAR_BUTTON_WIDTH, FLOATBAR_BUTTON_WIDTH, 0,
-	                           CopyFromParent, InputOutput, CopyFromParent, 0, NULL);
+	                           CopyFromParent, InputOutput, CopyFromParent, 0, nullptr);
 	XSelectInput(floatbar->xfc->display, button->handle,
 	             ExposureMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask |
 	                 LeaveWindowMask | EnterWindowMask | StructureNotifyMask);
 	return button;
 }
 
-xfFloatbar* xf_floatbar_new(xfContext* xfc, Window window, const char* name, DWORD flags)
+xfFloatbar* xf_floatbar_new(xfContext* xfc, Window window, const char* title, DWORD flags)
 {
 	WINPR_ASSERT(xfc);
 	WINPR_ASSERT(xfc->display);
-	WINPR_ASSERT(name);
+	WINPR_ASSERT(title);
 
 	/* Floatbar not enabled */
 	if ((flags & 0x0001) == 0)
-		return NULL;
+		return nullptr;
 
 	if (!xfc)
-		return NULL;
+		return nullptr;
 
 	/* Force disable with remote app */
 	if (xfc->remote_app)
-		return NULL;
+		return nullptr;
 
 	xfFloatbar* floatbar = (xfFloatbar*)calloc(1, sizeof(xfFloatbar));
 
 	if (!floatbar)
-		return NULL;
+		return nullptr;
 
-	floatbar->title = _strdup(name);
+	floatbar->title = _strdup(title);
 
 	if (!floatbar->title)
 		goto fail;
@@ -345,17 +346,17 @@ xfFloatbar* xf_floatbar_new(xfContext* xfc, Window window, const char* name, DWO
 	floatbar->root_window = window;
 	floatbar->flags = flags;
 	floatbar->xfc = xfc;
-	floatbar->locked = (flags & 0x0002) != 0 ? TRUE : FALSE;
+	floatbar->locked = (flags & 0x0002) != 0;
 	xf_floatbar_toggle_fullscreen(floatbar, FALSE);
 
 	{
-		char** missingList = NULL;
+		char** missingList = nullptr;
 		int missingCount = 0;
-		char* defString = NULL;
+		char* defString = nullptr;
 		floatbar->fontSet = XCreateFontSet(floatbar->xfc->display, "-*-*-*-*-*-*-*-*-*-*-*-*-*-*",
 		                                   &missingList, &missingCount, &defString);
 
-		if (floatbar->fontSet == NULL)
+		if (floatbar->fontSet == nullptr)
 		{
 			WLog_ERR(TAG, "Failed to create fontset");
 		}
@@ -367,7 +368,7 @@ fail:
 	WINPR_PRAGMA_DIAG_IGNORED_MISMATCHED_DEALLOC
 	xf_floatbar_free(floatbar);
 	WINPR_PRAGMA_DIAG_POP
-	return NULL;
+	return nullptr;
 }
 
 static unsigned long xf_floatbar_get_color(xfFloatbar* floatbar, char* rgb_value)
@@ -388,11 +389,11 @@ static unsigned long xf_floatbar_get_color(xfFloatbar* floatbar, char* rgb_value
 
 static void xf_floatbar_event_expose(xfFloatbar* floatbar)
 {
-	GC gc = NULL;
-	GC shape_gc = NULL;
+	GC gc = nullptr;
+	GC shape_gc = nullptr;
 	Pixmap pmap = 0;
-	XPoint shape[5] = { 0 };
-	XPoint border[5] = { 0 };
+	XPoint shape[5] = WINPR_C_ARRAY_INIT;
+	XPoint border[5] = WINPR_C_ARRAY_INIT;
 
 	WINPR_ASSERT(floatbar);
 	WINPR_ASSERT(floatbar->xfc);
@@ -452,7 +453,7 @@ static void xf_floatbar_event_expose(xfFloatbar* floatbar)
 
 	WINPR_ASSERT(len <= INT32_MAX / 2);
 	const int fx = floatbar->width / 2 - (int)len * 2;
-	if (floatbar->fontSet != NULL)
+	if (floatbar->fontSet != nullptr)
 	{
 		XmbDrawString(display, floatbar->handle, floatbar->fontSet, gc, fx, 15, floatbar->title,
 		              (int)len);
@@ -479,12 +480,12 @@ static xfFloatbarButton* xf_floatbar_get_button(xfFloatbar* floatbar, Window win
 		}
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 static void xf_floatbar_button_update_positon(xfFloatbar* floatbar)
 {
-	xfFloatbarButton* button = NULL;
+	xfFloatbarButton* button = nullptr;
 	WINPR_ASSERT(floatbar);
 	xfContext* xfc = floatbar->xfc;
 	const size_t size = ARRAYSIZE(floatbar->buttons);
@@ -525,7 +526,7 @@ static void xf_floatbar_button_event_expose(xfFloatbar* floatbar, Window window)
 {
 	xfFloatbarButton* button = xf_floatbar_get_button(floatbar, window);
 	static unsigned char* bits;
-	GC gc = NULL;
+	GC gc = nullptr;
 	Pixmap pattern = 0;
 	xfContext* xfc = floatbar->xfc;
 
@@ -595,7 +596,7 @@ static void xf_floatbar_button_event_buttonpress(xfFloatbar* floatbar, const XBu
 
 static void xf_floatbar_button_event_buttonrelease(xfFloatbar* floatbar, const XButtonEvent* event)
 {
-	xfFloatbarButton* button = NULL;
+	xfFloatbarButton* button = nullptr;
 
 	WINPR_ASSERT(floatbar);
 	WINPR_ASSERT(event);
@@ -750,7 +751,7 @@ static void xf_floatbar_event_motionnotify(xfFloatbar* floatbar, const XMotionEv
 
 static void xf_floatbar_button_event_focusin(xfFloatbar* floatbar, const XAnyEvent* event)
 {
-	xfFloatbarButton* button = NULL;
+	xfFloatbarButton* button = nullptr;
 
 	WINPR_ASSERT(floatbar);
 	WINPR_ASSERT(event);
@@ -766,7 +767,7 @@ static void xf_floatbar_button_event_focusin(xfFloatbar* floatbar, const XAnyEve
 
 static void xf_floatbar_button_event_focusout(xfFloatbar* floatbar, const XAnyEvent* event)
 {
-	xfFloatbarButton* button = NULL;
+	xfFloatbarButton* button = nullptr;
 
 	WINPR_ASSERT(floatbar);
 	WINPR_ASSERT(event);
@@ -857,6 +858,8 @@ BOOL xf_floatbar_event_process(xfFloatbar* floatbar, const XEvent* event)
 			break;
 
 		case EnterNotify:
+			floatbar->entered = TRUE;
+			WINPR_FALLTHROUGH
 		case FocusIn:
 			if (event->xany.window != floatbar->handle)
 				xf_floatbar_button_event_focusin(floatbar, &event->xany);
@@ -864,6 +867,8 @@ BOOL xf_floatbar_event_process(xfFloatbar* floatbar, const XEvent* event)
 			break;
 
 		case LeaveNotify:
+			floatbar->entered = FALSE;
+			WINPR_FALLTHROUGH
 		case FocusOut:
 			if (event->xany.window == floatbar->handle)
 				xf_floatbar_event_focusout(floatbar);
@@ -910,7 +915,7 @@ static void xf_floatbar_button_free(xfContext* xfc, xfFloatbarButton* button)
 void xf_floatbar_free(xfFloatbar* floatbar)
 {
 	size_t size = 0;
-	xfContext* xfc = NULL;
+	xfContext* xfc = nullptr;
 
 	if (!floatbar)
 		return;
@@ -924,7 +929,7 @@ void xf_floatbar_free(xfFloatbar* floatbar)
 	for (size_t i = 0; i < size; i++)
 	{
 		xf_floatbar_button_free(xfc, floatbar->buttons[i]);
-		floatbar->buttons[i] = NULL;
+		floatbar->buttons[i] = nullptr;
 	}
 
 	if (floatbar->handle)
@@ -948,7 +953,9 @@ BOOL xf_floatbar_is_window(xfFloatbar* floatbar, Window window)
 {
 	if (!floatbar)
 		return FALSE;
-	return floatbar->handle == window;
+	if (floatbar->handle == window)
+		return TRUE;
+	return floatbar->entered;
 }
 
 BOOL xfc_is_floatbar_window(xfContext* xfc, Window window)

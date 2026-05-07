@@ -56,12 +56,12 @@ int main(int argc, char* argv[])
 {
 	int rc = 1;
 	int status = 0;
-	HANDLE thread = NULL;
-	xfContext* xfc = NULL;
+	HANDLE thread = nullptr;
+	xfContext* xfc = nullptr;
 	DWORD dwExitCode = 0;
-	rdpContext* context = NULL;
-	rdpSettings* settings = NULL;
-	RDP_CLIENT_ENTRY_POINTS clientEntryPoints = { 0 };
+	rdpContext* context = nullptr;
+	rdpSettings* settings = nullptr;
+	RDP_CLIENT_ENTRY_POINTS clientEntryPoints = WINPR_C_ARRAY_INIT;
 
 	clientEntryPoints.Size = sizeof(RDP_CLIENT_ENTRY_POINTS);
 	clientEntryPoints.Version = RDP_CLIENT_INTERFACE_VERSION;
@@ -91,8 +91,9 @@ int main(int argc, char* argv[])
 				case COMMAND_LINE_STATUS_PRINT_BUILDCONFIG:
 					break;
 				case COMMAND_LINE_STATUS_PRINT_HELP:
-				default:
 					xfreerdp_print_help();
+					break;
+				default:
 					break;
 			}
 		}
@@ -108,7 +109,8 @@ int main(int argc, char* argv[])
 	thread = freerdp_client_get_thread(context);
 
 	(void)WaitForSingleObject(thread, INFINITE);
-	GetExitCodeThread(thread, &dwExitCode);
+	if (!GetExitCodeThread(thread, &dwExitCode))
+		goto out;
 	rc = xf_exit_code_from_disconnect_reason(dwExitCode);
 
 	freerdp_client_stop(context);

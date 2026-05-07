@@ -1,6 +1,6 @@
 /**
  * FreeRDP: A Remote Desktop Protocol Implementation
- * Video Capture Virtual Channel Extension
+ * WebAuthn Virtual Channel Extension [MS-RDPEWA]
  *
  * Copyright 2023 Armin Novak <anovak@thincast.com>
  * Copyright 2023 Thincast Technologies GmbH
@@ -30,7 +30,7 @@
  *  \since version 3.0.0
  */
 #define RDPEWA_CHANNEL_NAME "rdpewa"
-#define RDPEWA_DVC_CHANNEL_NAME "rdpewa"
+#define RDPEWA_DVC_CHANNEL_NAME "WebAuthN_Channel"
 
 #ifdef __cplusplus
 extern "C"

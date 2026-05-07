@@ -49,6 +49,8 @@ set(SRCS
     sdl_context.cpp
 )
 
+add_win_console_manifest(SRCS)
+
 list(
   APPEND
   LIBS

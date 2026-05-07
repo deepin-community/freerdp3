@@ -29,6 +29,7 @@
 #cmakedefine WITH_AAD
 #cmakedefine WITH_CAIRO
 #cmakedefine WITH_SWSCALE
+#cmakedefine WITH_SWSCALE_LOADING
 #cmakedefine WITH_RDPSND_DSOUND
 
 #cmakedefine WITH_WINMM
@@ -57,8 +58,10 @@
 #cmakedefine WITH_OPENCL
 #cmakedefine WITH_MEDIA_FOUNDATION
 #cmakedefine WITH_MEDIACODEC
+#cmakedefine WITH_GFX_AV1
 
 #cmakedefine WITH_VAAPI
+#cmakedefine WITH_VIDEOTOOLBOX
 
 #cmakedefine WITH_CHANNELS
 #cmakedefine WITH_CLIENT_CHANNELS
@@ -138,6 +141,9 @@
 #cmakedefine CHANNEL_RDPEAR
 #cmakedefine CHANNEL_RDPEAR_CLIENT
 #cmakedefine CHANNEL_RDPEAR_SERVER
+#cmakedefine CHANNEL_RDPEWA
+#cmakedefine CHANNEL_RDPEWA_CLIENT
+#cmakedefine CHANNEL_RDPEWA_SERVER
 #cmakedefine CHANNEL_RDPEI
 #cmakedefine CHANNEL_RDPEI_CLIENT
 #cmakedefine CHANNEL_RDPEI_SERVER
@@ -216,9 +222,6 @@
 #cmakedefine WITH_DEBUG_URBDRC
 #cmakedefine WITH_DEBUG_TRANSPORT
 #cmakedefine WITH_DEBUG_WND
-#cmakedefine WITH_DEBUG_X11
-#cmakedefine WITH_DEBUG_X11_LOCAL_MOVESIZE
-#cmakedefine WITH_DEBUG_XV
 #cmakedefine WITH_DEBUG_RINGBUFFER
 
 /* Proxy */

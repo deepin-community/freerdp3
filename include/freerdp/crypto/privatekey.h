@@ -36,6 +36,7 @@ extern "C"
 	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpPrivateKey* freerdp_key_new(void);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpPrivateKey* freerdp_key_new_from_file(const char* keyfile);
 
 	WINPR_ATTR_MALLOC(freerdp_key_free, 1)
@@ -45,8 +46,8 @@ extern "C"
 	/** @brief Create a private key from file \b keyfile with optional password \b password
 	 *
 	 *  @param keyfile The file to read the key from
-	 *  @param password The optional password the key is enecrypted with, \b NULL for unencrypted
-	 *  @return An allocated private key, \b NULL in case of failure.
+	 *  @param password The optional password the key is enecrypted with, \b nullptr for unencrypted
+	 *  @return An allocated private key, \b nullptr in case of failure.
 	 *  @since version 3.16.0
 	 */
 	WINPR_ATTR_MALLOC(freerdp_key_free, 1)
@@ -57,24 +58,26 @@ extern "C"
 	/** @brief Create a private key from a PEM file with optional \b password
 	 *
 	 *  @param pem The PEM string to use
-	 *  @param password The optional password, use \b NULL if no encryption is used.
-	 *  @return An allocated private key, \b NULL in case of failure.
+	 *  @param password The optional password, use \b nullptr if no encryption is used.
+	 *  @return An allocated private key, \b nullptr in case of failure.
 	 *  @since version 3.16.0
 	 */
 	WINPR_ATTR_MALLOC(freerdp_key_free, 1)
 	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpPrivateKey* freerdp_key_new_from_pem_enc(const char* pem, const char* password);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_key_is_rsa(const rdpPrivateKey* key);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API size_t freerdp_key_get_bits(const rdpPrivateKey* key);
 
 	/** @brief Create a PEM from a private key
 	 *
 	 *  @param key The key to convert
 	 *  @param plen Optional pointer, value set to strlen of the PEM
-	 *  @param password Optional password string. If \b NULL an unencrypted PEM is written.
-	 *  @return A PEM string or \b NULL in case of errors
+	 *  @param password Optional password string. If \b nullptr an unencrypted PEM is written.
+	 *  @return A PEM string or \b nullptr in case of errors
 	 *
 	 *  @since version 3.16.0
 	 */
@@ -91,6 +94,7 @@ extern "C"
 	 *  @return \b TRUE for success, \b FALSE otherwise
 	 *  @since version 3.16.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_key_generate(rdpPrivateKey* key, const char* type, size_t count, ...);
 
 #ifdef __cplusplus

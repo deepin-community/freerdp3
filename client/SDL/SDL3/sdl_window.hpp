@@ -31,6 +31,7 @@ class SdlWindow
   public:
 	[[nodiscard]] static SdlWindow create(SDL_DisplayID id, const std::string& title, Uint32 flags,
 	                                      Uint32 width = 0, Uint32 height = 0);
+	[[nodiscard]] static rdpMonitor query(SDL_DisplayID id, bool forceAsPrimary = false);
 
 	SdlWindow(SdlWindow&& other) noexcept;
 	SdlWindow(const SdlWindow& other) = delete;
@@ -44,6 +45,7 @@ class SdlWindow
 	[[nodiscard]] SDL_Rect rect() const;
 	[[nodiscard]] SDL_Rect bounds() const;
 	[[nodiscard]] SDL_Window* window() const;
+	[[nodiscard]] SDL_Renderer* renderer() const;
 
 	[[nodiscard]] Sint32 offsetX() const;
 	void setOffsetX(Sint32 x);
@@ -52,6 +54,7 @@ class SdlWindow
 	[[nodiscard]] Sint32 offsetY() const;
 
 	[[nodiscard]] rdpMonitor monitor(bool isPrimary) const;
+	void setMonitor(rdpMonitor monitor);
 
 	[[nodiscard]] float scale() const;
 	[[nodiscard]] SDL_DisplayOrientation orientation() const;
@@ -61,9 +64,10 @@ class SdlWindow
 	void setBordered(bool bordered);
 	void raise();
 	void resizeable(bool use);
-	void fullscreen(bool enter);
+	void fullscreen(bool enter, bool forceOriginalDisplay);
 	void minimize();
 
+	[[nodiscard]] bool resizeToScale();
 	[[nodiscard]] bool resize(const SDL_Point& size);
 
 	[[nodiscard]] bool drawRect(SDL_Surface* surface, SDL_Point offset, const SDL_Rect& srcRect);
@@ -80,11 +84,40 @@ class SdlWindow
 	void updateSurface();
 
   protected:
-	SdlWindow(const std::string& title, Sint32 startupX, Sint32 startupY, Sint32 width,
-	          Sint32 height, Uint32 flags);
+	SdlWindow(SDL_DisplayID id, const std::string& title, const SDL_Rect& rect, Uint32 flags);
+
+	[[nodiscard]] static bool fill(SDL_Window* window, Uint8 r = 0x00, Uint8 g = 0x00,
+	                               Uint8 b = 0x00, Uint8 a = 0xff);
+	[[nodiscard]] static rdpMonitor query(SDL_Window* window, SDL_DisplayID id,
+	                                      bool forceAsPrimary = false);
+	[[nodiscard]] static SDL_Rect rect(SDL_Window* window, bool forceAsPrimary = false);
+	[[nodiscard]] static SDL_Rect rect(SDL_DisplayID id, bool forceAsPrimary = false);
+
+	[[nodiscard]] static bool tryFallback(bool isFullscreen);
+
+	enum HighDPIMode
+	{
+		MODE_INVALID,
+		MODE_NONE,
+		MODE_WINDOWS,
+		MODE_MACOS
+	};
+
+	[[nodiscard]] static enum HighDPIMode isHighDPIWindowsMode(SDL_Window* window);
 
   private:
+	void ensureRenderTarget();
+
 	SDL_Window* _window = nullptr;
+	SDL_Renderer* _renderer = nullptr;
+	SDL_Texture* _renderTarget = nullptr;
+	SDL_Texture* _gdiTexture = nullptr;
+	int _gdiTextureW = 0;
+	int _gdiTextureH = 0;
+	int _initialW = 0;
+	int _initialH = 0;
+	SDL_DisplayID _displayID = 0;
 	Sint32 _offset_x = 0;
 	Sint32 _offset_y = 0;
+	rdpMonitor _monitor{};
 };

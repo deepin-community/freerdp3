@@ -31,16 +31,20 @@
 LONG scard_log_status_error(const char* tag, const char* what, LONG status)
 {
 	wLog* log = WLog_Get(tag);
-	return scard_log_status_error_wlog(log, what, status);
+	return scard_log_status_error_wlog(log, "%s", status, what);
 }
 
-LONG scard_log_status_error_wlog(wLog* log, const char* what, LONG status)
+LONG scard_log_status_error_wlog(wLog* log, const char* what, LONG status, ...)
 {
 	if (status != SCARD_S_SUCCESS)
 	{
 		DWORD level = WLOG_ERROR;
 		switch (status)
 		{
+			case SCARD_W_RESET_CARD:
+			case SCARD_E_NOT_TRANSACTED:
+			case SCARD_E_CANCELLED:
+			case SCARD_E_UNSUPPORTED_FEATURE:
 			case SCARD_E_TIMEOUT:
 				level = WLOG_DEBUG;
 				break;
@@ -50,8 +54,16 @@ LONG scard_log_status_error_wlog(wLog* log, const char* what, LONG status)
 			default:
 				break;
 		}
-		WLog_Print(log, level, "%s failed with error %s [%" PRId32 "]", what,
+
+		char* str = nullptr;
+		size_t slen = 0;
+		va_list ap = WINPR_C_ARRAY_INIT;
+		va_start(ap, status);
+		winpr_vasprintf(&str, &slen, what, ap);
+		va_end(ap);
+		WLog_Print(log, level, "%s failed with error %s [%" PRId32 "]", str,
 		           SCardGetErrorString(status), status);
+		free(str);
 	}
 	return status;
 }
@@ -261,9 +273,10 @@ BOOL rdpdr_write_iocompletion_header(wStream* out, UINT32 DeviceId, UINT32 Compl
                                      NTSTATUS ioStatus)
 {
 	WINPR_ASSERT(out);
-	Stream_SetPosition(out, 0);
+	Stream_ResetPosition(out);
 	if (!Stream_EnsureRemainingCapacity(out, 16))
 		return FALSE;
+
 	Stream_Write_UINT16(out, RDPDR_CTYP_CORE);                /* Component (2 bytes) */
 	Stream_Write_UINT16(out, PAKID_CORE_DEVICE_IOCOMPLETION); /* PacketId (2 bytes) */
 	Stream_Write_UINT32(out, DeviceId);                       /* DeviceId (4 bytes) */
@@ -284,7 +297,7 @@ static void rdpdr_dump_packet(wLog* log, DWORD lvl, wStream* s, const char* cust
 	UINT16 component = 0;
 	UINT16 packetid = 0;
 
-	Stream_SetPosition(s, 0);
+	Stream_ResetPosition(s);
 
 	if (pos >= 2)
 		Stream_Read_UINT16(s, component);
@@ -315,7 +328,7 @@ static void rdpdr_dump_packet(wLog* log, DWORD lvl, wStream* s, const char* cust
 		break;
 		case PAKID_CORE_CLIENT_NAME:
 		{
-			char name[256] = { 0 };
+			char name[256] = WINPR_C_ARRAY_INIT;
 			UINT32 unicodeFlag = 0;
 			UINT32 codePage = 0;
 			UINT32 computerNameLen = 0;
@@ -414,7 +427,7 @@ static void rdpdr_dump_packet(wLog* log, DWORD lvl, wStream* s, const char* cust
 			           numCapabilities, pos);
 			for (UINT16 x = 0; x < numCapabilities; x++)
 			{
-				RDPDR_CAPABILITY_HEADER header = { 0 };
+				RDPDR_CAPABILITY_HEADER header = WINPR_C_ARRAY_INIT;
 				const UINT error = rdpdr_read_capset_header(log, s, &header);
 				if (error == CHANNEL_RC_OK)
 					Stream_Seek(s, header.CapabilityLength);
@@ -435,7 +448,7 @@ static void rdpdr_dump_packet(wLog* log, DWORD lvl, wStream* s, const char* cust
 
 			for (UINT32 x = 0; x < count; x++)
 			{
-				RdpdrDevice device = { 0 };
+				RdpdrDevice device = WINPR_C_ARRAY_INIT;
 
 				offset += 20;
 				if (pos >= offset)
@@ -493,17 +506,18 @@ static void rdpdr_dump_packet(wLog* log, DWORD lvl, wStream* s, const char* cust
 	}
 
 	// winpr_HexLogDump(log, lvl, Stream_Buffer(s), pos);
-	Stream_SetPosition(s, gpos);
+	if (!Stream_SetPosition(s, gpos))
+		WLog_Print(log, WLOG_ERROR, "Stream_SetPosition(%" PRIuz ") failed", gpos);
 }
 
-void rdpdr_dump_received_packet(wLog* log, DWORD lvl, wStream* s, const char* custom)
+void rdpdr_dump_received_packet(wLog* log, DWORD lvl, wStream* out, const char* custom)
 {
-	rdpdr_dump_packet(log, lvl, s, custom, FALSE);
+	rdpdr_dump_packet(log, lvl, out, custom, FALSE);
 }
 
-void rdpdr_dump_send_packet(wLog* log, DWORD lvl, wStream* s, const char* custom)
+void rdpdr_dump_send_packet(wLog* log, DWORD lvl, wStream* out, const char* custom)
 {
-	rdpdr_dump_packet(log, lvl, s, custom, TRUE);
+	rdpdr_dump_packet(log, lvl, out, custom, TRUE);
 }
 
 const char* rdpdr_irp_string(UINT32 major)
@@ -646,10 +660,10 @@ const char* rdpdr_irp_val2str(UINT32 ioCode1)
 const char* rdpdr_irp_mask2str(UINT32 ioCode1Mask, char* buffer, size_t len)
 {
 	if (len < 1)
-		return NULL;
+		return nullptr;
 
-	if (!winpr_str_append("{", buffer, len, NULL))
-		return NULL;
+	if (!winpr_str_append("{", buffer, len, nullptr))
+		return nullptr;
 
 	for (size_t x = 0; x < 32; x++)
 	{
@@ -657,14 +671,14 @@ const char* rdpdr_irp_mask2str(UINT32 ioCode1Mask, char* buffer, size_t len)
 		if (ioCode1Mask & mask)
 		{
 			if (!winpr_str_append(rdpdr_irp_val2str(mask), &buffer[1], len - 1, "|"))
-				return NULL;
+				return nullptr;
 		}
 	}
 
-	char number[16] = { 0 };
+	char number[16] = WINPR_C_ARRAY_INIT;
 	(void)_snprintf(number, sizeof(number), "}[0x%08" PRIx32 "]", ioCode1Mask);
-	if (!winpr_str_append(number, buffer, len, NULL))
-		return NULL;
+	if (!winpr_str_append(number, buffer, len, nullptr))
+		return nullptr;
 	return buffer;
 }
 

@@ -49,9 +49,9 @@ typedef struct
 	OpenH264Version version;
 #endif
 	pWelsGetCodecVersionEx WelsGetCodecVersionEx;
-	pWelsCreateDecoder WelsCreateDecoder;
+	WINPR_ATTR_NODISCARD pWelsCreateDecoder WelsCreateDecoder;
 	pWelsDestroyDecoder WelsDestroyDecoder;
-	pWelsCreateSVCEncoder WelsCreateSVCEncoder;
+	WINPR_ATTR_NODISCARD pWelsCreateSVCEncoder WelsCreateSVCEncoder;
 	pWelsDestroySVCEncoder WelsDestroySVCEncoder;
 	ISVCDecoder* pDecoder;
 	ISVCEncoder* pEncoder;
@@ -83,11 +83,11 @@ static int openh264_decompress(H264_CONTEXT* WINPR_RESTRICT h264,
                                const BYTE* WINPR_RESTRICT pSrcData, UINT32 SrcSize)
 {
 	DECODING_STATE state = dsInvalidArgument;
-	SBufferInfo sBufferInfo = { 0 };
-	SSysMEMBuffer* pSystemBuffer = NULL;
-	H264_CONTEXT_OPENH264* sys = NULL;
-	UINT32* iStride = NULL;
-	BYTE** pYUVData = NULL;
+	SBufferInfo sBufferInfo = WINPR_C_ARRAY_INIT;
+	SSysMEMBuffer* pSystemBuffer = nullptr;
+	H264_CONTEXT_OPENH264* sys = nullptr;
+	UINT32* iStride = nullptr;
+	BYTE** pYUVData = nullptr;
 
 	WINPR_ASSERT(h264);
 	WINPR_ASSERT(pSrcData || (SrcSize == 0));
@@ -107,9 +107,9 @@ static int openh264_decompress(H264_CONTEXT* WINPR_RESTRICT h264,
 	/*
 	 * Decompress the image.  The RDP host only seems to send I420 format.
 	 */
-	pYUVData[0] = NULL;
-	pYUVData[1] = NULL;
-	pYUVData[2] = NULL;
+	pYUVData[0] = nullptr;
+	pYUVData[1] = nullptr;
+	pYUVData[2] = nullptr;
 
 	WINPR_ASSERT(sys->pDecoder);
 	state = (*sys->pDecoder)
@@ -121,12 +121,14 @@ static int openh264_decompress(H264_CONTEXT* WINPR_RESTRICT h264,
 		if (state == dsNoParamSets)
 		{
 			/* this happens on the first frame due to missing parameter sets */
-			state = (*sys->pDecoder)->DecodeFrame2(sys->pDecoder, NULL, 0, pYUVData, &sBufferInfo);
+			state =
+			    (*sys->pDecoder)->DecodeFrame2(sys->pDecoder, nullptr, 0, pYUVData, &sBufferInfo);
 		}
 		else if (state == dsErrorFree)
 		{
 			/* call DecodeFrame2 again to decode without delay */
-			state = (*sys->pDecoder)->DecodeFrame2(sys->pDecoder, NULL, 0, pYUVData, &sBufferInfo);
+			state =
+			    (*sys->pDecoder)->DecodeFrame2(sys->pDecoder, nullptr, 0, pYUVData, &sBufferInfo);
 		}
 		else
 		{
@@ -184,10 +186,10 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
                              UINT32* WINPR_RESTRICT pDstSize)
 {
 	int status = 0;
-	SFrameBSInfo info = { 0 };
-	SSourcePicture pic = { 0 };
+	SFrameBSInfo info = WINPR_C_ARRAY_INIT;
+	SSourcePicture pic = WINPR_C_ARRAY_INIT;
 
-	H264_CONTEXT_OPENH264* sys = NULL;
+	H264_CONTEXT_OPENH264* sys = nullptr;
 
 	WINPR_ASSERT(h264);
 	WINPR_ASSERT(pYUVData);
@@ -316,7 +318,7 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
 			case H264_RATECONTROL_VBR:
 				if (sys->EncParamExt.iTargetBitrate != (int)h264->BitRate)
 				{
-					SBitrateInfo bitrate = { 0 };
+					SBitrateInfo bitrate = WINPR_C_ARRAY_INIT;
 
 					sys->EncParamExt.iTargetBitrate = (int)h264->BitRate;
 					bitrate.iLayer = SPATIAL_LAYER_ALL;
@@ -336,7 +338,8 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
 
 				if ((uint32_t)sys->EncParamExt.fMaxFrameRate != h264->FrameRate)
 				{
-					sys->EncParamExt.fMaxFrameRate = WINPR_ASSERTING_INT_CAST(int, h264->FrameRate);
+					sys->EncParamExt.fMaxFrameRate =
+					    WINPR_ASSERTING_INT_CAST(float, h264->FrameRate);
 
 					WINPR_ASSERT((*sys->pEncoder)->SetOption);
 					status = (*sys->pEncoder)
@@ -413,7 +416,7 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
 
 static void openh264_uninit(H264_CONTEXT* h264)
 {
-	H264_CONTEXT_OPENH264* sysContexts = NULL;
+	H264_CONTEXT_OPENH264* sysContexts = nullptr;
 
 	WINPR_ASSERT(h264);
 
@@ -429,14 +432,14 @@ static void openh264_uninit(H264_CONTEXT* h264)
 			{
 				(*sys->pDecoder)->Uninitialize(sys->pDecoder);
 				sysContexts->WelsDestroyDecoder(sys->pDecoder);
-				sys->pDecoder = NULL;
+				sys->pDecoder = nullptr;
 			}
 
 			if (sys->pEncoder)
 			{
 				(*sys->pEncoder)->Uninitialize(sys->pEncoder);
 				sysContexts->WelsDestroySVCEncoder(sys->pEncoder);
-				sys->pEncoder = NULL;
+				sys->pEncoder = nullptr;
 			}
 		}
 
@@ -445,7 +448,7 @@ static void openh264_uninit(H264_CONTEXT* h264)
 			FreeLibrary(sysContexts->lib);
 #endif
 		free(h264->pSystemData);
-		h264->pSystemData = NULL;
+		h264->pSystemData = nullptr;
 	}
 }
 
@@ -485,12 +488,12 @@ static BOOL openh264_load_functionpointers(H264_CONTEXT* h264, const char* name)
 	    !sysContexts->WelsGetCodecVersionEx)
 	{
 		FreeLibrary(sysContexts->lib);
-		sysContexts->lib = NULL;
+		sysContexts->lib = nullptr;
 		return FALSE;
 	}
 
 	sysContexts->WelsGetCodecVersionEx(&sysContexts->version);
-	WLog_Print(h264->log, WLOG_INFO, "loaded %s %d.%d.%d", name, sysContexts->version.uMajor,
+	WLog_Print(h264->log, WLOG_DEBUG, "loaded %s %u.%u.%u", name, sysContexts->version.uMajor,
 	           sysContexts->version.uMinor, sysContexts->version.uRevision);
 
 	if ((sysContexts->version.uMajor < 1) ||
@@ -498,11 +501,11 @@ static BOOL openh264_load_functionpointers(H264_CONTEXT* h264, const char* name)
 	{
 		WLog_Print(
 		    h264->log, WLOG_ERROR,
-		    "OpenH264 %s %d.%d.%d is too old, need at least version 1.6.0 for dynamic loading",
+		    "OpenH264 %s %u.%u.%u is too old, need at least version 1.6.0 for dynamic loading",
 		    name, sysContexts->version.uMajor, sysContexts->version.uMinor,
 		    sysContexts->version.uRevision);
 		FreeLibrary(sysContexts->lib);
-		sysContexts->lib = NULL;
+		sysContexts->lib = nullptr;
 		return FALSE;
 	}
 
@@ -516,7 +519,7 @@ static BOOL openh264_init(H264_CONTEXT* h264)
 	BOOL success = FALSE;
 #endif
 	long status = 0;
-	H264_CONTEXT_OPENH264* sysContexts = NULL;
+	H264_CONTEXT_OPENH264* sysContexts = nullptr;
 	static int traceLevel = WELS_LOG_DEBUG;
 #if (OPENH264_MAJOR == 1) && (OPENH264_MINOR <= 5)
 	static EVideoFormatType videoFormat = videoFormatI420;
@@ -557,13 +560,29 @@ static BOOL openh264_init(H264_CONTEXT* h264)
 
 	for (UINT32 x = 0; x < h264->numSystemData; x++)
 	{
-		SDecodingParam sDecParam = { 0 };
+		SDecodingParam sDecParam = WINPR_C_ARRAY_INIT;
 		H264_CONTEXT_OPENH264* sys = &sysContexts[x];
 
 		if (h264->Compressor)
 		{
-			sysContexts->WelsCreateSVCEncoder(&sys->pEncoder);
-
+#if defined(WITH_OPENH264_LOADING)
+			if (sysContexts->version.uMajor != OPENH264_MAJOR ||
+			    sysContexts->version.uMinor != OPENH264_MINOR)
+			{
+				WLog_Print(h264->log, WLOG_WARN,
+				           "OpenH264 encoder ABI mismatch: runtime %d.%d.%d vs compiled %d.%d.%d",
+				           sysContexts->version.uMajor, sysContexts->version.uMinor,
+				           sysContexts->version.uRevision, OPENH264_MAJOR, OPENH264_MINOR,
+				           OPENH264_REVISION);
+				goto EXCEPTION;
+			}
+#endif
+			const int rc = sysContexts->WelsCreateSVCEncoder(&sys->pEncoder);
+			if (rc != 0)
+			{
+				WLog_Print(h264->log, WLOG_ERROR, "Failed to create OpenH264 encoder: %d", rc);
+				goto EXCEPTION;
+			}
 			if (!sys->pEncoder)
 			{
 				WLog_Print(h264->log, WLOG_ERROR, "Failed to create OpenH264 encoder");
@@ -572,8 +591,12 @@ static BOOL openh264_init(H264_CONTEXT* h264)
 		}
 		else
 		{
-			sysContexts->WelsCreateDecoder(&sys->pDecoder);
-
+			const long rc = sysContexts->WelsCreateDecoder(&sys->pDecoder);
+			if (rc != 0)
+			{
+				WLog_Print(h264->log, WLOG_ERROR, "Failed to create OpenH264 decoder: %ld", rc);
+				goto EXCEPTION;
+			}
 			if (!sys->pDecoder)
 			{
 				WLog_Print(h264->log, WLOG_ERROR, "Failed to create OpenH264 decoder");

@@ -209,20 +209,20 @@ static void ffmpeg_close_context(FREERDP_DSP_CONTEXT* WINPR_RESTRICT context)
 		}
 
 		context->id = AV_CODEC_ID_NONE;
-		context->codec = NULL;
+		context->codec = nullptr;
 		context->isOpen = FALSE;
-		context->context = NULL;
-		context->frame = NULL;
-		context->resampled = NULL;
-		context->packet = NULL;
-		context->rcontext = NULL;
+		context->context = nullptr;
+		context->frame = nullptr;
+		context->resampled = nullptr;
+		context->packet = nullptr;
+		context->rcontext = nullptr;
 	}
 }
 
 static void ffmpeg_setup_resample_frame(FREERDP_DSP_CONTEXT* WINPR_RESTRICT context,
                                         const AUDIO_FORMAT* WINPR_RESTRICT format)
 {
-	if (context->resampled->buf[0] != NULL)
+	if (context->resampled->buf[0] != nullptr)
 		av_frame_unref(context->resampled);
 
 	if (context->common.encoder)
@@ -313,7 +313,7 @@ static BOOL ffmpeg_open_context(FREERDP_DSP_CONTEXT* WINPR_RESTRICT context)
 	context->context->sample_fmt = ffmpeg_sample_format(format);
 	context->context->time_base = av_make_q(1, context->context->sample_rate);
 
-	if ((ret = avcodec_open2(context->context, context->codec, NULL)) < 0)
+	if ((ret = avcodec_open2(context->context, context->codec, nullptr)) < 0)
 	{
 		const char* err = av_err2str(ret);
 		WLog_ERR(TAG, "Error avcodec_open2 %s [%d]", err, ret);
@@ -662,14 +662,14 @@ BOOL freerdp_dsp_ffmpeg_supports_format(const AUDIO_FORMAT* WINPR_RESTRICT forma
 		return FALSE;
 
 	if (encode)
-		return avcodec_find_encoder(id) != NULL;
+		return avcodec_find_encoder(id) != nullptr;
 	else
-		return avcodec_find_decoder(id) != NULL;
+		return avcodec_find_decoder(id) != nullptr;
 }
 
 FREERDP_DSP_CONTEXT* freerdp_dsp_ffmpeg_context_new(BOOL encode)
 {
-	FREERDP_DSP_CONTEXT* context = NULL;
+	FREERDP_DSP_CONTEXT* context = nullptr;
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 10, 100)
 	avcodec_register_all();
 #endif
@@ -688,7 +688,7 @@ fail:
 	WINPR_PRAGMA_DIAG_IGNORED_MISMATCHED_DEALLOC
 	freerdp_dsp_ffmpeg_context_free(context);
 	WINPR_PRAGMA_DIAG_POP
-	return NULL;
+	return nullptr;
 }
 
 void freerdp_dsp_ffmpeg_context_free(FREERDP_DSP_CONTEXT* context)
@@ -738,7 +738,7 @@ static BOOL freerdp_dsp_channel_mix(FREERDP_DSP_CONTEXT* WINPR_RESTRICT context,
 		return TRUE;
 	}
 
-	Stream_SetPosition(context->common.channelmix, 0);
+	Stream_ResetPosition(context->common.channelmix);
 
 	/* Destination has more channels than source */
 	if (context->common.format.nChannels > srcFormat->nChannels)
@@ -808,19 +808,16 @@ BOOL freerdp_dsp_ffmpeg_encode(FREERDP_DSP_CONTEXT* WINPR_RESTRICT context,
                                const BYTE* WINPR_RESTRICT sdata, size_t length,
                                wStream* WINPR_RESTRICT out)
 {
-	AUDIO_FORMAT fmt = { 0 };
+	AUDIO_FORMAT fmt = WINPR_C_ARRAY_INIT;
 
 	if (!context || !format || !sdata || !out || !context->common.encoder)
-		return FALSE;
-
-	if (!context || !sdata || !out)
 		return FALSE;
 
 	/* https://github.com/FreeRDP/FreeRDP/issues/7607
 	 *
 	 * we get noisy data with channel transformation, so do it ourselves.
 	 */
-	const BYTE* data = NULL;
+	const BYTE* data = nullptr;
 	if (!freerdp_dsp_channel_mix(context, sdata, length, format, &data, &length, &fmt))
 		return FALSE;
 

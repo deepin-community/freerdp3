@@ -100,6 +100,7 @@ BOOL sdl_authenticate_ex(freerdp* instance, char** username, char** password, ch
 		case AUTH_TLS:
 		case AUTH_RDP:
 		case AUTH_SMARTCARD_PIN: /* in this case password is pin code */
+		case AUTH_FIDO_PIN:
 			if ((*username) && (*password))
 				return TRUE;
 			break;
@@ -539,6 +540,7 @@ BOOL sdl_auth_dialog_show(const SDL_UserAuthArg* args)
 	const std::vector<std::string> auth = { "Username:        ", "Domain:          ",
 		                                    "Password:        " };
 	const std::vector<std::string> authPin = { "Device:       ", "PIN:        " };
+	const std::vector<std::string> fidoPin = { "FIDO2 PIN:    " };
 	const std::vector<std::string> gw = { "GatewayUsername: ", "GatewayDomain:   ",
 		                                  "GatewayPassword: " };
 	std::vector<std::string> prompt;
@@ -548,6 +550,9 @@ BOOL sdl_auth_dialog_show(const SDL_UserAuthArg* args)
 	{
 		case AUTH_SMARTCARD_PIN:
 			prompt = authPin;
+			break;
+		case AUTH_FIDO_PIN:
+			prompt = fidoPin;
 			break;
 		case AUTH_RDSTLS:
 		case AUTH_TLS:
@@ -566,12 +571,21 @@ BOOL sdl_auth_dialog_show(const SDL_UserAuthArg* args)
 
 	std::vector<std::string> result;
 
+	auto parent = SDL_GetMouseFocus();
+	if (!parent)
+		parent = SDL_GetKeyboardFocus();
+
 	if (!prompt.empty())
 	{
 		std::vector<std::string> initial{ args->user ? args->user : "Smartcard", "" };
 		std::vector<Uint32> flags = { SdlInputWidgetPair::SDL_INPUT_READONLY,
 			                          SdlInputWidgetPair::SDL_INPUT_MASK };
-		if (args->result != AUTH_SMARTCARD_PIN)
+		if (args->result == AUTH_FIDO_PIN)
+		{
+			initial = { "" };
+			flags = { SdlInputWidgetPair::SDL_INPUT_MASK };
+		}
+		else if (args->result != AUTH_SMARTCARD_PIN)
 		{
 			if (args->result == AUTH_RDSTLS)
 			{
@@ -602,6 +616,7 @@ BOOL sdl_auth_dialog_show(const SDL_UserAuthArg* args)
 				break;
 		}
 		SdlInputWidgetPairList ilist(args->title, prompt, initial, flags, selected);
+		ilist.parent(parent);
 		rc = ilist.run(result);
 	}
 
@@ -613,13 +628,20 @@ BOOL sdl_auth_dialog_show(const SDL_UserAuthArg* args)
 	char* pwd = nullptr;
 	if (rc > 0)
 	{
-		user = _strdup(result[0].c_str());
-		if (args->result == AUTH_SMARTCARD_PIN)
-			pwd = _strdup(result[1].c_str());
+		if (args->result == AUTH_FIDO_PIN)
+		{
+			pwd = _strdup(result.at(0).c_str());
+		}
 		else
 		{
-			domain = _strdup(result[1].c_str());
-			pwd = _strdup(result[2].c_str());
+			user = _strdup(result.at(0).c_str());
+			if (args->result == AUTH_SMARTCARD_PIN)
+				pwd = _strdup(result.at(1).c_str());
+			else
+			{
+				domain = _strdup(result.at(1).c_str());
+				pwd = _strdup(result.at(2).c_str());
+			}
 		}
 	}
 

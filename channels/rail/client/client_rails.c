@@ -9,10 +9,10 @@
 UINT client_rail_server_start_cmd(RailClientContext* context)
 {
 	UINT status = 0;
-	char argsAndFile[520] = { 0 };
-	RAIL_EXEC_ORDER exec = { 0 };
-	RAIL_SYSPARAM_ORDER sysparam = { 0 };
-	RAIL_CLIENT_STATUS_ORDER clientStatus = { 0 };
+	char argsAndFile[520] = WINPR_C_ARRAY_INIT;
+	RAIL_EXEC_ORDER exec = WINPR_C_ARRAY_INIT;
+	RAIL_SYSPARAM_ORDER sysparam = WINPR_C_ARRAY_INIT;
+	RAIL_CLIENT_STATUS_ORDER clientStatus = WINPR_C_ARRAY_INIT;
 
 	WINPR_ASSERT(context);
 	railPlugin* rail = context->handle;
@@ -56,7 +56,7 @@ UINT client_rail_server_start_cmd(RailClientContext* context)
 
 	sysparam.params = 0;
 	sysparam.params |= SPI_MASK_SET_HIGH_CONTRAST;
-	sysparam.highContrast.colorScheme.string = NULL;
+	sysparam.highContrast.colorScheme.string = nullptr;
 	sysparam.highContrast.colorScheme.length = 0;
 	sysparam.highContrast.flags = 0x7E;
 	sysparam.params |= SPI_MASK_SET_MOUSE_BUTTON_SWAP;

@@ -32,11 +32,11 @@ extern "C"
 {
 #endif
 
-#define WINPR_FD_READ_BIT 0
-#define WINPR_FD_READ (1 << WINPR_FD_READ_BIT)
+#define WINPR_FD_READ_BIT 0u
+#define WINPR_FD_READ (1u << WINPR_FD_READ_BIT)
 
-#define WINPR_FD_WRITE_BIT 1
-#define WINPR_FD_WRITE (1 << WINPR_FD_WRITE_BIT)
+#define WINPR_FD_WRITE_BIT 1u
+#define WINPR_FD_WRITE (1u << WINPR_FD_WRITE_BIT)
 
 #ifndef _WIN32
 
@@ -48,11 +48,15 @@ extern "C"
 
 	WINPR_API BOOL CloseHandle(HANDLE hObject);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL DuplicateHandle(HANDLE hSourceProcessHandle, HANDLE hSourceHandle,
 	                               HANDLE hTargetProcessHandle, LPHANDLE lpTargetHandle,
 	                               DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwOptions);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL GetHandleInformation(HANDLE hObject, LPDWORD lpdwFlags);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL SetHandleInformation(HANDLE hObject, DWORD dwMask, DWORD dwFlags);
 
 #endif

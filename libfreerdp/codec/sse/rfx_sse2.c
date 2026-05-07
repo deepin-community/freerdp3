@@ -25,6 +25,7 @@
 
 #include "../rfx_types.h"
 #include "rfx_sse2.h"
+#include "../rfx_quantization.h"
 
 #include "../../core/simd.h"
 #include "../../primitives/sse/prim_avxsse.h"
@@ -50,8 +51,8 @@
 #define ATTRIBUTES __gnu_inline__, __always_inline__
 #endif
 
-static __inline void __attribute__((ATTRIBUTES))
-mm_prefetch_buffer(char* WINPR_RESTRICT buffer, size_t num_bytes)
+static inline void __attribute__((ATTRIBUTES)) mm_prefetch_buffer(char* WINPR_RESTRICT buffer,
+                                                                  size_t num_bytes)
 {
 	__m128i* buf = (__m128i*)buffer;
 
@@ -64,7 +65,7 @@ mm_prefetch_buffer(char* WINPR_RESTRICT buffer, size_t num_bytes)
 /* rfx_decode_ycbcr_to_rgb_sse2 code now resides in the primitives library. */
 /* rfx_encode_rgb_to_ycbcr_sse2 code now resides in the primitives library. */
 
-static __inline void __attribute__((ATTRIBUTES))
+static inline void __attribute__((ATTRIBUTES))
 rfx_quantization_decode_block_sse2(INT16* WINPR_RESTRICT buffer, const size_t buffer_size,
                                    const UINT32 factor)
 {
@@ -84,11 +85,21 @@ rfx_quantization_decode_block_sse2(INT16* WINPR_RESTRICT buffer, const size_t bu
 	} while (ptr < buf_end);
 }
 
-static void rfx_quantization_decode_sse2(INT16* WINPR_RESTRICT buffer,
-                                         const UINT32* WINPR_RESTRICT quantVals)
+WINPR_ATTR_NODISCARD
+static BOOL rfx_quantization_decode_sse2(INT16* WINPR_RESTRICT buffer,
+                                         const UINT32* WINPR_RESTRICT quantVals,
+                                         size_t nrQuantValues)
 {
 	WINPR_ASSERT(buffer);
 	WINPR_ASSERT(quantVals);
+	WINPR_ASSERT(nrQuantValues == NR_QUANT_VALUES);
+
+	for (size_t x = 0; x < nrQuantValues; x++)
+	{
+		const UINT32 val = quantVals[x];
+		if (val < 1)
+			return FALSE;
+	}
 
 	mm_prefetch_buffer((char*)buffer, 4096 * sizeof(INT16));
 	rfx_quantization_decode_block_sse2(&buffer[0], 1024, quantVals[8] - 1);    /* HL1 */
@@ -101,9 +112,10 @@ static void rfx_quantization_decode_sse2(INT16* WINPR_RESTRICT buffer,
 	rfx_quantization_decode_block_sse2(&buffer[3904], 64, quantVals[1] - 1);   /* LH3 */
 	rfx_quantization_decode_block_sse2(&buffer[3968], 64, quantVals[3] - 1);   /* HH3 */
 	rfx_quantization_decode_block_sse2(&buffer[4032], 64, quantVals[0] - 1);   /* LL3 */
+	return TRUE;
 }
 
-static __inline void __attribute__((ATTRIBUTES))
+static inline void __attribute__((ATTRIBUTES))
 rfx_quantization_encode_block_sse2(INT16* WINPR_RESTRICT buffer, const unsigned buffer_size,
                                    const INT16 factor)
 {
@@ -125,15 +137,22 @@ rfx_quantization_encode_block_sse2(INT16* WINPR_RESTRICT buffer, const unsigned 
 	} while (ptr < buf_end);
 }
 
-static void rfx_quantization_encode_sse2(INT16* WINPR_RESTRICT buffer,
-                                         const UINT32* WINPR_RESTRICT quantization_values)
+WINPR_ATTR_NODISCARD
+static BOOL rfx_quantization_encode_sse2(INT16* WINPR_RESTRICT buffer,
+                                         const UINT32* WINPR_RESTRICT quantization_values,
+                                         size_t quantVals)
 {
 	WINPR_ASSERT(buffer);
 	WINPR_ASSERT(quantization_values);
-	for (size_t x = 0; x < 10; x++)
+	WINPR_ASSERT(quantVals == NR_QUANT_VALUES);
+
+	for (size_t x = 0; x < quantVals; x++)
 	{
-		WINPR_ASSERT(quantization_values[x] >= 6);
-		WINPR_ASSERT(quantization_values[x] <= INT16_MAX + 6);
+		const UINT32 val = quantization_values[x];
+		if (val < 6)
+			return FALSE;
+		if (val > INT16_MAX)
+			return FALSE;
 	}
 
 	mm_prefetch_buffer((char*)buffer, 4096 * sizeof(INT16));
@@ -158,9 +177,10 @@ static void rfx_quantization_encode_sse2(INT16* WINPR_RESTRICT buffer,
 	rfx_quantization_encode_block_sse2(
 	    buffer + 4032, 64, WINPR_ASSERTING_INT_CAST(INT16, quantization_values[0] - 6)); /* LL3 */
 	rfx_quantization_encode_block_sse2(buffer, 4096, 5);
+	return TRUE;
 }
 
-static __inline void __attribute__((ATTRIBUTES))
+static inline void __attribute__((ATTRIBUTES))
 rfx_dwt_2d_decode_block_horiz_sse2(INT16* WINPR_RESTRICT l, INT16* WINPR_RESTRICT h,
                                    INT16* WINPR_RESTRICT dst, size_t subband_width)
 {
@@ -229,7 +249,7 @@ rfx_dwt_2d_decode_block_horiz_sse2(INT16* WINPR_RESTRICT l, INT16* WINPR_RESTRIC
 	}
 }
 
-static __inline void __attribute__((ATTRIBUTES))
+static inline void __attribute__((ATTRIBUTES))
 rfx_dwt_2d_decode_block_vert_sse2(INT16* WINPR_RESTRICT l, INT16* WINPR_RESTRICT h,
                                   INT16* WINPR_RESTRICT dst, size_t subband_width)
 {
@@ -300,7 +320,7 @@ rfx_dwt_2d_decode_block_vert_sse2(INT16* WINPR_RESTRICT l, INT16* WINPR_RESTRICT
 	}
 }
 
-static __inline void __attribute__((ATTRIBUTES))
+static inline void __attribute__((ATTRIBUTES))
 rfx_dwt_2d_decode_block_sse2(INT16* WINPR_RESTRICT buffer, INT16* WINPR_RESTRICT idwt,
                              size_t subband_width)
 {
@@ -333,7 +353,7 @@ static void rfx_dwt_2d_decode_sse2(INT16* WINPR_RESTRICT buffer, INT16* WINPR_RE
 	rfx_dwt_2d_decode_block_sse2(&buffer[0], dwt_buffer, 32);
 }
 
-static __inline void __attribute__((ATTRIBUTES))
+static inline void __attribute__((ATTRIBUTES))
 rfx_dwt_2d_encode_block_vert_sse2(INT16* WINPR_RESTRICT src, INT16* WINPR_RESTRICT l,
                                   INT16* WINPR_RESTRICT h, size_t subband_width)
 {
@@ -375,7 +395,7 @@ rfx_dwt_2d_encode_block_vert_sse2(INT16* WINPR_RESTRICT src, INT16* WINPR_RESTRI
 	}
 }
 
-static __inline void __attribute__((ATTRIBUTES))
+static inline void __attribute__((ATTRIBUTES))
 rfx_dwt_2d_encode_block_horiz_sse2(INT16* WINPR_RESTRICT src, INT16* WINPR_RESTRICT l,
                                    INT16* WINPR_RESTRICT h, size_t subband_width)
 {
@@ -418,7 +438,7 @@ rfx_dwt_2d_encode_block_horiz_sse2(INT16* WINPR_RESTRICT src, INT16* WINPR_RESTR
 	}
 }
 
-static __inline void __attribute__((ATTRIBUTES))
+static inline void __attribute__((ATTRIBUTES))
 rfx_dwt_2d_encode_block_sse2(INT16* WINPR_RESTRICT buffer, INT16* WINPR_RESTRICT dwt,
                              size_t subband_width)
 {

@@ -96,10 +96,7 @@ BOOL xf_decode_color(xfContext* xfc, const UINT32 srcColor, XColor* color)
 	color->red = (unsigned short)(r << 8);
 	color->flags = DoRed | DoGreen | DoBlue;
 
-	if (XAllocColor(xfc->display, xfc->colormap, color) == 0)
-		return FALSE;
-
-	return TRUE;
+	return (XAllocColor(xfc->display, xfc->colormap, color) != 0);
 }
 
 static BOOL xf_Pointer_GetCursorForCurrentScale(rdpContext* context, rdpPointer* pointer,
@@ -108,7 +105,7 @@ static BOOL xf_Pointer_GetCursorForCurrentScale(rdpContext* context, rdpPointer*
 #if defined(WITH_XCURSOR) && defined(WITH_XRENDER)
 	xfContext* xfc = (xfContext*)context;
 	xfPointer* xpointer = (xfPointer*)pointer;
-	XcursorImage ci = { 0 };
+	XcursorImage ci = WINPR_C_ARRAY_INIT;
 	int cursorIndex = -1;
 
 	if (!context || !pointer || !context->gdi)
@@ -155,7 +152,7 @@ static BOOL xf_Pointer_GetCursorForCurrentScale(rdpContext* context, rdpPointer*
 
 		if (xpointer->nCursors == xpointer->mCursors)
 		{
-			void* tmp2 = NULL;
+			void* tmp2 = nullptr;
 			xpointer->mCursors = (xpointer->mCursors == 0 ? 1 : xpointer->mCursors * 2);
 
 			tmp2 = realloc(xpointer->cursorWidths, sizeof(UINT32) * xpointer->mCursors);
@@ -253,12 +250,14 @@ static Window xf_Pointer_get_window(xfContext* xfc)
 	}
 	if (xfc->remote_app)
 	{
+		Window w = 0;
+		xf_AppWindowsLock(xfc);
 		if (!xfc->appWindow)
-		{
 			WLog_WARN(TAG, "xf_Pointer: Invalid appWindow");
-			return 0;
-		}
-		return xfc->appWindow->handle;
+		else
+			w = xfc->appWindow->handle;
+		xf_AppWindowsUnlock(xfc);
+		return w;
 	}
 	else
 	{
@@ -273,7 +272,7 @@ static Window xf_Pointer_get_window(xfContext* xfc)
 
 BOOL xf_pointer_update_scale(xfContext* xfc)
 {
-	xfPointer* pointer = NULL;
+	xfPointer* pointer = nullptr;
 	WINPR_ASSERT(xfc);
 
 	pointer = xfc->pointer;
@@ -323,7 +322,7 @@ static BOOL xf_Pointer_New(rdpContext* context, rdpPointer* pointer)
 	rc = TRUE;
 
 fail:
-	WLog_DBG(TAG, "%p", WINPR_CXX_COMPAT_CAST(const void*, rc ? pointer : NULL));
+	WLog_DBG(TAG, "%p", WINPR_CXX_COMPAT_CAST(const void*, rc ? pointer : nullptr));
 	return rc;
 }
 
@@ -396,7 +395,7 @@ static BOOL xf_Pointer_SetNull(rdpContext* context)
 
 	if (nullcursor == None)
 	{
-		XcursorImage ci = { 0 };
+		XcursorImage ci = WINPR_C_ARRAY_INIT;
 		XcursorPixel xp = 0;
 
 		ci.version = XCURSOR_IMAGE_VERSION;
@@ -407,7 +406,7 @@ static BOOL xf_Pointer_SetNull(rdpContext* context)
 		nullcursor = XcursorImageLoadCursor(xfc->display, &ci);
 	}
 
-	xfc->pointer = NULL;
+	xfc->pointer = nullptr;
 
 	if ((handle) && (nullcursor != None))
 		XDefineCursor(xfc->display, handle, nullcursor);
@@ -425,7 +424,7 @@ static BOOL xf_Pointer_SetDefault(rdpContext* context)
 	xfContext* xfc = (xfContext*)context;
 	Window handle = xf_Pointer_get_window(xfc);
 	xf_lock_x11(xfc);
-	xfc->pointer = NULL;
+	xfc->pointer = nullptr;
 
 	if (handle)
 		XUndefineCursor(xfc->display, handle);
@@ -439,8 +438,8 @@ static BOOL xf_Pointer_SetDefault(rdpContext* context)
 static BOOL xf_Pointer_SetPosition(rdpContext* context, UINT32 x, UINT32 y)
 {
 	xfContext* xfc = (xfContext*)context;
-	XWindowAttributes current = { 0 };
-	XSetWindowAttributes tmp = { 0 };
+	XWindowAttributes current = WINPR_C_ARRAY_INIT;
+	XSetWindowAttributes tmp = WINPR_C_ARRAY_INIT;
 	BOOL ret = FALSE;
 	Status rc = 0;
 	Window handle = xf_Pointer_get_window(xfc);
@@ -487,7 +486,7 @@ out:
 /* Graphics Module */
 BOOL xf_register_pointer(rdpGraphics* graphics)
 {
-	rdpPointer pointer = { 0 };
+	rdpPointer pointer = WINPR_C_ARRAY_INIT;
 
 	pointer.size = sizeof(xfPointer);
 	pointer.New = xf_Pointer_New;

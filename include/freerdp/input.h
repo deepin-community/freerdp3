@@ -90,33 +90,42 @@ extern "C"
 		void* param1;            /* 1 */
 		UINT32 paddingA[16 - 2]; /* 2 */
 
-		pSynchronizeEvent SynchronizeEvent;         /* 16 */
-		pKeyboardEvent KeyboardEvent;               /* 17 */
-		pUnicodeKeyboardEvent UnicodeKeyboardEvent; /* 18 */
-		pMouseEvent MouseEvent;                     /* 19 */
-		pExtendedMouseEvent ExtendedMouseEvent;     /* 20 */
-		pFocusInEvent FocusInEvent;                 /*21 */
-		pKeyboardPauseEvent KeyboardPauseEvent;     /* 22 */
-		pRelMouseEvent RelMouseEvent;               /* 23 */
-		pQoEEvent QoEEvent;                         /* 24 */
+		WINPR_ATTR_NODISCARD pSynchronizeEvent SynchronizeEvent;         /* 16 */
+		WINPR_ATTR_NODISCARD pKeyboardEvent KeyboardEvent;               /* 17 */
+		WINPR_ATTR_NODISCARD pUnicodeKeyboardEvent UnicodeKeyboardEvent; /* 18 */
+		WINPR_ATTR_NODISCARD pMouseEvent MouseEvent;                     /* 19 */
+		WINPR_ATTR_NODISCARD pExtendedMouseEvent ExtendedMouseEvent;     /* 20 */
+		WINPR_ATTR_NODISCARD pFocusInEvent FocusInEvent;                 /*21 */
+		WINPR_ATTR_NODISCARD pKeyboardPauseEvent KeyboardPauseEvent;     /* 22 */
+		WINPR_ATTR_NODISCARD pRelMouseEvent RelMouseEvent;               /* 23 */
+		WINPR_ATTR_NODISCARD pQoEEvent QoEEvent;                         /* 24 */
 
 		UINT32 paddingB[32 - 25]; /* 25 */
 	};
 
 	FREERDP_API BOOL freerdp_input_send_synchronize_event(rdpInput* input, UINT32 flags);
+
 	FREERDP_API BOOL freerdp_input_send_keyboard_event(rdpInput* input, UINT16 flags, UINT8 code);
+
 	FREERDP_API BOOL freerdp_input_send_keyboard_event_ex(rdpInput* input, BOOL down, BOOL repeat,
 	                                                      UINT32 rdp_scancode);
+
 	FREERDP_API BOOL freerdp_input_send_keyboard_pause_event(rdpInput* input);
+
 	FREERDP_API BOOL freerdp_input_send_unicode_keyboard_event(rdpInput* input, UINT16 flags,
 	                                                           UINT16 code);
+
 	FREERDP_API BOOL freerdp_input_send_mouse_event(rdpInput* input, UINT16 flags, UINT16 x,
 	                                                UINT16 y);
+
 	FREERDP_API BOOL freerdp_input_send_rel_mouse_event(rdpInput* input, UINT16 flags, INT16 xDelta,
 	                                                    INT16 yDelta);
+
 	FREERDP_API BOOL freerdp_input_send_qoe_timestamp(rdpInput* input, UINT32 timestampMS);
+
 	FREERDP_API BOOL freerdp_input_send_extended_mouse_event(rdpInput* input, UINT16 flags,
 	                                                         UINT16 x, UINT16 y);
+
 	FREERDP_API BOOL freerdp_input_send_focus_in_event(rdpInput* input, UINT16 toggleStates);
 
 	/** @brief stringify \b enum KBD_SYNC_FLAGS
@@ -125,11 +134,40 @@ extern "C"
 	 *  @param buffer A buffer to store the resulting string
 	 *  @param len The length of the buffer in bytes
 	 *
-	 *  @return A pointer to \ref buffer or \b NULL in case of failure
+	 *  @return A pointer to \ref buffer or \b nullptr in case of failure
 	 *  @since version 3.19.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_input_keyboard_flags_string(uint32_t flags, char* buffer,
 	                                                            size_t len);
+
+	/** @brief stringify \b KBD_FLAGS_* constants
+	 *
+	 *  @param flags The flags to stringify
+	 *  @param buffer A buffer to store the resulting string
+	 *  @param len The length of the buffer in bytes
+	 *
+	 *  @return A pointer to \ref buffer or \b nullptr in case of failure
+	 *  @since version 3.24.0
+	 */
+	WINPR_ATTR_NODISCARD
+	FREERDP_API const char* freerdp_input_keypress_flags_string(uint32_t flags, char* buffer,
+	                                                            size_t len);
+
+	/** @brief stringify \b PTR_XFLAGS_* or \b PTR_FLAGS_* constants
+	 *
+	 *  @param flags The flags to stringify
+	 *  @param extended if \b false assume \ref flags contains \b PTR_FLAGS_* constants, if \b true
+	 * assume \b PTR_XFLAGS_* constants.
+	 *  @param buffer A buffer to store the resulting string
+	 *  @param len The length of the buffer in bytes
+	 *
+	 *  @return A pointer to \ref buffer or \b nullptr in case of failure
+	 *  @since version 3.24.0
+	 */
+	WINPR_ATTR_NODISCARD
+	FREERDP_API const char* freerdp_input_mouse_flags_string(uint32_t flags, bool extended,
+	                                                         char* buffer, size_t len);
 
 #ifdef __cplusplus
 }

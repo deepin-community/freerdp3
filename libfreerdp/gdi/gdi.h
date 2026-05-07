@@ -27,11 +27,16 @@
 
 #include <freerdp/api.h>
 
+WINPR_ATTR_NODISCARD
 FREERDP_LOCAL BOOL gdi_bitmap_update(rdpContext* context, const BITMAP_UPDATE* bitmapUpdate);
 
-FREERDP_LOCAL gdiBitmap* gdi_bitmap_new_ex(rdpGdi* gdi, int width, int height, int bpp, BYTE* data);
-FREERDP_LOCAL void gdi_bitmap_free_ex(gdiBitmap* gdi_bmp);
+FREERDP_LOCAL void gdi_bitmap_free_ex(gdiBitmap* bitmap);
 
+WINPR_ATTR_MALLOC(gdi_bitmap_free_ex, 1)
+WINPR_ATTR_NODISCARD
+FREERDP_LOCAL gdiBitmap* gdi_bitmap_new_ex(rdpGdi* gdi, int width, int height, int bpp, BYTE* data);
+
+WINPR_ATTR_NODISCARD
 static inline BYTE* gdi_get_bitmap_pointer(HGDI_DC hdcBmp, INT32 x, INT32 y)
 {
 	HGDI_BITMAP hBmp = (HGDI_BITMAP)hdcBmp->selectedObject;
@@ -48,7 +53,7 @@ static inline BYTE* gdi_get_bitmap_pointer(HGDI_DC hdcBmp, INT32 x, INT32 y)
 		         "gdi_get_bitmap_pointer: requesting invalid pointer: (%" PRId32 ",%" PRId32
 		         ") in %" PRId32 "x%" PRId32 "",
 		         x, y, hBmp->width, hBmp->height);
-		return 0;
+		return nullptr;
 	}
 }
 
@@ -59,9 +64,10 @@ static inline BYTE* gdi_get_bitmap_pointer(HGDI_DC hdcBmp, INT32 x, INT32 y)
  * @param y dest y-coordinate
  * @return color pointer
  */
+WINPR_ATTR_NODISCARD
 static inline BYTE* gdi_get_brush_pointer(HGDI_DC hdcBrush, UINT32 x, UINT32 y)
 {
-	BYTE* p = NULL;
+	BYTE* p = nullptr;
 	UINT32 brushStyle = gdi_GetBrushStyle(hdcBrush);
 
 	switch (brushStyle)

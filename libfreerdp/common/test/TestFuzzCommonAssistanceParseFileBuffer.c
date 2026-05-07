@@ -9,7 +9,7 @@ static int parse_file_buffer(const uint8_t* Data, size_t Size)
 		return -1;
 
 	char* buf = calloc(Size + 1, sizeof(char));
-	if (buf == NULL)
+	if (buf == nullptr)
 		goto err;
 	memcpy(buf, Data, Size);
 	buf[Size] = '\0';
@@ -21,7 +21,7 @@ err:
 	freerdp_assistance_file_free(file);
 	free(buf);
 
-	return status >= 0 ? TRUE : FALSE;
+	return status >= 0;
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)

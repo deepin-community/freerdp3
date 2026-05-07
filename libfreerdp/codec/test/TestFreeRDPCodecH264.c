@@ -52,7 +52,7 @@ fail:
 	h264_context_free(h264);
 	const UINT64 end = winpr_GetUnixTimeNS();
 
-	char buffer[64] = { 0 };
+	char buffer[64] = WINPR_C_ARRAY_INIT;
 	printf("[%s] %" PRIu32 "x%" PRIu32 " took %s\n", __func__, width, height,
 	       print_ns(start, end, buffer, sizeof(buffer)));
 	return rc;
@@ -67,11 +67,15 @@ static void* allocRGB(uint32_t format, uint32_t width, uint32_t height, uint32_t
 
 	uint8_t* rgb = calloc(stride, height);
 	if (!rgb)
-		return NULL;
+		return nullptr;
 
 	for (size_t x = 0; x < height; x++)
 	{
-		winpr_RAND(&rgb[x * stride], width * bpp);
+		if (winpr_RAND(&rgb[x * stride], width * bpp) < 0)
+		{
+			free(rgb);
+			return nullptr;
+		}
 	}
 	return rgb;
 }
@@ -98,9 +102,9 @@ static BOOL compareRGB(const uint8_t* src, const uint8_t* dst, uint32_t format, 
 static BOOL testEncode(uint32_t format, uint32_t width, uint32_t height)
 {
 	BOOL rc = FALSE;
-	void* src = NULL;
-	void* out = NULL;
-	RDPGFX_H264_METABLOCK meta = { 0 };
+	void* src = nullptr;
+	void* out = nullptr;
+	RDPGFX_H264_METABLOCK meta = WINPR_C_ARRAY_INIT;
 	H264_CONTEXT* h264 = h264_context_new(TRUE);
 	H264_CONTEXT* h264dec = h264_context_new(FALSE);
 	if (!h264 || !h264dec)
@@ -120,7 +124,7 @@ static BOOL testEncode(uint32_t format, uint32_t width, uint32_t height)
 
 	const RECTANGLE_16 rect = { .left = 0, .top = 0, .right = width, .bottom = height };
 	uint32_t dstsize = 0;
-	uint8_t* dst = NULL;
+	uint8_t* dst = nullptr;
 	if (avc420_compress(h264, src, format, stride, width, height, &rect, &dst, &dstsize, &meta) < 0)
 		goto fail;
 	if ((dstsize == 0) || !dst)
@@ -156,11 +160,11 @@ int TestFreeRDPCodecH264(int argc, char* argv[])
 	if (argc == 3)
 	{
 		errno = 0;
-		width = strtoul(argv[1], NULL, 0);
-		height = strtoul(argv[2], NULL, 0);
+		width = strtoul(argv[1], nullptr, 0);
+		height = strtoul(argv[2], nullptr, 0);
 		if ((errno != 0) || (width == 0) || (height == 0))
 		{
-			char buffer[128] = { 0 };
+			char buffer[128] = WINPR_C_ARRAY_INIT;
 			(void)fprintf(stderr, "%s failed: width=%" PRIu32 ", height=%" PRIu32 ", errno=%s\n",
 			              __func__, width, height, winpr_strerror(errno, buffer, sizeof(buffer)));
 			return -1;

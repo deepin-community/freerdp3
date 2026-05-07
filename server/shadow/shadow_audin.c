@@ -31,10 +31,11 @@
 
 #if defined(CHANNEL_AUDIN_SERVER)
 
+WINPR_ATTR_NODISCARD
 static UINT AudinServerData(audin_server_context* audin, const SNDIN_DATA* data)
 {
-	rdpShadowClient* client = NULL;
-	rdpShadowSubsystem* subsystem = NULL;
+	rdpShadowClient* client = nullptr;
+	rdpShadowSubsystem* subsystem = nullptr;
 
 	WINPR_ASSERT(audin);
 	WINPR_ASSERT(data);
@@ -82,14 +83,14 @@ BOOL shadow_client_audin_init(rdpShadowClient* client)
 	}
 	else
 	{
-		if (!audin_server_set_formats(client->audin, -1, NULL))
+		if (!audin_server_set_formats(client->audin, -1, nullptr))
 			goto fail;
 	}
 
 	return TRUE;
 fail:
 	audin_server_context_free(audin);
-	client->audin = NULL;
+	client->audin = nullptr;
 #endif
 	return FALSE;
 }
@@ -100,6 +101,6 @@ void shadow_client_audin_uninit(rdpShadowClient* client)
 
 #if defined(CHANNEL_AUDIN_SERVER)
 	audin_server_context_free(client->audin);
-	client->audin = NULL;
+	client->audin = nullptr;
 #endif
 }

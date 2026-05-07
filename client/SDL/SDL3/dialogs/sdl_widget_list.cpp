@@ -9,8 +9,11 @@ bool SdlWidgetList::reset(const std::string& title, size_t width, size_t height)
 	auto h = WINPR_ASSERTING_INT_CAST(int, height);
 	SDL_Renderer* renderer = nullptr;
 	SDL_Window* window = nullptr;
-	auto rc = SDL_CreateWindowAndRenderer(
-	    title.c_str(), w, h, SDL_WINDOW_MOUSE_FOCUS | SDL_WINDOW_INPUT_FOCUS, &window, &renderer);
+	auto rc = SDL_CreateWindowAndRenderer(title.c_str(), w, h,
+	                                      SDL_WINDOW_MOUSE_FOCUS | SDL_WINDOW_INPUT_FOCUS |
+	                                          SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_UTILITY |
+	                                          SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_MOUSE_FOCUS,
+	                                      &window, &renderer);
 	_renderer = std::shared_ptr<SDL_Renderer>(renderer, SDL_DestroyRenderer);
 	_window = std::shared_ptr<SDL_Window>(window, SDL_DestroyWindow);
 	if (!rc)

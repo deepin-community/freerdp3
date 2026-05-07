@@ -1,6 +1,5 @@
 libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
-* Build-Depends-Package: freerdp3-dev
- add_device@Base 3.0.0
+* Build-Depends-Package: freerdp-dev
  channel_client_create_handler@Base 3.0.0
  client_auto_reconnect@Base 3.0.0
  client_auto_reconnect_ex@Base 3.0.0
@@ -29,7 +28,6 @@ libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
  cliprdr_file_context_uninit@Base 3.0.0
  cliprdr_file_context_update_client_data@Base 3.0.0
  cliprdr_file_context_update_server_data@Base 3.0.0
- del_device@Base 3.0.0
  freerdp_channels_addin_list_free@Base 3.0.0
  freerdp_channels_client_find_static_entry@Base 3.0.0
  freerdp_channels_list_addins@Base 3.0.0
@@ -85,6 +83,7 @@ libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
  freerdp_client_settings_parse_command_line@Base 3.0.0
  freerdp_client_settings_parse_command_line_arguments@Base 3.0.0
  freerdp_client_settings_parse_command_line_arguments_ex@Base 3.0.0
+ freerdp_client_settings_parse_command_line_arguments_with_flags@Base 3.26.0
  freerdp_client_settings_parse_command_line_ex@Base 3.9.0
  freerdp_client_settings_parse_connection_file@Base 3.0.0
  freerdp_client_settings_parse_connection_file_buffer@Base 3.0.0
@@ -105,15 +104,5 @@ libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
  freerdp_smartcard_list@Base 3.0.0
  mappedGeometryRef@Base 3.0.0
  mappedGeometryUnref@Base 3.0.0
- msusb_msconfig_dump@Base 3.0.0
- msusb_msconfig_free@Base 3.0.0
- msusb_msconfig_new@Base 3.0.0
- msusb_msconfig_read@Base 3.0.0
- msusb_msconfig_write@Base 3.0.0
- msusb_msinterface_free@Base 3.0.0
- msusb_msinterface_read@Base 3.0.0
- msusb_msinterface_replace@Base 3.0.0
- msusb_msinterface_write@Base 3.0.0
- msusb_mspipes_replace@Base 3.0.0
  rail_handshake_ex_flags_to_string@Base 3.5.0
  rdpgfx_client_context_free@Base 3.0.0

@@ -53,7 +53,13 @@
 #endif
 #else
 #if defined(__GNUC__) && (__GNUC__ >= 4)
+#if defined(__cplusplus) && (__cplusplus >= 201703L)
+#define FREERDP_API [[gnu::visibility("default")]]
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 202311L)
+#define FREERDP_API [[gnu::visibility("default")]]
+#else
 #define FREERDP_API __attribute__((visibility("default")))
+#endif
 #else
 #define FREERDP_API
 #endif
@@ -66,52 +72,50 @@
 #define FREERDP_LOCAL
 #else
 #if defined(__GNUC__) && (__GNUC__ >= 4)
+#if defined(__cplusplus) && (__cplusplus >= 201703L)
+#define FREERDP_LOCAL [[gnu::visibility("hidden")]]
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 202311L)
+#define FREERDP_LOCAL [[gnu::visibility("hidden")]]
+#else
 #define FREERDP_LOCAL __attribute__((visibility("hidden")))
+#endif
 #else
 #define FREERDP_LOCAL
 #endif
 #endif
 #endif
 
-#define IFCALL(_cb, ...)                                             \
-	do                                                               \
-	{                                                                \
-		if (_cb != NULL)                                             \
-			_cb(__VA_ARGS__);                                        \
-		else                                                         \
-			WLog_VRB("com.freerdp.api", "IFCALL(" #_cb ") == NULL"); \
-	} while (0)
-#define IFCALLRET(_cb, _ret, ...)                                       \
+#define IFCALL(_cb, ...)                                                \
 	do                                                                  \
 	{                                                                   \
-		if (_cb != NULL)                                                \
-			_ret = _cb(__VA_ARGS__);                                    \
+		if (_cb != nullptr)                                             \
+			_cb(__VA_ARGS__);                                           \
 		else                                                            \
-			WLog_VRB("com.freerdp.api", "IFCALLRET(" #_cb ") == NULL"); \
+			WLog_VRB("com.freerdp.api", "IFCALL(" #_cb ") == nullptr"); \
+	} while (0)
+#define IFCALLRET(_cb, _ret, ...)                                          \
+	do                                                                     \
+	{                                                                      \
+		if (_cb != nullptr)                                                \
+			_ret = _cb(__VA_ARGS__);                                       \
+		else                                                               \
+			WLog_VRB("com.freerdp.api", "IFCALLRET(" #_cb ") == nullptr"); \
 	} while (0)
 
 #if defined(__GNUC__) || defined(__clang__)
-#define IFCALLRESULT(_default_return, _cb, ...)                            \
-	__extension__({                                                        \
-		if (_cb == NULL)                                                   \
-		{                                                                  \
-			WLog_VRB("com.freerdp.api", "IFCALLRESULT(" #_cb ") == NULL"); \
-		}                                                                  \
-		((_cb != NULL) ? _cb(__VA_ARGS__) : (_default_return));            \
+#define IFCALLRESULT(_default_return, _cb, ...)                               \
+	__extension__({                                                           \
+		if (_cb == nullptr)                                                   \
+		{                                                                     \
+			WLog_VRB("com.freerdp.api", "IFCALLRESULT(" #_cb ") == nullptr"); \
+		}                                                                     \
+		((_cb != nullptr) ? _cb(__VA_ARGS__) : (_default_return));            \
 	})
 #else
 #define IFCALLRESULT(_default_return, _cb, ...) \
-	((_cb != NULL) ? _cb(__VA_ARGS__) : (_default_return))
+	((_cb != nullptr) ? _cb(__VA_ARGS__) : (_default_return))
 #endif
 
-#if defined(__GNUC__) || defined(__clang__)
-#define ALIGN64 __attribute__((aligned(8)))
-#else
-#ifdef _WIN32
-#define ALIGN64 __declspec(align(8))
-#else
-#define ALIGN64
-#endif
-#endif
+#define ALIGN64 DECLSPEC_ALIGN(8)
 
 #endif /* FREERDP_API */

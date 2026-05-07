@@ -17,6 +17,8 @@
  * limitations under the License.
  */
 
+#include <algorithm>
+
 #include <freerdp/config.h>
 
 #include <freerdp/gdi/gdi.h>
@@ -28,44 +30,51 @@
 
 #include <SDL3/SDL_mouse.h>
 
-typedef struct
+struct sdlPointer
 {
-	rdpPointer pointer;
-	SDL_Cursor* cursor;
-	SDL_Surface* image;
-	size_t size;
-	void* data;
-} sdlPointer;
+	rdpPointer pointer{};
+	SDL_Cursor* cursor = nullptr;
+	SDL_Surface* image = nullptr;
+	size_t size = 0;
+	BYTE* data = nullptr;
+
+	sdlPointer(const sdlPointer& other) = delete;
+	sdlPointer(sdlPointer&& other) = delete;
+	auto operator=(const sdlPointer& other) = delete;
+	auto operator=(sdlPointer&& other) = delete;
+	~sdlPointer() = delete;
+
+	bool update(rdpContext* context)
+	{
+		assert(context);
+		assert(context->gdi);
+
+		size = 4ull * pointer.width * pointer.height;
+		winpr_aligned_free(data);
+		data = static_cast<BYTE*>(winpr_aligned_malloc(size, 16));
+
+		if (!data)
+			return false;
+
+		return freerdp_image_copy_from_pointer_data(
+		    data, context->gdi->dstFormat, 0, 0, 0, pointer.width, pointer.height,
+		    pointer.xorMaskData, pointer.lengthXorMask, pointer.andMaskData, pointer.lengthAndMask,
+		    pointer.xorBpp, &context->gdi->palette);
+	}
+};
 
 [[nodiscard]] static BOOL sdl_Pointer_New(rdpContext* context, rdpPointer* pointer)
 {
 	auto ptr = reinterpret_cast<sdlPointer*>(pointer);
+	auto sdl = get_context(context);
 
-	WINPR_ASSERT(context);
+	WINPR_ASSERT(sdl);
+	std::unique_lock lock(sdl->lock());
 	if (!ptr)
 		return FALSE;
+	sdl->pointers().push_back(pointer);
 
-	rdpGdi* gdi = context->gdi;
-	WINPR_ASSERT(gdi);
-
-	ptr->size = 4ull * pointer->width * pointer->height;
-	ptr->data = winpr_aligned_malloc(ptr->size, 16);
-
-	if (!ptr->data)
-		return FALSE;
-
-	auto data = static_cast<BYTE*>(ptr->data);
-	if (!freerdp_image_copy_from_pointer_data(
-	        data, gdi->dstFormat, 0, 0, 0, pointer->width, pointer->height, pointer->xorMaskData,
-	        pointer->lengthXorMask, pointer->andMaskData, pointer->lengthAndMask, pointer->xorBpp,
-	        &context->gdi->palette))
-	{
-		winpr_aligned_free(ptr->data);
-		ptr->data = nullptr;
-		return FALSE;
-	}
-
-	return TRUE;
+	return ptr->update(context);
 }
 
 static void sdl_Pointer_Clear(sdlPointer* ptr)
@@ -77,17 +86,28 @@ static void sdl_Pointer_Clear(sdlPointer* ptr)
 	ptr->image = nullptr;
 }
 
-static void sdl_Pointer_Free(rdpContext* context, rdpPointer* pointer)
+static void sdl_Pointer_Free(WINPR_ATTR_UNUSED rdpContext* context, rdpPointer* pointer)
+{
+	auto sdl = get_context(context);
+
+	WINPR_ASSERT(sdl);
+	std::unique_lock lock(sdl->lock());
+	auto it = std::remove(sdl->pointers().begin(), sdl->pointers().end(), pointer);
+	sdl->pointers().erase(it, sdl->pointers().end());
+
+	sdl_Pointer_FreeCopy(pointer);
+}
+
+void sdl_Pointer_FreeCopy(rdpPointer* pointer)
 {
 	auto ptr = reinterpret_cast<sdlPointer*>(pointer);
-	WINPR_UNUSED(context);
 
-	if (ptr)
-	{
-		sdl_Pointer_Clear(ptr);
-		winpr_aligned_free(ptr->data);
-		ptr->data = nullptr;
-	}
+	if (!ptr)
+		return;
+
+	sdl_Pointer_Clear(ptr);
+	winpr_aligned_free(ptr->data);
+	ptr->data = nullptr;
 }
 
 [[nodiscard]] static BOOL sdl_Pointer_SetDefault(rdpContext* context)
@@ -103,15 +123,16 @@ static void sdl_Pointer_Free(rdpContext* context, rdpPointer* pointer)
 	return sdl_push_user_event(SDL_EVENT_USER_POINTER_SET, pointer);
 }
 
-BOOL sdl_Pointer_Set_Process(SdlContext* sdl)
+bool sdl_Pointer_Set_Process(SdlContext* sdl)
 {
 	WINPR_ASSERT(sdl);
 
+	std::unique_lock lock(sdl->lock());
 	auto context = sdl->context();
 	auto pointer = sdl->cursor();
 	auto ptr = reinterpret_cast<sdlPointer*>(pointer);
 	if (!ptr)
-		return TRUE;
+		return true;
 
 	rdpGdi* gdi = context->gdi;
 	WINPR_ASSERT(gdi);
@@ -121,58 +142,103 @@ BOOL sdl_Pointer_Set_Process(SdlContext* sdl)
 	auto isw = static_cast<float>(pointer->width);
 	auto ish = static_cast<float>(pointer->height);
 
-	SDL_Window* window = SDL_GetMouseFocus();
+	auto window = SDL_GetMouseFocus();
 	if (!window)
 		return sdl_Pointer_SetDefault(context);
 
 	const Uint32 id = SDL_GetWindowID(window);
 
-	auto pos = sdl->pixelToScreen(id, SDL_FRect{ ix, iy, isw, ish });
+	const SDL_FRect orig{ ix, iy, isw, ish };
+	const auto pos = sdl->pixelToScreen(id, orig, true);
+	WLog_Print(sdl->getWLog(), WLOG_DEBUG, "cursor scale: pixel:%s, display:%s",
+	           sdl::utils::toString(orig).c_str(), sdl::utils::toString(pos).c_str());
 
 	sdl_Pointer_Clear(ptr);
 
 	ptr->image =
-	    SDL_CreateSurface(static_cast<int>(pos.w), static_cast<int>(pos.h), sdl->pixelFormat());
+	    SDL_CreateSurface(static_cast<int>(orig.w), static_cast<int>(orig.h), sdl->pixelFormat());
 	if (!ptr->image)
-		return FALSE;
+	{
+		WLog_Print(sdl->getWLog(), WLOG_ERROR, "SDL_CreateSurface failed");
+		return false;
+	}
 
-	SDL_LockSurface(ptr->image);
-	auto pixels = static_cast<BYTE*>(ptr->image->pixels);
 	auto data = static_cast<const BYTE*>(ptr->data);
-	const BOOL rc = freerdp_image_scale(
-	    pixels, gdi->dstFormat, static_cast<UINT32>(ptr->image->pitch), 0, 0,
-	    static_cast<UINT32>(ptr->image->w), static_cast<UINT32>(ptr->image->h), data,
-	    gdi->dstFormat, 0, 0, 0, static_cast<UINT32>(isw), static_cast<UINT32>(ish));
-	SDL_UnlockSurface(ptr->image);
-	if (!rc)
-		return FALSE;
+	if (data)
+	{
+		if (!SDL_LockSurface(ptr->image))
+		{
+			WLog_Print(sdl->getWLog(), WLOG_ERROR, "SDL_LockSurface failed");
+			return false;
+		}
+
+		auto pixels = static_cast<BYTE*>(ptr->image->pixels);
+		const BOOL rc = freerdp_image_scale(
+		    pixels, gdi->dstFormat, static_cast<UINT32>(ptr->image->pitch), 0, 0,
+		    static_cast<UINT32>(ptr->image->w), static_cast<UINT32>(ptr->image->h), data,
+		    gdi->dstFormat, 0, 0, 0, static_cast<UINT32>(isw), static_cast<UINT32>(ish));
+		SDL_UnlockSurface(ptr->image);
+		if (!rc)
+		{
+			WLog_Print(sdl->getWLog(), WLOG_ERROR, "freerdp_image_scale failed");
+			return false;
+		}
+	}
 
 	// create a cursor image in 100% display scale to trick SDL into creating the cursor with the
 	// correct size
 	auto fw = sdl->getFirstWindow();
 	if (!fw)
-		return FALSE;
+	{
+		WLog_Print(sdl->getWLog(), WLOG_ERROR, "sdl->getFirstWindow() nullptr");
+		return false;
+	}
 
-	const auto hidpi_scale =
-	    sdl->pixelToScreen(fw->id(), SDL_FPoint{ static_cast<float>(ptr->image->w),
-	                                             static_cast<float>(ptr->image->h) });
-	auto normal = SDL_CreateSurface(static_cast<int>(hidpi_scale.x),
-	                                static_cast<int>(hidpi_scale.y), ptr->image->format);
+	const auto w = static_cast<int>(pos.w);
+	const auto h = static_cast<int>(pos.h);
+	std::unique_ptr<SDL_Surface, void (*)(SDL_Surface*)> normal{
+		SDL_CreateSurface(w, h, ptr->image->format), SDL_DestroySurface
+	};
 	assert(normal);
-	SDL_BlitSurfaceScaled(ptr->image, nullptr, normal, nullptr,
-	                      SDL_ScaleMode::SDL_SCALEMODE_LINEAR);
-	SDL_AddSurfaceAlternateImage(normal, ptr->image);
+	if (!SDL_BlitSurfaceScaled(ptr->image, nullptr, normal.get(), nullptr,
+	                           SDL_ScaleMode::SDL_SCALEMODE_LINEAR))
+	{
+		WLog_Print(sdl->getWLog(), WLOG_ERROR, "SDL_BlitSurfaceScaled failed");
+		return false;
+	}
+	if (!SDL_AddSurfaceAlternateImage(normal.get(), ptr->image))
+	{
+		WLog_Print(sdl->getWLog(), WLOG_ERROR, "SDL_AddSurfaceAlternateImage failed");
+		return false;
+	}
 
-	ptr->cursor = SDL_CreateColorCursor(normal, static_cast<int>(pos.x), static_cast<int>(pos.y));
+	auto x = static_cast<int>(pos.x);
+	auto y = static_cast<int>(pos.y);
+	if (x >= w)
+		x = w - 1;
+	if (y >= h)
+		y = h - 1;
+
+	ptr->cursor = SDL_CreateColorCursor(normal.get(), x, y);
 	if (!ptr->cursor)
-		return FALSE;
+	{
+		WLog_Print(sdl->getWLog(), WLOG_ERROR, "SDL_CreateColorCursor(display:%s, pixel:%s} failed",
+		           sdl::utils::toString(pos).c_str(), sdl::utils::toString(orig).c_str());
+		return false;
+	}
 
-	SDL_DestroySurface(normal);
-
-	SDL_SetCursor(ptr->cursor);
-	SDL_ShowCursor();
+	if (!SDL_SetCursor(ptr->cursor))
+	{
+		WLog_Print(sdl->getWLog(), WLOG_ERROR, "SDL_SetCursor failed");
+		return false;
+	}
+	if (!SDL_ShowCursor())
+	{
+		WLog_Print(sdl->getWLog(), WLOG_ERROR, "SDL_ShowCursor failed");
+		return false;
+	}
 	sdl->setHasCursor(true);
-	return TRUE;
+	return true;
 }
 
 [[nodiscard]] static BOOL sdl_Pointer_SetNull(rdpContext* context)
@@ -190,7 +256,7 @@ BOOL sdl_Pointer_Set_Process(SdlContext* sdl)
 	return sdl_push_user_event(SDL_EVENT_USER_POINTER_POSITION, x, y);
 }
 
-BOOL sdl_register_pointer(rdpGraphics* graphics)
+bool sdl_register_pointer(rdpGraphics* graphics)
 {
 	const rdpPointer pointer = { sizeof(sdlPointer),
 		                         sdl_Pointer_New,
@@ -211,5 +277,34 @@ BOOL sdl_register_pointer(rdpGraphics* graphics)
 		                         nullptr,
 		                         {} };
 	graphics_register_pointer(graphics, &pointer);
-	return TRUE;
+	return true;
+}
+
+rdpPointer* sdl_Pointer_Copy(const rdpPointer* pointer)
+{
+	auto ptr = reinterpret_cast<const sdlPointer*>(pointer);
+	if (!pointer)
+		return nullptr;
+
+	auto copy = static_cast<sdlPointer*>(calloc(1, sizeof(sdlPointer)));
+	if (!copy)
+		return nullptr;
+
+	copy->pointer.xPos = pointer->xPos;
+	copy->pointer.yPos = pointer->yPos;
+	copy->pointer.width = pointer->width;
+	copy->pointer.height = pointer->height;
+	copy->pointer.xorBpp = pointer->xorBpp;
+	if (ptr->size > 0)
+	{
+		copy->data = static_cast<BYTE*>(winpr_aligned_malloc(ptr->size, 32));
+		if (!copy)
+		{
+			free(copy);
+			return nullptr;
+		}
+		copy->size = ptr->size;
+		memcpy(copy->data, ptr->data, copy->size);
+	}
+	return &copy->pointer;
 }

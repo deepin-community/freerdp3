@@ -140,6 +140,7 @@ extern "C"
 		UINT32 resizeWidth;
 		UINT32 resizeHeight;
 		BOOL areGfxCapsReady; /** @since version 3.3.0 */
+		RDPGFX_CAPSET confirmedCaps; /** @since version 3.25.0 */
 	};
 
 	struct rdp_shadow_server
@@ -180,6 +181,12 @@ extern "C"
 		size_t maxClientsConnected;
 		BOOL SupportMultiRectBitmapUpdates; /** @since version 3.13.0 */
 		BOOL ShowMouseCursor;               /** @since version 3.15.0 */
+#if defined(WITH_GFX_AV1)
+		FREERDP_AV1_RATECONTROL AV1RateControlMode; /** @since version 3.15.0 */
+		UINT32 AV1BitRate;                          /** @since version 3.15.0 */
+#else
+	    UINT32 reservedAV1[2];
+#endif
 	};
 
 	struct rdp_shadow_surface
@@ -200,16 +207,16 @@ extern "C"
 
 	struct S_RDP_SHADOW_ENTRY_POINTS
 	{
-		pfnShadowSubsystemNew New;
+		WINPR_ATTR_NODISCARD pfnShadowSubsystemNew New;
 		pfnShadowSubsystemFree Free;
 
-		pfnShadowSubsystemInit Init;
+		WINPR_ATTR_NODISCARD pfnShadowSubsystemInit Init;
 		pfnShadowSubsystemUninit Uninit;
 
-		pfnShadowSubsystemStart Start;
+		WINPR_ATTR_NODISCARD pfnShadowSubsystemStart Start;
 		pfnShadowSubsystemStop Stop;
 
-		pfnShadowEnumMonitors EnumMonitors;
+		WINPR_ATTR_NODISCARD pfnShadowEnumMonitors EnumMonitors;
 	};
 
 	struct rdp_shadow_subsystem
@@ -236,21 +243,21 @@ extern "C"
 		AUDIO_FORMAT* audinFormats;
 		size_t nAudinFormats;
 
-		pfnShadowSynchronizeEvent SynchronizeEvent;
-		pfnShadowKeyboardEvent KeyboardEvent;
-		pfnShadowUnicodeKeyboardEvent UnicodeKeyboardEvent;
-		pfnShadowMouseEvent MouseEvent;
-		pfnShadowExtendedMouseEvent ExtendedMouseEvent;
-		pfnShadowChannelAudinServerReceiveSamples AudinServerReceiveSamples;
+		WINPR_ATTR_NODISCARD pfnShadowSynchronizeEvent SynchronizeEvent;
+		WINPR_ATTR_NODISCARD pfnShadowKeyboardEvent KeyboardEvent;
+		WINPR_ATTR_NODISCARD pfnShadowUnicodeKeyboardEvent UnicodeKeyboardEvent;
+		WINPR_ATTR_NODISCARD pfnShadowMouseEvent MouseEvent;
+		WINPR_ATTR_NODISCARD pfnShadowExtendedMouseEvent ExtendedMouseEvent;
+		WINPR_ATTR_NODISCARD pfnShadowChannelAudinServerReceiveSamples AudinServerReceiveSamples;
 
-		pfnShadowAuthenticate Authenticate;
-		pfnShadowClientConnect ClientConnect;
+		WINPR_ATTR_NODISCARD pfnShadowAuthenticate Authenticate;
+		WINPR_ATTR_NODISCARD pfnShadowClientConnect ClientConnect;
 		pfnShadowClientDisconnect ClientDisconnect;
-		pfnShadowClientCapabilities ClientCapabilities;
+		WINPR_ATTR_NODISCARD pfnShadowClientCapabilities ClientCapabilities;
 
 		rdpShadowServer* server;
 
-		pfnShadowRelMouseEvent RelMouseEvent; /** @since version 3.15.0 */
+		WINPR_ATTR_NODISCARD pfnShadowRelMouseEvent RelMouseEvent; /** @since version 3.15.0 */
 	};
 
 /* Definition of message between subsystem and clients */
@@ -313,7 +320,7 @@ extern "C"
 #if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 	WINPR_DEPRECATED_VAR(
 	    "[since 3.4.0] Use shadow_subsystem_pointer_convert_alpha_pointer_data_to_format instead",
-	    FREERDP_API int shadow_subsystem_pointer_convert_alpha_pointer_data(
+	    WINPR_ATTR_NODISCARD FREERDP_API int shadow_subsystem_pointer_convert_alpha_pointer_data(
 	        const BYTE* WINPR_RESTRICT pixels, BOOL premultiplied, UINT32 width, UINT32 height,
 	        SHADOW_MSG_OUT_POINTER_ALPHA_UPDATE* WINPR_RESTRICT pointerColor));
 #endif
@@ -331,22 +338,31 @@ extern "C"
 	 *
 	 *  @since version 3.4.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int shadow_subsystem_pointer_convert_alpha_pointer_data_to_format(
 	    const BYTE* WINPR_RESTRICT pixels, UINT32 format, BOOL premultiplied, UINT32 width,
 	    UINT32 height, SHADOW_MSG_OUT_POINTER_ALPHA_UPDATE* WINPR_RESTRICT pointerColor);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int shadow_server_parse_command_line(rdpShadowServer* server, int argc, char** argv,
 	                                                 COMMAND_LINE_ARGUMENT_A* cargs);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int shadow_server_command_line_status_print(rdpShadowServer* server, int argc,
 	                                                        char** argv, int status,
 	                                                        const COMMAND_LINE_ARGUMENT_A* cargs);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int shadow_server_start(rdpShadowServer* server);
+
 	FREERDP_API int shadow_server_stop(rdpShadowServer* server);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int shadow_server_init(rdpShadowServer* server);
+
 	FREERDP_API int shadow_server_uninit(rdpShadowServer* server);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API UINT32 shadow_enum_monitors(MONITOR_DEF* monitors, UINT32 maxMonitors);
 
 	FREERDP_API void shadow_server_free(rdpShadowServer* server);
@@ -355,11 +371,12 @@ extern "C"
 	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpShadowServer* shadow_server_new(void);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int shadow_capture_align_clip_rect(RECTANGLE_16* rect, const RECTANGLE_16* clip);
 
 #if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 	WINPR_DEPRECATED_VAR("[since 3.4.0] Use shadow_capture_compare_with_format",
-	                     FREERDP_API int shadow_capture_compare(
+	                     WINPR_ATTR_NODISCARD FREERDP_API int shadow_capture_compare(
 	                         const BYTE* WINPR_RESTRICT pData1, UINT32 nStep1, UINT32 nWidth,
 	                         UINT32 nHeight, const BYTE* WINPR_RESTRICT pData2, UINT32 nStep2,
 	                         RECTANGLE_16* WINPR_RESTRICT rect));
@@ -381,6 +398,7 @@ extern "C"
 	 *
 	 *  @since version 3.4.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int shadow_capture_compare_with_format(const BYTE* WINPR_RESTRICT pData1,
 	                                                   UINT32 format1, UINT32 nStep1, UINT32 nWidth,
 	                                                   UINT32 nHeight,
@@ -390,15 +408,24 @@ extern "C"
 
 	FREERDP_API void shadow_subsystem_frame_update(rdpShadowSubsystem* subsystem);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL shadow_client_post_msg(rdpShadowClient* client, void* context, UINT32 type,
 	                                        SHADOW_MSG_OUT* msg, void* lParam);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int shadow_client_boardcast_msg(rdpShadowServer* server, void* context, UINT32 type,
 	                                            SHADOW_MSG_OUT* msg, void* lParam);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int shadow_client_boardcast_quit(rdpShadowServer* server, int nExitCode);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API UINT32 shadow_encoder_preferred_fps(rdpShadowEncoder* encoder);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API UINT32 shadow_encoder_inflight_frames(rdpShadowEncoder* encoder);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL shadow_screen_resize(rdpShadowScreen* screen);
 
 #ifdef __cplusplus

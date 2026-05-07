@@ -5,13 +5,14 @@
 
 int TestCryptoRand(int argc, char* argv[])
 {
-	char* str = NULL;
-	BYTE rnd[16] = { 0 };
+	char* str = nullptr;
+	BYTE rnd[16] = WINPR_C_ARRAY_INIT;
 
 	WINPR_UNUSED(argc);
 	WINPR_UNUSED(argv);
 
-	winpr_RAND(rnd, sizeof(rnd));
+	if (winpr_RAND(rnd, sizeof(rnd)) < 0)
+		return -1;
 
 	str = winpr_BinToHexString(rnd, sizeof(rnd), FALSE);
 	// (void)fprintf(stderr, "Rand: %s\n", str);

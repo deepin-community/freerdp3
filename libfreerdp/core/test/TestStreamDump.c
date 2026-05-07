@@ -12,19 +12,20 @@
 static BOOL test_entry_read_write(void)
 {
 	BOOL rc = FALSE;
-	FILE* fp = NULL;
-	wStream* sw = NULL;
-	wStream* sr = NULL;
+	FILE* fp = nullptr;
+	wStream* sw = nullptr;
+	wStream* sr = nullptr;
 	size_t offset = 0;
 	UINT64 ts = 0;
 	UINT32 flags = 0;
-	BYTE tmp[16] = { 0 };
-	char tmp2[64] = { 0 };
-	char* name = NULL;
+	BYTE tmp[16] = WINPR_C_ARRAY_INIT;
+	char tmp2[64] = WINPR_C_ARRAY_INIT;
+	char* name = nullptr;
 	size_t entrysize = sizeof(UINT64) /* timestamp */ + sizeof(BYTE) /* direction */ +
 	                   sizeof(UINT32) /* CRC */ + sizeof(UINT64) /* size */;
 
-	winpr_RAND(tmp, sizeof(tmp));
+	if (winpr_RAND(tmp, sizeof(tmp)) < 0)
+		goto fail;
 
 	for (size_t x = 0; x < sizeof(tmp); x++)
 		(void)_snprintf(&tmp2[x * 2], sizeof(tmp2) - 2 * x, "%02" PRIx8, tmp[x]);
@@ -35,8 +36,8 @@ static BOOL test_entry_read_write(void)
 		goto fail;
 	}
 
-	sw = Stream_New(NULL, 8123);
-	sr = Stream_New(NULL, 1024);
+	sw = Stream_New(nullptr, 8123);
+	sr = Stream_New(nullptr, 1024);
 	if (!sr || !sw)
 	{
 		(void)fprintf(stderr, "[%s] Could not create iostreams sw=%p, sr=%p\n", __func__, (void*)sw,
@@ -44,9 +45,11 @@ static BOOL test_entry_read_write(void)
 		goto fail;
 	}
 
-	winpr_RAND(Stream_Buffer(sw), Stream_Capacity(sw));
+	if (winpr_RAND(Stream_Buffer(sw), Stream_Capacity(sw)) < 0)
+		goto fail;
 	entrysize += Stream_Capacity(sw);
-	Stream_SetLength(sw, Stream_Capacity(sw));
+	if (!Stream_SetLength(sw, Stream_Capacity(sw)))
+		goto fail;
 
 	fp = fopen(name, "wb");
 	if (!fp)

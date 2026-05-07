@@ -78,9 +78,9 @@ static UINT enumerator_server_open_channel(enumerator_server* enumerator)
 {
 	CamDevEnumServerContext* context = &enumerator->context;
 	DWORD Error = ERROR_SUCCESS;
-	HANDLE hEvent = NULL;
+	HANDLE hEvent = nullptr;
 	DWORD BytesReturned = 0;
-	PULONG pSessionId = NULL;
+	PULONG pSessionId = nullptr;
 	UINT32 channelId = 0;
 	BOOL status = TRUE;
 
@@ -129,7 +129,7 @@ static UINT enumerator_server_handle_select_version_request(CamDevEnumServerCont
                                                             WINPR_ATTR_UNUSED wStream* s,
                                                             const CAM_SHARED_MSG_HEADER* header)
 {
-	CAM_SELECT_VERSION_REQUEST pdu = { 0 };
+	CAM_SELECT_VERSION_REQUEST pdu = WINPR_C_ARRAY_INIT;
 	UINT error = CHANNEL_RC_OK;
 
 	WINPR_ASSERT(context);
@@ -151,7 +151,7 @@ static UINT enumerator_server_recv_device_added_notification(CamDevEnumServerCon
 	CAM_DEVICE_ADDED_NOTIFICATION pdu;
 	UINT error = CHANNEL_RC_OK;
 	size_t remaining_length = 0;
-	WCHAR* channel_name_start = 0;
+	WCHAR* channel_name_start = nullptr;
 
 	WINPR_ASSERT(context);
 	WINPR_ASSERT(header);
@@ -264,8 +264,8 @@ static UINT enumerator_process_message(enumerator_server* enumerator)
 	BOOL rc = 0;
 	UINT error = ERROR_INTERNAL_ERROR;
 	ULONG BytesReturned = 0;
-	CAM_SHARED_MSG_HEADER header = { 0 };
-	wStream* s = NULL;
+	CAM_SHARED_MSG_HEADER header = WINPR_C_ARRAY_INIT;
+	wStream* s = nullptr;
 
 	WINPR_ASSERT(enumerator);
 	WINPR_ASSERT(enumerator->enumerator_channel);
@@ -273,8 +273,8 @@ static UINT enumerator_process_message(enumerator_server* enumerator)
 	s = enumerator->buffer;
 	WINPR_ASSERT(s);
 
-	Stream_SetPosition(s, 0);
-	rc = WTSVirtualChannelRead(enumerator->enumerator_channel, 0, NULL, 0, &BytesReturned);
+	Stream_ResetPosition(s);
+	rc = WTSVirtualChannelRead(enumerator->enumerator_channel, 0, nullptr, 0, &BytesReturned);
 	if (!rc)
 		goto out;
 
@@ -298,7 +298,9 @@ static UINT enumerator_process_message(enumerator_server* enumerator)
 		goto out;
 	}
 
-	Stream_SetLength(s, BytesReturned);
+	if (!Stream_SetLength(s, BytesReturned))
+		return ERROR_INTERNAL_ERROR;
+
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, CAM_HEADER_SIZE))
 		return ERROR_NO_DATA;
 
@@ -366,9 +368,9 @@ static UINT enumerator_server_context_poll_int(CamDevEnumServerContext* context)
 
 static HANDLE enumerator_server_get_channel_handle(enumerator_server* enumerator)
 {
-	void* buffer = NULL;
+	void* buffer = nullptr;
 	DWORD BytesReturned = 0;
-	HANDLE ChannelEvent = NULL;
+	HANDLE ChannelEvent = nullptr;
 
 	WINPR_ASSERT(enumerator);
 
@@ -387,7 +389,7 @@ static HANDLE enumerator_server_get_channel_handle(enumerator_server* enumerator
 static DWORD WINAPI enumerator_server_thread_func(LPVOID arg)
 {
 	DWORD nCount = 0;
-	HANDLE events[2] = { 0 };
+	HANDLE events[2] = WINPR_C_ARRAY_INIT;
 	enumerator_server* enumerator = (enumerator_server*)arg;
 	UINT error = CHANNEL_RC_OK;
 	DWORD status = 0;
@@ -432,7 +434,7 @@ static DWORD WINAPI enumerator_server_thread_func(LPVOID arg)
 	}
 
 	(void)WTSVirtualChannelClose(enumerator->enumerator_channel);
-	enumerator->enumerator_channel = NULL;
+	enumerator->enumerator_channel = nullptr;
 
 	if (error && enumerator->context.rdpcontext)
 		setChannelError(enumerator->context.rdpcontext, error,
@@ -448,9 +450,9 @@ static UINT enumerator_server_open(CamDevEnumServerContext* context)
 
 	WINPR_ASSERT(enumerator);
 
-	if (!enumerator->externalThread && (enumerator->thread == NULL))
+	if (!enumerator->externalThread && (enumerator->thread == nullptr))
 	{
-		enumerator->stopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+		enumerator->stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 		if (!enumerator->stopEvent)
 		{
 			WLog_ERR(TAG, "CreateEvent failed!");
@@ -458,12 +460,12 @@ static UINT enumerator_server_open(CamDevEnumServerContext* context)
 		}
 
 		enumerator->thread =
-		    CreateThread(NULL, 0, enumerator_server_thread_func, enumerator, 0, NULL);
+		    CreateThread(nullptr, 0, enumerator_server_thread_func, enumerator, 0, nullptr);
 		if (!enumerator->thread)
 		{
 			WLog_ERR(TAG, "CreateThread failed!");
 			(void)CloseHandle(enumerator->stopEvent);
-			enumerator->stopEvent = NULL;
+			enumerator->stopEvent = nullptr;
 			return ERROR_INTERNAL_ERROR;
 		}
 	}
@@ -492,15 +494,15 @@ static UINT enumerator_server_close(CamDevEnumServerContext* context)
 
 		(void)CloseHandle(enumerator->thread);
 		(void)CloseHandle(enumerator->stopEvent);
-		enumerator->thread = NULL;
-		enumerator->stopEvent = NULL;
+		enumerator->thread = nullptr;
+		enumerator->stopEvent = nullptr;
 	}
 	if (enumerator->externalThread)
 	{
 		if (enumerator->state != ENUMERATOR_INITIAL)
 		{
 			(void)WTSVirtualChannelClose(enumerator->enumerator_channel);
-			enumerator->enumerator_channel = NULL;
+			enumerator->enumerator_channel = nullptr;
 			enumerator->state = ENUMERATOR_INITIAL;
 		}
 	}
@@ -568,9 +570,9 @@ out:
 static UINT enumerator_send_select_version_response_pdu(
     CamDevEnumServerContext* context, const CAM_SELECT_VERSION_RESPONSE* selectVersionResponse)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
-	s = Stream_New(NULL, CAM_HEADER_SIZE);
+	s = Stream_New(nullptr, CAM_HEADER_SIZE);
 	if (!s)
 	{
 		WLog_ERR(TAG, "Stream_New failed!");
@@ -589,7 +591,7 @@ CamDevEnumServerContext* cam_dev_enum_server_context_new(HANDLE vcm)
 	enumerator_server* enumerator = (enumerator_server*)calloc(1, sizeof(enumerator_server));
 
 	if (!enumerator)
-		return NULL;
+		return nullptr;
 
 	enumerator->context.vcm = vcm;
 	enumerator->context.Initialize = enumerator_server_initialize;
@@ -600,7 +602,7 @@ CamDevEnumServerContext* cam_dev_enum_server_context_new(HANDLE vcm)
 
 	enumerator->context.SelectVersionResponse = enumerator_send_select_version_response_pdu;
 
-	enumerator->buffer = Stream_New(NULL, 4096);
+	enumerator->buffer = Stream_New(nullptr, 4096);
 	if (!enumerator->buffer)
 		goto fail;
 
@@ -610,7 +612,7 @@ fail:
 	WINPR_PRAGMA_DIAG_IGNORED_MISMATCHED_DEALLOC
 	cam_dev_enum_server_context_free(&enumerator->context);
 	WINPR_PRAGMA_DIAG_POP
-	return NULL;
+	return nullptr;
 }
 
 void cam_dev_enum_server_context_free(CamDevEnumServerContext* context)

@@ -85,7 +85,8 @@ extern "C"
 		GW_AUTH_RDG,
 		GW_AUTH_RPC,
 		AUTH_SMARTCARD_PIN,
-		AUTH_RDSTLS
+		AUTH_RDSTLS,
+		AUTH_FIDO_PIN /**< @since version 3.x.0 FIDO2 authenticator PIN prompt */
 	} rdp_auth_reason;
 
 	typedef BOOL (*pContextNew)(freerdp* instance, rdpContext* context);
@@ -94,14 +95,15 @@ extern "C"
 	typedef BOOL (*pConnectCallback)(freerdp* instance);
 	typedef void (*pPostDisconnect)(freerdp* instance);
 
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 	/** \brief Authentication callback function pointer definition
 	 *
 	 * \param instance A pointer to the instance to work on
 	 * \param username A pointer to the username string. On input the current username, on output
-	 * the username that should be used. Must not be NULL. \param password A pointer to the password
-	 * string. On input the current password, on output the password that sohould be used. Must not
-	 * be NULL. \param domain A pointer to the domain string. On input the current domain, on output
-	 * the domain that sohould be used. Must not be NULL.
+	 * the username that should be used. Must not be nullptr. \param password A pointer to the
+	 * password string. On input the current password, on output the password that sohould be used.
+	 * Must not be nullptr. \param domain A pointer to the domain string. On input the current
+	 * domain, on output the domain that sohould be used. Must not be nullptr.
 	 *
 	 * \return \b FALSE no valid credentials supplied, continue without \b TRUE valid credentials
 	 * should be available.
@@ -109,6 +111,7 @@ extern "C"
 
 	typedef BOOL (*pAuthenticate)(freerdp* instance, char** username, char** password,
 	                              char** domain);
+#endif
 
 	/** @brief Extended authentication callback function pointer definition
 	 *
@@ -117,11 +120,11 @@ extern "C"
 	 *
 	 * @param instance A pointer to the instance to work on
 	 * @param username A pointer to the username string. On input the current username, on output
-	 *          the username that should be used instead. Must not be NULL.
+	 *          the username that should be used instead. Must not be nullptr.
 	 * @param password A pointer to the password string. On input the current password, on output
-	 *          the password that sohould be used. Must not be NULL.
+	 *          the password that sohould be used. Must not be nullptr.
 	 * @param domain A pointer to the domain string. On input the current domain, on output the
-	 *          domain that sohould be used. Must not be NULL.
+	 *          domain that sohould be used. Must not be nullptr.
 	 * @param reason The reason the callback was called. (e.g. NLA, TLS, RDP, GATEWAY, ...)
 	 *
 	 * @return \b FALSE to abort the connection, \b TRUE otherwise.
@@ -144,7 +147,7 @@ extern "C"
 	 *  @param cert_list A list of smartcard certificates
 	 *  @param count The number of smartcard certificates in the list
 	 *  @param choice A pointer to an integer that will represent the selected certificate index.
-	 * Must not be \b NULL
+	 * Must not be \b nullptr
 	 *  @param gateway A indicator if the authentication is for a session (\b FALSE) or a gateway
 	 * (\b TRUE)
 	 *
@@ -219,12 +222,11 @@ extern "C"
 	 *  @return 1 to accept and store a certificate, 2 to accept
 	 *          a certificate only for this session, 0 otherwise.
 	 */
-#if defined(WITH_FREERDP_DEPRECATED)
-	typedef WINPR_DEPRECATED_VAR(
-	    "Use pVerifyCertificateEx",
-	    DWORD (*pVerifyCertificate)(freerdp* instance, const char* common_name, const char* subject,
-	                                const char* issuer, const char* fingerprint,
-	                                BOOL host_mismatch));
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
+	WINPR_DEPRECATED_VAR("Use pVerifyCertificateEx",
+	                     typedef DWORD (*pVerifyCertificate)(
+	                         freerdp* instance, const char* common_name, const char* subject,
+	                         const char* issuer, const char* fingerprint, BOOL host_mismatch));
 #endif
 
 	/** @brief Callback used if user interaction is required to accept
@@ -261,13 +263,13 @@ extern "C"
 	 *  @return 1 to accept and store a certificate, 2 to accept
 	 *          a certificate only for this session, 0 otherwise.
 	 */
-#if defined(WITH_FREERDP_DEPRECATED)
-	typedef WINPR_DEPRECATED_VAR(
-	    "Use pVerifyChangedCertificateEx",
-	    DWORD (*pVerifyChangedCertificate)(freerdp* instance, const char* common_name,
-	                                       const char* subject, const char* issuer,
-	                                       const char* new_fingerprint, const char* old_subject,
-	                                       const char* old_issuer, const char* old_fingerprint));
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
+	WINPR_DEPRECATED_VAR("Use pVerifyChangedCertificateEx",
+	                     typedef DWORD (*pVerifyChangedCertificate)(
+	                         freerdp* instance, const char* common_name, const char* subject,
+	                         const char* issuer, const char* new_fingerprint,
+	                         const char* old_subject, const char* old_issuer,
+	                         const char* old_fingerprint));
 #endif
 
 	/** @brief Callback used if user interaction is required to accept
@@ -477,51 +479,55 @@ owned by rdpRdp */
 		             additional information after that.
 		          */
 
-		ALIGN64 pContextNew
+		WINPR_ATTR_NODISCARD ALIGN64 pContextNew
 		    ContextNew; /**< (offset 33)
 		             Callback for context allocation
 		             Can be set before calling freerdp_context_new() to have it executed after
-		             allocation and initialization. Must be set to NULL if not needed. */
+		             allocation and initialization. Must be set to nullptr if not needed. */
 
 		ALIGN64 pContextFree
 		    ContextFree;          /**< (offset 34)
 		                       Callback for context deallocation
 		                       Can be set before calling freerdp_context_free() to have it executed before
-		                       deallocation.		  Must be set to NULL if not needed. */
+		                       deallocation.		  Must be set to nullptr if not needed. */
 		UINT64 paddingC[47 - 35]; /* 35 */
 
 		ALIGN64 UINT ConnectionCallbackState; /* 47 */
 
-		ALIGN64 pConnectCallback
+		WINPR_ATTR_NODISCARD ALIGN64 pConnectCallback
 		    PreConnect; /**< (offset 48)
 		             Callback for pre-connect operations.
 		             Can be set before calling freerdp_connect() to have it executed before the
-		             actual connection happens. Must be set to NULL if not needed. */
+		             actual connection happens. Must be set to nullptr if not needed. */
 
-		ALIGN64 pConnectCallback
+		WINPR_ATTR_NODISCARD ALIGN64 pConnectCallback
 		    PostConnect; /**< (offset 49)
 		              Callback for post-connect operations.
 		              Can be set before calling freerdp_connect() to have it executed after the
-		              actual connection has succeeded. Must be set to NULL if not needed. */
+		              actual connection has succeeded. Must be set to nullptr if not needed. */
 
-		ALIGN64 pAuthenticate Authenticate; /**< (offset 50)
-		                                 Callback for authentication.
-		                                 It is used to get the username/password when it was not
-		                                 provided at connection time. */
-#if defined(WITH_FREERDP_DEPRECATED)
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
+		WINPR_DEPRECATED_VAR("[since 3.25.0] Use AuthenticateEx instead",
+		                     WINPR_ATTR_NODISCARD ALIGN64 pAuthenticate
+		                         Authenticate); /**< (offset 50)
+  Callback for authentication.
+  It is used to get the username/password when it was not
+  provided at connection time. */
+
 		WINPR_DEPRECATED_VAR("Use VerifyCertificateEx or VerifyX509Certificate  instead",
-		                     ALIGN64 pVerifyCertificate VerifyCertificate;) /**< (offset 51) */
+		                     WINPR_ATTR_NODISCARD ALIGN64 pVerifyCertificate
+		                         VerifyCertificate;) /**< (offset 51) */
 		WINPR_DEPRECATED_VAR("Use VerifyChangedCertificateEx or VerifyX509Certificate  instead",
-		                     ALIGN64 pVerifyChangedCertificate
+		                     WINPR_ATTR_NODISCARD ALIGN64 pVerifyChangedCertificate
 		                         VerifyChangedCertificate;) /**< (offset 52) */
 #else
-	ALIGN64 UINT64 reserved[2];
+	    ALIGN64 UINT64 reserved50[3];
 #endif
-		ALIGN64 pVerifyX509Certificate
+		WINPR_ATTR_NODISCARD ALIGN64 pVerifyX509Certificate
 		    VerifyX509Certificate; /**< (offset 53)  Callback for X509 certificate verification
 		                              (PEM format) */
 
-		ALIGN64 pLogonErrorInfo
+		WINPR_ATTR_NODISCARD ALIGN64 pLogonErrorInfo
 		    LogonErrorInfo; /**< (offset 54)  Callback for logon error info, important for logon
 		                       system messages with RemoteApp */
 
@@ -533,23 +539,27 @@ owned by rdpRdp */
 		                       This will be called before disconnecting and cleaning up the
 		                       channels.
  */
-
-		ALIGN64 pAuthenticate GatewayAuthenticate; /**< (offset 56)
-		                                 Callback for gateway authentication.
-		                                 It is used to get the username/password when it was not
-		                                 provided at connection time. */
-
-		ALIGN64 pPresentGatewayMessage PresentGatewayMessage; /**< (offset 57)
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
+		WINPR_DEPRECATED_VAR("[since 3.25.0] Use AuthenticateEx instead",
+		                     WINPR_ATTR_NODISCARD ALIGN64 pAuthenticate
+		                         GatewayAuthenticate); /**< (offset 56)
+  Callback for gateway authentication.
+  It is used to get the username/password when it was not
+  provided at connection time. */
+#else
+	    ALIGN64 UINT64 reserved56[1];
+#endif
+		WINPR_ATTR_NODISCARD ALIGN64 pPresentGatewayMessage PresentGatewayMessage; /**< (offset 57)
 		                                  Callback for gateway consent messages.
 		                                  It is used to present consent messages to the user. */
 
-		ALIGN64 pConnectCallback Redirect; /**< (offset 58)
+		WINPR_ATTR_NODISCARD ALIGN64 pConnectCallback Redirect; /**< (offset 58)
 		                                               Callback for redirect operations.
 		                                               Can be set after
 		             rdp_client_disconnect_and_clear and applying redirection settings but before
 		             rdp_client_connect() to have it executed after the actual connection has
-		             succeeded. Must be set to NULL if not needed. */
-		ALIGN64 pConnectCallback
+		             succeeded. Must be set to nullptr if not needed. */
+		WINPR_ATTR_NODISCARD ALIGN64 pConnectCallback
 		    LoadChannels; /**< (offset 59)
 		                   * callback for loading channel configuration. Might be called multiple
 		                   * times when redirection occurs. */
@@ -563,46 +573,47 @@ owned by rdpRdp */
 		                           */
 		UINT64 paddingD[64 - 61]; /* 61 */
 
-		ALIGN64 pSendChannelData
+		WINPR_ATTR_NODISCARD ALIGN64 pSendChannelData
 		    SendChannelData; /* (offset 64)
 		                Callback for sending data to a channel.
 		                By default, it is set by freerdp_new() to freerdp_send_channel_data(), which
 		                eventually calls freerdp_channel_send() */
-		ALIGN64 pReceiveChannelData
+		WINPR_ATTR_NODISCARD ALIGN64 pReceiveChannelData
 		    ReceiveChannelData; /* (offset 65)
 		                   Callback for receiving data from a channel.
-		                   This is called by freerdp_channel_process() (if not NULL).
+		                   This is called by freerdp_channel_process() (if not nullptr).
 		                   Clients will typically use a function that calls freerdp_channels_data()
 		                   to perform the needed tasks. */
 
-		ALIGN64 pVerifyCertificateEx
+		WINPR_ATTR_NODISCARD ALIGN64 pVerifyCertificateEx
 		    VerifyCertificateEx; /**< (offset 66)
 		                  Callback for certificate validation.
 		                  Used to verify that an unknown certificate is trusted. */
-		ALIGN64 pVerifyChangedCertificateEx
+		WINPR_ATTR_NODISCARD ALIGN64 pVerifyChangedCertificateEx
 		    VerifyChangedCertificateEx; /**< (offset 67)
 		                         Callback for changed certificate validation.
 		                         Used when a certificate differs from stored fingerprint. */
-		ALIGN64 pSendChannelPacket
-		    SendChannelPacket;                  /* (offset 68)
-		                                         * Callback for sending RAW data to a channel. In contrast to
-		                                         * SendChannelData data fragmentation    is up to the user and this
-		                                         * function sends data as is with the provided flags.
-		                                         */
-		ALIGN64 pAuthenticateEx AuthenticateEx; /**< (offset 69)
+		WINPR_ATTR_NODISCARD ALIGN64 pSendChannelPacket
+		    SendChannelPacket;                                       /* (offset 68)
+		                                                              * Callback for sending RAW data to a channel. In contrast to
+		                                                              * SendChannelData data fragmentation    is up to the user and this
+		                                                              * function sends data as is with the provided flags.
+		                                                              */
+		WINPR_ATTR_NODISCARD ALIGN64 pAuthenticateEx AuthenticateEx; /**< (offset 69)
 		                                 Callback for authentication.
 		                                 It is used to get the username/password. The reason
 		                                 argument tells why it was called.  */
-		ALIGN64 pChooseSmartcard
-		    ChooseSmartcard;                    /* (offset 70)
-		                                      Callback for choosing a smartcard for logon.
-		                                      Used when multiple smartcards are available. Returns an index into a list
-		                                      of SmartcardCertInfo pointers	*/
-		ALIGN64 pGetAccessToken GetAccessToken; /* (offset 71)
+		WINPR_ATTR_NODISCARD ALIGN64 pChooseSmartcard
+		    ChooseSmartcard;                                         /* (offset 70)
+		                                                           Callback for choosing a smartcard for logon.
+		                                                           Used when multiple smartcards are available. Returns an index into a list
+		                                                           of SmartcardCertInfo pointers	*/
+		WINPR_ATTR_NODISCARD ALIGN64 pGetAccessToken GetAccessToken; /* (offset 71)
 		                                            Callback for obtaining an access token
 		                                            for \b AccessTokenType authentication */
-		ALIGN64 pRetryDialog RetryDialog; /* (offset 72) Callback for displaying a dialog in case of
-		                                     something needs a retry */
+		WINPR_ATTR_NODISCARD ALIGN64 pRetryDialog
+		    RetryDialog;                  /* (offset 72) Callback for displaying a dialog in case of
+		                something needs a retry */
 		UINT64 paddingE[80 - 73];         /* 73 */
 	};
 
@@ -615,11 +626,16 @@ owned by rdpRdp */
 
 	FREERDP_API void freerdp_context_free(freerdp* instance);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_context_new(freerdp* instance);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_context_new_ex(freerdp* instance, rdpSettings* settings);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_context_reset(freerdp* instance);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_connect(freerdp* instance);
 
 #if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
@@ -628,14 +644,19 @@ owned by rdpRdp */
 #endif
 
 	FREERDP_API BOOL freerdp_abort_connect_context(rdpContext* context);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API HANDLE freerdp_abort_event(rdpContext* context);
 
 #if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 	WINPR_DEPRECATED_VAR("use freerdp_shall_disconnect_context instead",
-	                     FREERDP_API BOOL freerdp_shall_disconnect(const freerdp* instance));
+	                     WINPR_ATTR_NODISCARD FREERDP_API BOOL
+	                         freerdp_shall_disconnect(const freerdp* instance));
 #endif
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_shall_disconnect_context(const rdpContext* context);
+
 	FREERDP_API BOOL freerdp_disconnect(freerdp* instance);
 
 	/** @brief stringify disconnect reason of type Disconnect_Ultimatum
@@ -646,46 +667,77 @@ owned by rdpRdp */
 	 *
 	 *  @since version 3.13.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_disconnect_reason_string(int reason);
 
 #if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 	WINPR_DEPRECATED_VAR("use freerdp_disconnect_before_reconnect_context instead",
-	                     FREERDP_API BOOL freerdp_disconnect_before_reconnect(freerdp* instance));
+	                     WINPR_ATTR_NODISCARD FREERDP_API BOOL
+	                         freerdp_disconnect_before_reconnect(freerdp* instance));
 #endif
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_disconnect_before_reconnect_context(rdpContext* context);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_reconnect(freerdp* instance);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API UINT freerdp_channels_attach(freerdp* instance);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API UINT freerdp_channels_detach(freerdp* instance);
 
 #if defined(WITH_FREERDP_DEPRECATED)
 	WINPR_DEPRECATED_VAR("Use freerdp_get_event_handles",
-	                     FREERDP_API BOOL freerdp_get_fds(freerdp* instance, void** rfds,
-	                                                      int* rcount, void** wfds, int* wcount));
+	                     WINPR_ATTR_NODISCARD FREERDP_API BOOL
+	                         freerdp_get_fds(freerdp* instance, void** rfds, int* rcount,
+	                                         void** wfds, int* wcount));
 #endif
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_check_fds(freerdp* instance);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API DWORD freerdp_get_event_handles(rdpContext* context, HANDLE* events, DWORD count);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_check_event_handles(rdpContext* context);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API wMessageQueue* freerdp_get_message_queue(freerdp* instance, DWORD id);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API HANDLE freerdp_get_message_queue_event_handle(freerdp* instance, DWORD id);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int freerdp_message_queue_process_message(freerdp* instance, DWORD id,
 	                                                      wMessage* message);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int freerdp_message_queue_process_pending_messages(freerdp* instance, DWORD id);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API UINT32 freerdp_error_info(const freerdp* instance);
+
 	FREERDP_API void freerdp_set_error_info(rdpRdp* rdp, UINT32 error);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_send_error_info(rdpRdp* rdp);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_get_stats(const rdpRdp* rdp, UINT64* inBytes, UINT64* outBytes,
 	                                   UINT64* inPackets, UINT64* outPackets);
 
 	FREERDP_API void freerdp_get_version(int* major, int* minor, int* revision);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_get_version_string(void);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_get_build_revision(void);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_get_build_config(void);
 
 	FREERDP_API void freerdp_free(freerdp* instance);
@@ -694,15 +746,24 @@ owned by rdpRdp */
 	WINPR_ATTR_NODISCARD
 	FREERDP_API freerdp* freerdp_new(void);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_focus_required(freerdp* instance);
 	FREERDP_API void freerdp_set_focus(freerdp* instance);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int freerdp_get_disconnect_ultimatum(const rdpContext* context);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API UINT32 freerdp_get_last_error(const rdpContext* context);
-	FREERDP_API const char* freerdp_get_last_error_name(UINT32 error);
-	FREERDP_API const char* freerdp_get_last_error_string(UINT32 error);
-	FREERDP_API const char* freerdp_get_last_error_category(UINT32 error);
+
+	WINPR_ATTR_NODISCARD
+	FREERDP_API const char* freerdp_get_last_error_name(UINT32 code);
+
+	WINPR_ATTR_NODISCARD
+	FREERDP_API const char* freerdp_get_last_error_string(UINT32 code);
+
+	WINPR_ATTR_NODISCARD
+	FREERDP_API const char* freerdp_get_last_error_category(UINT32 code);
 
 #define freerdp_set_last_error(context, lastError) \
 	freerdp_set_last_error_ex((context), (lastError), __func__, __FILE__, __LINE__)
@@ -719,19 +780,30 @@ owned by rdpRdp */
 	FREERDP_API void freerdp_set_last_error_ex(rdpContext* context, UINT32 lastError,
 	                                           const char* fkt, const char* file, int line);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_get_logon_error_info_type(UINT32 type);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_get_logon_error_info_type_ex(UINT32 type, char* buffer,
 	                                                             size_t size);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_get_logon_error_info_data(UINT32 data);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_get_logon_error_info_data_ex(UINT32 data, char* buffer,
 	                                                             size_t size);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API ULONG freerdp_get_transport_sent(const rdpContext* context, BOOL resetCount);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_nla_impersonate(rdpContext* context);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_nla_revert_to_self(rdpContext* context);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API UINT32 freerdp_get_nla_sspi_error(const rdpContext* context);
 
 	/** Encrypts the provided buffer using the NLA's GSSAPI context
@@ -742,6 +814,7 @@ owned by rdpRdp */
 	 *	\returns if the operation completed successfully
 	 *	\since version 3.9.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_nla_encrypt(rdpContext* context, const SecBuffer* inBuffer,
 	                                     SecBuffer* outBuffer);
 
@@ -753,6 +826,7 @@ owned by rdpRdp */
 	 *	\returns if the operation completed successfully
 	 *	\since version 3.9.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_nla_decrypt(rdpContext* context, const SecBuffer* inBuffer,
 	                                     SecBuffer* outBuffer);
 
@@ -765,6 +839,7 @@ owned by rdpRdp */
 	 *	\returns a SECURITY_STATUS indicating if the operation completed successfully
 	 *	\since version 3.9.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API SECURITY_STATUS freerdp_nla_QueryContextAttributes(rdpContext* context,
 	                                                               DWORD ulAttr, PVOID pBuffer);
 
@@ -777,15 +852,26 @@ owned by rdpRdp */
 	 *
 	 *  Supported buffers are ones retrieved from SECPKG_ATTR_PACKAGE_INFO.
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API SECURITY_STATUS freerdp_nla_FreeContextBuffer(rdpContext* context, PVOID pBuffer);
 
 	FREERDP_API void clearChannelError(rdpContext* context);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API HANDLE getChannelErrorEventHandle(rdpContext* context);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API UINT getChannelError(const rdpContext* context);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* getChannelErrorDescription(const rdpContext* context);
+
 	FREERDP_API void setChannelError(rdpContext* context, UINT errorNum, const char* format, ...);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL checkChannelErrorEvent(rdpContext* context);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_nego_get_routing_token(const rdpContext* context,
 	                                                       DWORD* length);
 
@@ -795,6 +881,7 @@ owned by rdpRdp */
 	 *
 	 *  \return A \b CONNECTION_STATE the context is currently in
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API CONNECTION_STATE freerdp_get_state(const rdpContext* context);
 
 	/** \brief returns a string representation of a \b CONNECTION_STATE
@@ -803,6 +890,7 @@ owned by rdpRdp */
 	 *
 	 *  \return The string representation of the \b CONNECTION_STATE
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_state_string(CONNECTION_STATE state);
 
 	/** \brief Queries if the current \b CONNECTION_STATE of the context is an active connection.
@@ -814,11 +902,16 @@ owned by rdpRdp */
 	 *
 	 *  \return \b TRUE if the connection state indicates an active connection, \b FALSE otherwise
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_is_active_state(const rdpContext* context);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_channels_from_mcs(rdpSettings* settings, const rdpContext* context);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_is_valid_mcs_create_request(const BYTE* data, size_t size);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_is_valid_mcs_create_response(const BYTE* data, size_t size);
 
 	/** \brief Persist the current credentials (gateway, target server, ...)
@@ -827,31 +920,34 @@ owned by rdpRdp */
 	 * is required. If a client modifies settings during runtime after pre-connect call this
 	 * function or the credentials will be lost on any reconnect, redirect, ...
 	 *
-	 *  \param context The RDP context to use, must not be \b NULL
+	 *  \param context The RDP context to use, must not be \b nullptr
 	 *
 	 *  \return \b TRUE if successful, \b FALSE if settings could not be applied (wrong session
 	 * state, ...)
 	 *  \since version 3.12.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_persist_credentials(rdpContext* context);
 
 	/** @brief set a new function to be called when an access token is requested.
 	 *
-	 * @param context The rdp context to set the function for. Must not be \b NULL
-	 * @param GetCommonAccessToken The function pointer to set, \b NULL to disable
+	 * @param context The rdp context to set the function for. Must not be \b nullptr
+	 * @param GetCommonAccessToken The function pointer to set, \b nullptr to disable
 	 *
 	 * @return \b TRUE for success, \b FALSE otherwise
 	 * @since version 3.16.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_set_common_access_token(rdpContext* context,
 	                                                 pGetCommonAccessToken GetCommonAccessToken);
 
 	/** @brief get the current function pointer set as GetCommonAccessToken
 	 *
-	 *  @param context The rdp context to set the function for. Must not be \b NULL
-	 *  @return The current function pointer set or \b NULL
+	 *  @param context The rdp context to set the function for. Must not be \b nullptr
+	 *  @return The current function pointer set or \b nullptr
 	 *  @since version 3.16.0
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API pGetCommonAccessToken freerdp_get_common_access_token(const rdpContext* context);
 
 #ifdef __cplusplus

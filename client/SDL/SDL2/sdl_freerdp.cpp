@@ -60,6 +60,9 @@
 #include "sdl_prefs.hpp"
 #include "dialogs/sdl_dialogs.hpp"
 #include "scoped_guard.hpp"
+#if defined(_WIN32)
+#include "sdl_win32_console.hpp"
+#endif
 
 #include <sdl_config.hpp>
 
@@ -605,9 +608,15 @@ static BOOL sdl_pre_connect(freerdp* instance)
 	 * callbacks or deactivate certain features. */
 	/* Register the channel listeners.
 	 * They are required to set up / tear down channels if they are loaded. */
-	PubSub_SubscribeChannelConnected(instance->context->pubSub, sdl_OnChannelConnectedEventHandler);
-	PubSub_SubscribeChannelDisconnected(instance->context->pubSub,
-	                                    sdl_OnChannelDisconnectedEventHandler);
+	if (PubSub_SubscribeChannelConnected(instance->context->pubSub,
+	                                     sdl_OnChannelConnectedEventHandler) < 0)
+		return FALSE;
+	if (PubSub_SubscribeChannelDisconnected(instance->context->pubSub,
+	                                        sdl_OnChannelDisconnectedEventHandler) < 0)
+		return FALSE;
+	if (PubSub_SubscribeUserNotification(instance->context->pubSub,
+	                                     sdl_OnUserNotificationEventHandler) < 0)
+		return FALSE;
 
 	if (!freerdp_settings_get_bool(settings, FreeRDP_AuthenticationOnly))
 	{
@@ -846,7 +855,8 @@ static int sdl_run(SdlContext* sdl)
 	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
 #endif
 
-	freerdp_add_signal_cleanup_handler(sdl->context(), sdl_term_handler);
+	if (!freerdp_add_signal_cleanup_handler(sdl->context(), sdl_term_handler))
+		return -1;
 
 	sdl->initialized.set();
 
@@ -866,10 +876,8 @@ static int sdl_run(SdlContext* sdl)
 					continue;
 			}
 
-#if defined(WITH_DEBUG_SDL_EVENTS)
-			SDL_Log("got event %s [0x%08" PRIx32 "]", sdl_event_type_str(windowEvent.type),
-			        windowEvent.type);
-#endif
+			WLog_Print(sdl->log, WLOG_TRACE, "got event %s [0x%08" PRIx32 "]",
+			           sdl_event_type_str(windowEvent.type), windowEvent.type);
 			std::scoped_lock lock(sdl->critical);
 			/* The session might have been disconnected while we were waiting for a new SDL event.
 			 * In that case ignore the SDL event and terminate. */
@@ -1170,6 +1178,8 @@ static void sdl_post_disconnect(freerdp* instance)
 	                                   sdl_OnChannelConnectedEventHandler);
 	PubSub_UnsubscribeChannelDisconnected(instance->context->pubSub,
 	                                      sdl_OnChannelDisconnectedEventHandler);
+	PubSub_UnsubscribeUserNotification(instance->context->pubSub,
+	                                   sdl_OnUserNotificationEventHandler);
 	gdi_free(instance);
 }
 
@@ -1435,7 +1445,7 @@ static BOOL sdl_client_global_init()
 	}
 #endif
 
-	return freerdp_handle_signals() != 0;
+	return freerdp_handle_signals() == 0;
 }
 
 /* Optional global tear down */
@@ -1653,6 +1663,10 @@ static void SDLCALL winpr_LogOutputFunction(void* userdata, int category, SDL_Lo
 
 int main(int argc, char* argv[])
 {
+#if defined(_WIN32)
+	sdl::win32::release_transient_console();
+#endif
+
 	int rc = -1;
 	int status = 0;
 	RDP_CLIENT_ENTRY_POINTS clientEntryPoints = {};

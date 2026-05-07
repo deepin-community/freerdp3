@@ -50,6 +50,7 @@ extern "C"
 	/* All proxy interception channels derive from this base struct
 	 * and set their cleanup function accordingly. */
 	FREERDP_API void intercept_context_entry_free(void* obj);
+
 	typedef PfChannelResult (*proxyChannelDataFn)(proxyData* pdata,
 	                                              const pServerStaticChannelContext* channel,
 	                                              const BYTE* xdata, size_t xsize, UINT32 flags,
@@ -63,13 +64,13 @@ extern "C"
 		UINT32 front_channel_id;
 		UINT32 back_channel_id;
 		pf_utils_channel_mode channelMode;
-		proxyChannelDataFn onFrontData;
-		proxyChannelDataFn onBackData;
+		WINPR_ATTR_NODISCARD proxyChannelDataFn onFrontData;
+		WINPR_ATTR_NODISCARD proxyChannelDataFn onBackData;
 		proxyChannelContextDtor contextDtor;
 		void* context;
 	};
 
-	void StaticChannelContext_free(pServerStaticChannelContext* ctx);
+	FREERDP_API void StaticChannelContext_free(pServerStaticChannelContext* ctx);
 
 	/**
 	 * Wraps rdpContext and holds the state for the proxy's server.
@@ -120,7 +121,8 @@ extern "C"
 
 		pReceiveChannelData client_receive_channel_data_original;
 		wQueue* cached_server_channel_data;
-		BOOL (*sendChannelData)(pClientContext* pc, const proxyChannelDataEventInfo* ev);
+		WINPR_ATTR_NODISCARD BOOL (*sendChannelData)(pClientContext* pc,
+		                                             const proxyChannelDataEventInfo* ev);
 
 		/* X509 specific */
 		char* remote_hostname;
@@ -164,21 +166,23 @@ extern "C"
 		psPeerReceiveChannelData server_receive_channel_data_original;
 	};
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL pf_context_copy_settings(rdpSettings* dst, const rdpSettings* src);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL pf_context_init_server_context(freerdp_peer* client);
 
 	WINPR_ATTR_MALLOC(freerdp_client_context_free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API pClientContext* pf_context_create_client_context(const rdpSettings* clientSettings);
 
 	FREERDP_API void proxy_data_free(proxyData* pdata);
 
 	WINPR_ATTR_MALLOC(proxy_data_free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API proxyData* proxy_data_new(void);
 	FREERDP_API void proxy_data_set_client_context(proxyData* pdata, pClientContext* context);
 	FREERDP_API void proxy_data_set_server_context(proxyData* pdata, pServerContext* context);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL proxy_data_shall_disconnect(proxyData* pdata);
 	FREERDP_API void proxy_data_abort_connect(proxyData* pdata);
 

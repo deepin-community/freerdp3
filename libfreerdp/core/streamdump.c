@@ -79,7 +79,10 @@ static
 		return FALSE;
 
 	if (pOffset)
-		(void)_fseeki64(fp, WINPR_ASSERTING_INT_CAST(int64_t, *pOffset), SEEK_SET);
+	{
+		if (_fseeki64(fp, WINPR_ASSERTING_INT_CAST(int64_t, *pOffset), SEEK_SET) < 0)
+			goto fail;
+	}
 
 	r = fread(&ts, 1, sizeof(ts), fp);
 	if (r != sizeof(ts))
@@ -168,12 +171,12 @@ fail:
 
 static FILE* stream_dump_get_file(const rdpSettings* settings, const char* mode)
 {
-	const char* cfolder = NULL;
-	char* file = NULL;
-	FILE* fp = NULL;
+	const char* cfolder = nullptr;
+	char* file = nullptr;
+	FILE* fp = nullptr;
 
 	if (!settings || !mode)
-		return NULL;
+		return nullptr;
 
 	cfolder = freerdp_settings_get_string(settings, FreeRDP_TransportDumpFile);
 	if (!cfolder)
@@ -193,7 +196,7 @@ fail:
 SSIZE_T stream_dump_append(const rdpContext* context, UINT32 flags, wStream* s, size_t* offset)
 {
 	SSIZE_T rc = -1;
-	FILE* fp = NULL;
+	FILE* fp = nullptr;
 	const UINT32 mask = STREAM_MSG_SRV_RX | STREAM_MSG_SRV_TX;
 	CONNECTION_STATE state = freerdp_get_state(context);
 	int r = 0;
@@ -241,7 +244,7 @@ SSIZE_T stream_dump_get(const rdpContext* context, UINT32* flags, wStream* s, si
                         UINT64* pts)
 {
 	SSIZE_T rc = -1;
-	FILE* fp = NULL;
+	FILE* fp = nullptr;
 	int r = 0;
 
 	if (!context || !s || !offset)
@@ -311,7 +314,7 @@ static int stream_dump_transport_read(rdpTransport* transport, wStream* s)
 
 static BOOL stream_dump_register_write_handlers(rdpContext* context)
 {
-	rdpTransportIo dump = { 0 };
+	rdpTransportIo dump = WINPR_C_ARRAY_INIT;
 	const rdpTransportIo* dfl = freerdp_get_io_callbacks(context);
 
 	if (!freerdp_settings_get_bool(context->settings, FreeRDP_TransportDump))
@@ -362,7 +365,8 @@ static int stream_dump_replay_transport_read(rdpTransport* transport, wStream* s
 	const size_t start = Stream_GetPosition(s);
 	do
 	{
-		Stream_SetPosition(s, start);
+		if (!Stream_SetPosition(s, start))
+			return -1;
 		if (stream_dump_get(ctx, &flags, s, &ctx->dump->replayOffset, &ts) < 0)
 			return -1;
 	} while (flags & STREAM_MSG_SRV_RX);
@@ -375,7 +379,7 @@ static int stream_dump_replay_transport_read(rdpTransport* transport, wStream* s
 	ctx->dump->replayTime = ts;
 
 	size = Stream_Length(s);
-	Stream_SetPosition(s, 0);
+	Stream_ResetPosition(s);
 	WLog_Print(ctx->dump->log, WLOG_TRACE, "replay read %" PRIuz, size);
 
 	if (slp > 0)
@@ -412,7 +416,7 @@ static rdpTransportLayer* stream_dump_replay_transport_connect_layer(
 	WINPR_ASSERT(transport);
 	WINPR_ASSERT(hostname);
 
-	return NULL;
+	return nullptr;
 }
 
 static BOOL stream_dump_replay_transport_tls_connect(WINPR_ATTR_UNUSED rdpTransport* transport)
@@ -480,7 +484,7 @@ rdpStreamDumpContext* stream_dump_new(void)
 {
 	rdpStreamDumpContext* dump = calloc(1, sizeof(rdpStreamDumpContext));
 	if (!dump)
-		return NULL;
+		return nullptr;
 	dump->log = WLog_Get(TAG);
 
 	return dump;

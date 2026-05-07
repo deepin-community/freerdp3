@@ -40,11 +40,25 @@ extern "C"
 
 	FREERDP_API void smartcard_call_context_free(scard_call_context* ctx);
 
-	WINPR_ATTR_MALLOC(smartcard_call_context_free, 1)
-	WINPR_ATTR_NODISCARD
-	FREERDP_API scard_call_context* smartcard_call_context_new(const rdpSettings* settings);
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
+	WINPR_DEPRECATED_VAR("[since 3.24.0] use smartcard_call_context_new_with_context instead",
+	                     WINPR_ATTR_MALLOC(smartcard_call_context_free, 1)
+	                         FREERDP_API scard_call_context* smartcard_call_context_new(
+	                             const rdpSettings* settings));
+#endif
 
+	WINPR_ATTR_MALLOC(smartcard_call_context_free, 1)
+	FREERDP_API scard_call_context* smartcard_call_context_new_with_context(rdpContext* context);
+
+	/** @brief send a stop signal (or reset it if \b reset is \b TRUE) to a \ref scard_call_context
+	 *
+	 *  @param ctx The context to send the signal to. Must not be \b nullptr
+	 *  @param reset Set or reset the signal
+	 *
+	 *  @return \b TRUE for success, \b FALSE otherwise.
+	 */
 	FREERDP_API BOOL smartcard_call_context_signal_stop(scard_call_context* ctx, BOOL reset);
+
 	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL smartcard_call_context_add(scard_call_context* ctx, const char* name);
 
@@ -53,6 +67,7 @@ extern "C"
 	FREERDP_API BOOL smartcard_call_cancel_all_context(scard_call_context* ctx);
 
 	FREERDP_API BOOL smartcard_call_release_context(scard_call_context* ctx, SCARDCONTEXT context);
+
 	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL smartcard_call_is_configured(scard_call_context* ctx);
 
@@ -64,7 +79,7 @@ extern "C"
 	FREERDP_API void* smartcard_call_get_context(scard_call_context* ctx, SCARDCONTEXT hContext);
 
 	WINPR_ATTR_NODISCARD
-	FREERDP_API LONG smartcard_irp_device_control_call(scard_call_context* context, wStream* out,
+	FREERDP_API LONG smartcard_irp_device_control_call(scard_call_context* ctx, wStream* out,
 	                                                   NTSTATUS* pIoStatus,
 	                                                   SMARTCARD_OPERATION* operation);
 

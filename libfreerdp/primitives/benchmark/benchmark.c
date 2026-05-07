@@ -50,13 +50,13 @@ static void primitives_YUV_benchmark_free(primitives_YUV_benchmark* bench)
 		free(bench->channels[i]);
 	}
 
-	const primitives_YUV_benchmark empty = { 0 };
+	const primitives_YUV_benchmark empty = WINPR_C_ARRAY_INIT;
 	*bench = empty;
 }
 
 static primitives_YUV_benchmark primitives_YUV_benchmark_init(void)
 {
-	primitives_YUV_benchmark ret = { 0 };
+	primitives_YUV_benchmark ret = WINPR_C_ARRAY_INIT;
 	ret.roi.width = 3840 * 4;
 	ret.roi.height = 2160 * 4;
 	ret.outputStride = ret.roi.width * 4;
@@ -68,7 +68,8 @@ static primitives_YUV_benchmark primitives_YUV_benchmark_init(void)
 	ret.rgbBuffer = calloc(ret.outputStride, ret.roi.height);
 	if (!ret.rgbBuffer)
 		goto fail;
-	winpr_RAND(ret.rgbBuffer, 1ULL * ret.outputStride * ret.roi.height);
+	if (winpr_RAND(ret.rgbBuffer, 1ULL * ret.outputStride * ret.roi.height) < 0)
+		goto fail;
 
 	for (size_t i = 0; i < 3; i++)
 	{
@@ -77,7 +78,8 @@ static primitives_YUV_benchmark primitives_YUV_benchmark_init(void)
 		if (!ret.channels[i] || !ret.outputChannels[i])
 			goto fail;
 
-		winpr_RAND(ret.channels[i], 1ull * ret.roi.width * ret.roi.height);
+		if (winpr_RAND(ret.channels[i], 1ull * ret.roi.width * ret.roi.height) < 0)
+			goto fail;
 		ret.steps[i] = ret.roi.width;
 	}
 
@@ -98,7 +100,7 @@ static const char* print_time(UINT64 t, char* buffer, size_t size)
 
 static BOOL primitives_YUV420_benchmark_run(primitives_YUV_benchmark* bench, primitives_t* prims)
 {
-	const BYTE* channels[3] = { 0 };
+	const BYTE* channels[3] = WINPR_C_ARRAY_INIT;
 
 	for (size_t i = 0; i < 3; i++)
 		channels[i] = bench->channels[i];
@@ -116,7 +118,7 @@ static BOOL primitives_YUV420_benchmark_run(primitives_YUV_benchmark* bench, pri
 			return FALSE;
 		}
 		const UINT64 diff = end - start;
-		char buffer[32] = { 0 };
+		char buffer[32] = WINPR_C_ARRAY_INIT;
 		printf("[%" PRIuz "] YUV420ToRGB_8u_P3AC4R %" PRIu32 "x%" PRIu32 " took %sns\n", x,
 		       bench->roi.width, bench->roi.height, print_time(diff, buffer, sizeof(buffer)));
 	}
@@ -126,7 +128,7 @@ static BOOL primitives_YUV420_benchmark_run(primitives_YUV_benchmark* bench, pri
 
 static BOOL primitives_YUV444_benchmark_run(primitives_YUV_benchmark* bench, primitives_t* prims)
 {
-	const BYTE* channels[3] = { 0 };
+	const BYTE* channels[3] = WINPR_C_ARRAY_INIT;
 
 	for (size_t i = 0; i < 3; i++)
 		channels[i] = bench->channels[i];
@@ -144,7 +146,7 @@ static BOOL primitives_YUV444_benchmark_run(primitives_YUV_benchmark* bench, pri
 			return FALSE;
 		}
 		const UINT64 diff = end - start;
-		char buffer[32] = { 0 };
+		char buffer[32] = WINPR_C_ARRAY_INIT;
 		printf("[%" PRIuz "] YUV444ToRGB_8u_P3AC4R %" PRIu32 "x%" PRIu32 " took %sns\n", x,
 		       bench->roi.width, bench->roi.height, print_time(diff, buffer, sizeof(buffer)));
 	}
@@ -167,7 +169,7 @@ static BOOL primitives_RGB2420_benchmark_run(primitives_YUV_benchmark* bench, pr
 			return FALSE;
 		}
 		const UINT64 diff = end - start;
-		char buffer[32] = { 0 };
+		char buffer[32] = WINPR_C_ARRAY_INIT;
 		printf("[%" PRIuz "] RGBToYUV420_8u_P3AC4R %" PRIu32 "x%" PRIu32 " took %sns\n", x,
 		       bench->roi.width, bench->roi.height, print_time(diff, buffer, sizeof(buffer)));
 	}
@@ -190,7 +192,7 @@ static BOOL primitives_RGB2444_benchmark_run(primitives_YUV_benchmark* bench, pr
 			return FALSE;
 		}
 		const UINT64 diff = end - start;
-		char buffer[32] = { 0 };
+		char buffer[32] = WINPR_C_ARRAY_INIT;
 		printf("[%" PRIuz "] RGBToYUV444_8u_P3AC4R %" PRIu32 "x%" PRIu32 " took %sns\n", x,
 		       bench->roi.width, bench->roi.height, print_time(diff, buffer, sizeof(buffer)));
 	}

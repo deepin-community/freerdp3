@@ -32,7 +32,7 @@
 #include <freerdp/log.h>
 #define TAG CLIENT_TAG("sdl.disp")
 
-static constexpr UINT64 RESIZE_MIN_DELAY = 200; /* minimum delay in ms between two resizes */
+static constexpr UINT64 RESIZE_MIN_DELAY = 500; /* minimum delay in ms between two resizes */
 static constexpr unsigned MAX_RETRIES = 5;
 
 static auto operator==(const DISPLAY_CONTROL_MONITOR_LAYOUT& a,
@@ -281,10 +281,13 @@ bool sdlDispContext::addTimer()
 	return true;
 }
 
-bool sdlDispContext::updateMonitor([[maybe_unused]] SDL_WindowID id)
+bool sdlDispContext::updateMonitor(SDL_WindowID id)
 {
 	if (!freerdp_settings_get_bool(_sdl->context()->settings, FreeRDP_DynamicResolutionUpdate))
 		return true;
+
+	if (!_sdl->updateWindow(id))
+		return false;
 
 	if (!_sdl->updateWindowList())
 		return false;
@@ -308,7 +311,7 @@ bool sdlDispContext::updateMonitors(SDL_EventType type, SDL_DisplayID displayID)
 				return false;
 			break;
 		case SDL_EVENT_DISPLAY_REMOVED:
-			if (!_sdl->removeDisplay(displayID))
+			if (!_sdl->removeDisplayWindow(displayID))
 				return false;
 			break;
 		default:
@@ -322,28 +325,29 @@ bool sdlDispContext::updateMonitors(SDL_EventType type, SDL_DisplayID displayID)
 
 bool sdlDispContext::handleEvent(const SDL_DisplayEvent& ev)
 {
+	const auto cat = SDL_LOG_CATEGORY_APPLICATION;
 	switch (ev.type)
 	{
 		case SDL_EVENT_DISPLAY_ADDED:
-			SDL_Log("A new display with id %u was connected", ev.displayID);
+			SDL_LogDebug(cat, "A new display with id %u was connected", ev.displayID);
 			return updateMonitors(ev.type, ev.displayID);
 		case SDL_EVENT_DISPLAY_REMOVED:
-			SDL_Log("The display with id %u was disconnected", ev.displayID);
+			SDL_LogDebug(cat, "The display with id %u was disconnected", ev.displayID);
 			return updateMonitors(ev.type, ev.displayID);
 		case SDL_EVENT_DISPLAY_ORIENTATION:
-			SDL_Log("The orientation of display with id %u was changed", ev.displayID);
+			SDL_LogDebug(cat, "The orientation of display with id %u was changed", ev.displayID);
 			return updateMonitors(ev.type, ev.displayID);
 		case SDL_EVENT_DISPLAY_MOVED:
-			SDL_Log("The display with id %u was moved", ev.displayID);
+			SDL_LogDebug(cat, "The display with id %u was moved", ev.displayID);
 			return updateMonitors(ev.type, ev.displayID);
 		case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
-			SDL_Log("The display with id %u changed scale", ev.displayID);
+			SDL_LogDebug(cat, "The display with id %u changed scale", ev.displayID);
 			return updateMonitors(ev.type, ev.displayID);
 		case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
-			SDL_Log("The display with id %u changed mode", ev.displayID);
+			SDL_LogDebug(cat, "The display with id %u changed mode", ev.displayID);
 			return updateMonitors(ev.type, ev.displayID);
 		case SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED:
-			SDL_Log("The display with id %u changed desktop mode", ev.displayID);
+			SDL_LogDebug(cat, "The display with id %u changed desktop mode", ev.displayID);
 			return updateMonitors(ev.type, ev.displayID);
 		default:
 			return true;
@@ -466,8 +470,10 @@ sdlDispContext::sdlDispContext(SdlContext* sdl) : _sdl(sdl)
 
 	auto pubSub = _sdl->context()->pubSub;
 
-	PubSub_SubscribeActivated(pubSub, sdlDispContext::OnActivated);
-	PubSub_SubscribeGraphicsReset(pubSub, sdlDispContext::OnGraphicsReset);
+	if (PubSub_SubscribeActivated(pubSub, sdlDispContext::OnActivated) < 0)
+		throw std::exception();
+	if (PubSub_SubscribeGraphicsReset(pubSub, sdlDispContext::OnGraphicsReset) < 0)
+		throw std::exception();
 	std::ignore = addTimer();
 }
 

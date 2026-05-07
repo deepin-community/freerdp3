@@ -38,7 +38,7 @@ struct count
 
 static inline void reset_counts(struct count* counts)
 {
-	const struct count empty = { 0 };
+	const struct count empty = WINPR_C_ARRAY_INIT;
 	WINPR_ASSERT(counts);
 	*counts = empty;
 }
@@ -60,7 +60,7 @@ static inline UINT32 GETPIXEL32(const void* WINPR_RESTRICT d, UINT32 x, UINT32 y
 static inline UINT16 IN_PIXEL16(const void* WINPR_RESTRICT in_ptr, UINT32 in_x, UINT32 in_y,
                                 UINT32 in_w, UINT16 in_last_pixel)
 {
-	if (in_ptr == 0)
+	if (in_ptr == nullptr)
 		return 0;
 	else if (in_x < in_w)
 		return GETPIXEL16(in_ptr, in_x, in_y, in_w);
@@ -72,7 +72,7 @@ static inline UINT16 IN_PIXEL16(const void* WINPR_RESTRICT in_ptr, UINT32 in_x, 
 static inline UINT32 IN_PIXEL32(const void* WINPR_RESTRICT in_ptr, UINT32 in_x, UINT32 in_y,
                                 UINT32 in_w, UINT32 in_last_pixel)
 {
-	if (in_ptr == 0)
+	if (in_ptr == nullptr)
 		return 0;
 	else if (in_x < in_w)
 		return GETPIXEL32(in_ptr, in_x, in_y, in_w);
@@ -89,7 +89,7 @@ static inline UINT16 out_color_count_2(UINT16 in_count, wStream* WINPR_RESTRICT 
 	{
 		if (in_count < 32)
 		{
-			const BYTE temp = ((0x3 << 5) | in_count) & 0xFF;
+			const BYTE temp = ((0x3u << 5) | in_count) & 0xFF;
 			Stream_Write_UINT8(in_s, temp);
 		}
 		else if (in_count < 256 + 32)
@@ -119,7 +119,7 @@ static inline UINT16 out_color_count_3(UINT16 in_count, wStream* WINPR_RESTRICT 
 	{
 		if (in_count < 32)
 		{
-			const BYTE temp = ((0x3 << 5) | in_count) & 0xFF;
+			const BYTE temp = ((0x3u << 5) | in_count) & 0xFF;
 			Stream_Write_UINT8(in_s, temp);
 		}
 		else if (in_count < 256 + 32)
@@ -153,7 +153,7 @@ static inline UINT16 out_copy_count_2(UINT16 in_count, wStream* WINPR_RESTRICT i
 	{
 		if (in_count < 32)
 		{
-			const BYTE temp = ((0x4 << 5) | in_count) & 0xFF;
+			const BYTE temp = ((0x4u << 5) | in_count) & 0xFF;
 			Stream_Write_UINT8(in_s, temp);
 		}
 		else if (in_count < 256 + 32)
@@ -171,7 +171,7 @@ static inline UINT16 out_copy_count_2(UINT16 in_count, wStream* WINPR_RESTRICT i
 		Stream_Write(in_s, Stream_Buffer(in_data), 2ULL * in_count);
 	}
 
-	Stream_SetPosition(in_data, 0);
+	Stream_ResetPosition(in_data);
 	return 0;
 }
 
@@ -184,7 +184,7 @@ static inline UINT16 out_copy_count_3(UINT16 in_count, wStream* WINPR_RESTRICT i
 	{
 		if (in_count < 32)
 		{
-			const BYTE temp = ((0x4 << 5) | in_count) & 0xFF;
+			const BYTE temp = ((0x4u << 5) | in_count) & 0xFF;
 			Stream_Write_UINT8(in_s, temp);
 		}
 		else if (in_count < 256 + 32)
@@ -202,7 +202,7 @@ static inline UINT16 out_copy_count_3(UINT16 in_count, wStream* WINPR_RESTRICT i
 		Stream_Write(in_s, Stream_Pointer(in_data), 3ULL * in_count);
 	}
 
-	Stream_SetPosition(in_data, 0);
+	Stream_ResetPosition(in_data);
 	return 0;
 }
 
@@ -332,7 +332,7 @@ static inline UINT16 out_counts_mix_count_2(UINT16 in_count, wStream* WINPR_REST
 	{
 		if (in_count < 32)
 		{
-			const BYTE temp = ((0x1 << 5) | in_count) & 0xFF;
+			const BYTE temp = ((0x1u << 5) | in_count) & 0xFF;
 			Stream_Write_UINT8(in_s, temp);
 		}
 		else if (in_count < 256 + 32)
@@ -359,7 +359,7 @@ static inline UINT16 out_counts_mix_count_3(UINT16 in_count, wStream* WINPR_REST
 	{
 		if (in_count < 32)
 		{
-			const BYTE temp = ((0x1 << 5) | in_count) & 0xFF;
+			const BYTE temp = ((0x1u << 5) | in_count) & 0xFF;
 			Stream_Write_UINT8(in_s, temp);
 		}
 		else if (in_count < 256 + 32)
@@ -387,7 +387,7 @@ static inline UINT16 out_from_count_2(UINT16 in_count, wStream* WINPR_RESTRICT i
 	{
 		if ((in_count % 8) == 0 && in_count < 249)
 		{
-			const BYTE temp = ((0x2 << 5) | (in_count / 8)) & 0xFF;
+			const BYTE temp = ((0x2u << 5) | (in_count / 8)) & 0xFF;
 			Stream_Write_UINT8(in_s, temp);
 		}
 		else if (in_count < 256)
@@ -417,7 +417,7 @@ static inline UINT16 out_from_count_3(UINT16 in_count, wStream* WINPR_RESTRICT i
 	{
 		if ((in_count % 8) == 0 && in_count < 249)
 		{
-			const BYTE temp = ((0x2 << 5) | (in_count / 8)) & 0xFF;
+			const BYTE temp = ((0x2u << 5) | (in_count / 8)) & 0xFF;
 			Stream_Write_UINT8(in_s, temp);
 		}
 		else if (in_count < 256)
@@ -454,12 +454,12 @@ static inline SSIZE_T freerdp_bitmap_compress_24(const void* WINPR_RESTRICT srcD
                                                  UINT32 start_line, wStream* WINPR_RESTRICT temp_s,
                                                  UINT32 e)
 {
-	uint8_t fom_mask[8192] = { 0 }; /* good for up to 64K bitmap */
+	uint8_t fom_mask[8192] = WINPR_C_ARRAY_INIT; /* good for up to 64K bitmap */
 	SSIZE_T lines_sent = 0;
 	UINT16 count = 0;
 	UINT32 last_pixel = 0;
 	UINT32 last_ypixel = 0;
-	struct count counts = { 0 };
+	struct count counts = WINPR_C_ARRAY_INIT;
 	UINT32 bicolor1 = 0;
 	UINT32 bicolor2 = 0;
 	UINT32 end = width + e;
@@ -467,7 +467,7 @@ static inline SSIZE_T freerdp_bitmap_compress_24(const void* WINPR_RESTRICT srcD
 	const UINT32 mix = 0xFFFFFF;
 	const char* start = (const char*)srcData;
 	const char* line = start + 4ULL * width * start_line;
-	const char* last_line = NULL;
+	const char* last_line = nullptr;
 
 	while ((line >= start) && (out_count < 32768))
 	{
@@ -623,7 +623,7 @@ static inline SSIZE_T freerdp_bitmap_compress_24(const void* WINPR_RESTRICT srcD
 
 				if (pixel == (ypixel ^ mix))
 				{
-					const uint8_t tmp = (1 << (counts.fom_count % 8)) & 0xFF;
+					const uint8_t tmp = (1u << (counts.fom_count % 8)) & 0xFF;
 					const uint8_t val = fom_mask[counts.fom_mask_len - 1] | tmp;
 					fom_mask[counts.fom_mask_len - 1] = val;
 				}
@@ -640,7 +640,7 @@ static inline SSIZE_T freerdp_bitmap_compress_24(const void* WINPR_RESTRICT srcD
 		}
 
 		/* can't take fix, mix, or fom past first line */
-		if (last_line == 0)
+		if (last_line == nullptr)
 		{
 			if (counts.fill_count > 3 && counts.fill_count >= counts.color_count &&
 			    counts.fill_count >= counts.bicolor_count &&
@@ -696,7 +696,7 @@ static inline SSIZE_T freerdp_bitmap_compress_24(const void* WINPR_RESTRICT srcD
 		lines_sent++;
 	}
 
-	Stream_SetPosition(temp_s, 0);
+	Stream_ResetPosition(temp_s);
 
 	if (counts.fill_count > 3 && counts.fill_count >= counts.color_count &&
 	    counts.fill_count >= counts.bicolor_count && counts.fill_count >= counts.mix_count &&
@@ -777,12 +777,12 @@ static inline SSIZE_T freerdp_bitmap_compress_16(const void* WINPR_RESTRICT srcD
                                                  UINT32 byte_limit, UINT32 start_line,
                                                  wStream* WINPR_RESTRICT temp_s, UINT32 e)
 {
-	uint8_t fom_mask[8192] = { 0 }; /* good for up to 64K bitmap */
+	uint8_t fom_mask[8192] = WINPR_C_ARRAY_INIT; /* good for up to 64K bitmap */
 	SSIZE_T lines_sent = 0;
 	UINT16 count = 0;
 	UINT16 last_pixel = 0;
 	UINT16 last_ypixel = 0;
-	struct count counts = { 0 };
+	struct count counts = WINPR_C_ARRAY_INIT;
 	UINT16 bicolor1 = 0;
 	UINT16 bicolor2 = 0;
 	UINT32 end = width + e;
@@ -790,7 +790,7 @@ static inline SSIZE_T freerdp_bitmap_compress_16(const void* WINPR_RESTRICT srcD
 	const UINT32 mix = (bpp == 15) ? 0xBA1F : 0xFFFF;
 	const char* start = (const char*)srcData;
 	const char* line = start + 2ULL * width * start_line;
-	const char* last_line = NULL;
+	const char* last_line = nullptr;
 
 	while ((line >= start) && (out_count < 32768))
 	{
@@ -946,7 +946,7 @@ static inline SSIZE_T freerdp_bitmap_compress_16(const void* WINPR_RESTRICT srcD
 
 				if (pixel == (ypixel ^ mix))
 				{
-					const uint8_t tmp = (1 << (counts.fom_count % 8)) & 0xFF;
+					const uint8_t tmp = (1u << (counts.fom_count % 8)) & 0xFF;
 					const uint8_t val = fom_mask[counts.fom_mask_len - 1] | tmp;
 					fom_mask[counts.fom_mask_len - 1] = val;
 				}
@@ -961,7 +961,7 @@ static inline SSIZE_T freerdp_bitmap_compress_16(const void* WINPR_RESTRICT srcD
 		}
 
 		/* can't take fix, mix, or fom past first line */
-		if (last_line == 0)
+		if (last_line == nullptr)
 		{
 			if (counts.fill_count > 3 && counts.fill_count >= counts.color_count &&
 			    counts.fill_count >= counts.bicolor_count &&
@@ -1017,7 +1017,7 @@ static inline SSIZE_T freerdp_bitmap_compress_16(const void* WINPR_RESTRICT srcD
 		lines_sent++;
 	}
 
-	Stream_SetPosition(temp_s, 0);
+	Stream_ResetPosition(temp_s);
 
 	if (counts.fill_count > 3 && counts.fill_count >= counts.color_count &&
 	    counts.fill_count >= counts.bicolor_count && counts.fill_count >= counts.mix_count &&
@@ -1096,7 +1096,7 @@ SSIZE_T freerdp_bitmap_compress(const void* WINPR_RESTRICT srcData, UINT32 width
                                 wStream* WINPR_RESTRICT s, UINT32 bpp, UINT32 byte_limit,
                                 UINT32 start_line, wStream* WINPR_RESTRICT temp_s, UINT32 e)
 {
-	Stream_SetPosition(temp_s, 0);
+	Stream_ResetPosition(temp_s);
 
 	switch (bpp)
 	{

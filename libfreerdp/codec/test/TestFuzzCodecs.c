@@ -58,7 +58,7 @@ static BOOL test_ClearDecompressExample(UINT32 nr, UINT32 width, UINT32 height,
 		goto fail;
 
 	status = clear_decompress(clear, pSrcData, SrcSize, width, height, pDstData,
-	                          PIXEL_FORMAT_XRGB32, 0, 0, 0, width, height, NULL);
+	                          PIXEL_FORMAT_XRGB32, 0, 0, 0, width, height, nullptr);
 	// printf("clear_decompress example %" PRIu32 " status: %d\n", nr, status);
 	// fflush(stdout);
 	rc = (status == 0);
@@ -83,7 +83,7 @@ static int TestFreeRDPCodecXCrush(const uint8_t* Data, size_t Size)
 	if (Size > UINT32_MAX)
 		return -1;
 
-	const BYTE* OutputBuffer = NULL;
+	const BYTE* OutputBuffer = nullptr;
 	UINT32 DstSize = 0;
 	XCRUSH_CONTEXT* xcrush = xcrush_context_new(TRUE);
 	if (!xcrush)
@@ -103,7 +103,7 @@ static int test_ZGfxDecompressFoxSingle(const uint8_t* Data, size_t Size)
 	const BYTE* pSrcData = (const BYTE*)Data;
 	UINT32 SrcSize = (UINT32)Size;
 	UINT32 DstSize = 0;
-	BYTE* pDstData = NULL;
+	BYTE* pDstData = nullptr;
 	ZGFX_CONTEXT* zgfx = zgfx_context_new(TRUE);
 
 	if (!zgfx)
@@ -137,7 +137,7 @@ static BOOL test_NCrushDecompressBells(const uint8_t* Data, size_t Size)
 	const BYTE* pSrcData = (const BYTE*)Data;
 	UINT32 SrcSize = (UINT32)Size;
 	UINT32 DstSize = 0;
-	const BYTE* pDstData = NULL;
+	const BYTE* pDstData = nullptr;
 	NCRUSH_CONTEXT* ncrush = ncrush_context_new(FALSE);
 
 	if (!ncrush)
@@ -167,7 +167,7 @@ static const UINT32 FORMAT = PIXEL_FORMAT_XRGB32;
 static int TestFreeRDPCodecRemoteFX(const uint8_t* Data, size_t Size)
 {
 	int rc = -1;
-	REGION16 region = { 0 };
+	REGION16 region = WINPR_C_ARRAY_INIT;
 	RFX_CONTEXT* context = rfx_context_new(FALSE);
 	BYTE* dest = calloc(IMG_WIDTH * IMG_HEIGHT, FORMAT_SIZE);
 	size_t stride = FORMAT_SIZE * IMG_WIDTH;
@@ -207,7 +207,7 @@ static int test_MppcDecompressBellsRdp5(const uint8_t* Data, size_t Size)
 	const BYTE* pSrcData = Data;
 	UINT32 SrcSize = (UINT32)Size;
 	UINT32 DstSize = 0;
-	const BYTE* pDstData = NULL;
+	const BYTE* pDstData = nullptr;
 	MPPC_CONTEXT* mppc = mppc_context_new(1, FALSE);
 
 	if (!mppc)
@@ -235,7 +235,7 @@ static int test_MppcDecompressBellsRdp4(const uint8_t* Data, size_t Size)
 	const BYTE* pSrcData = (const BYTE*)Data;
 	UINT32 SrcSize = (UINT32)Size;
 	UINT32 DstSize = 0;
-	const BYTE* pDstData = NULL;
+	const BYTE* pDstData = nullptr;
 	MPPC_CONTEXT* mppc = mppc_context_new(0, FALSE);
 
 	if (!mppc)
@@ -262,7 +262,7 @@ static int test_MppcDecompressBufferRdp5(const uint8_t* Data, size_t Size)
 	const BYTE* pSrcData = (const BYTE*)Data;
 	UINT32 SrcSize = (UINT32)Size;
 	UINT32 DstSize = 0;
-	const BYTE* pDstData = NULL;
+	const BYTE* pDstData = nullptr;
 	MPPC_CONTEXT* mppc = mppc_context_new(1, FALSE);
 
 	if (!mppc)
@@ -291,9 +291,9 @@ static BOOL progressive_decode(const uint8_t* Data, size_t Size)
 {
 	BOOL res = FALSE;
 	int rc = 0;
-	BYTE* resultData = NULL;
+	BYTE* resultData = nullptr;
 	UINT32 ColorFormat = PIXEL_FORMAT_BGRX32;
-	REGION16 invalidRegion = { 0 };
+	REGION16 invalidRegion = WINPR_C_ARRAY_INIT;
 	UINT32 scanline = 4240;
 	UINT32 width = 1060;
 	UINT32 height = 827;
@@ -363,7 +363,7 @@ static BOOL i_run_encode_decode(UINT16 bpp, BITMAP_INTERLEAVED_CONTEXT* encoder,
 		goto fail;
 
 	rc = interleaved_decompress(decoder, Data, (UINT32)Size, w, h, bpp, pDstData, format, step, x,
-	                            y, w, h, NULL);
+	                            y, w, h, nullptr);
 
 	if (!rc)
 		goto fail;
@@ -384,9 +384,9 @@ static int TestFreeRDPCodecInterleaved(const uint8_t* Data, size_t Size)
 	if (!decoder)
 		goto fail;
 
-	i_run_encode_decode(24, NULL, decoder, Data, Size);
-	i_run_encode_decode(16, NULL, decoder, Data, Size);
-	i_run_encode_decode(15, NULL, decoder, Data, Size);
+	i_run_encode_decode(24, nullptr, decoder, Data, Size);
+	i_run_encode_decode(16, nullptr, decoder, Data, Size);
+	i_run_encode_decode(15, nullptr, decoder, Data, Size);
 	rc = 0;
 fail:
 	bitmap_interleaved_context_free(decoder);
@@ -402,6 +402,9 @@ static BOOL RunTestPlanar(BITMAP_PLANAR_CONTEXT* planar, const BYTE* srcBitmap,
 	WINPR_UNUSED(srcFormat);
 	if (Size > UINT32_MAX)
 		return FALSE;
+	if ((width == 0) || (height == 0))
+		return FALSE;
+
 	UINT32 dstSize = (UINT32)Size;
 	const BYTE* compressedBitmap = Data;
 	BYTE* decompressedBitmap =
@@ -432,9 +435,9 @@ static BOOL TestPlanar(const UINT32 format, const uint8_t* Data, size_t Size)
 	if (!planar)
 		goto fail;
 
-	RunTestPlanar(planar, NULL, PIXEL_FORMAT_RGBX32, format, 64, 64, Data, Size);
+	RunTestPlanar(planar, nullptr, PIXEL_FORMAT_RGBX32, format, 64, 64, Data, Size);
 
-	RunTestPlanar(planar, NULL, PIXEL_FORMAT_RGB16, format, 32, 32, Data, Size);
+	RunTestPlanar(planar, nullptr, PIXEL_FORMAT_RGB16, format, 32, 32, Data, Size);
 
 	rc = TRUE;
 fail:

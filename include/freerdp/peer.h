@@ -140,38 +140,39 @@ extern "C"
 
 		ALIGN64 void* ContextExtra;
 		ALIGN64 size_t ContextSize;
-		ALIGN64 psPeerContextNew ContextNew;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerContextNew ContextNew;
 		ALIGN64 psPeerContextFree ContextFree;
 
-		ALIGN64 psPeerInitialize Initialize;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerInitialize Initialize;
 #if defined(WITH_FREERDP_DEPRECATED)
 		WINPR_DEPRECATED_VAR("Use freerdp_peer::GetEventHandle instead",
-		                     ALIGN64 psPeerGetFileDescriptor GetFileDescriptor;)
+		                     WINPR_ATTR_NODISCARD ALIGN64 psPeerGetFileDescriptor
+		                         GetFileDescriptor;)
 #else
 	UINT64 reserved;
 #endif
-		ALIGN64 psPeerGetEventHandle GetEventHandle;
-		ALIGN64 psPeerGetReceiveEventHandle GetReceiveEventHandle;
-		ALIGN64 psPeerCheckFileDescriptor CheckFileDescriptor;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerGetEventHandle GetEventHandle;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerGetReceiveEventHandle GetReceiveEventHandle;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerCheckFileDescriptor CheckFileDescriptor;
 		ALIGN64 psPeerClose Close;
 		ALIGN64 psPeerDisconnect Disconnect;
 
-		ALIGN64 psPeerCapabilities Capabilities;
-		ALIGN64 psPeerPostConnect PostConnect;
-		ALIGN64 psPeerActivate Activate;
-		ALIGN64 psPeerLogon Logon;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerCapabilities Capabilities;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerPostConnect PostConnect;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerActivate Activate;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerLogon Logon;
 
-		ALIGN64 psPeerSendServerRedirection SendServerRedirection;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerSendServerRedirection SendServerRedirection;
 
-		ALIGN64 psPeerSendChannelData SendChannelData;
-		ALIGN64 psPeerReceiveChannelData ReceiveChannelData;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerSendChannelData SendChannelData;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerReceiveChannelData ReceiveChannelData;
 
-		ALIGN64 psPeerVirtualChannelOpen VirtualChannelOpen;
-		ALIGN64 psPeerVirtualChannelClose VirtualChannelClose;
-		ALIGN64 psPeerVirtualChannelRead VirtualChannelRead;
-		ALIGN64 psPeerVirtualChannelWrite VirtualChannelWrite;
-		ALIGN64 psPeerVirtualChannelGetData VirtualChannelGetData;
-		ALIGN64 psPeerVirtualChannelSetData VirtualChannelSetData;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerVirtualChannelOpen VirtualChannelOpen;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerVirtualChannelClose VirtualChannelClose;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerVirtualChannelRead VirtualChannelRead;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerVirtualChannelWrite VirtualChannelWrite;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerVirtualChannelGetData VirtualChannelGetData;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerVirtualChannelSetData VirtualChannelSetData;
 
 		ALIGN64 int pId;
 		ALIGN64 UINT32 ack_frame_id;
@@ -181,21 +182,21 @@ extern "C"
 		ALIGN64 BOOL authenticated;
 		ALIGN64 SEC_WINNT_AUTH_IDENTITY identity;
 
-		ALIGN64 psPeerIsWriteBlocked IsWriteBlocked;
-		ALIGN64 psPeerDrainOutputBuffer DrainOutputBuffer;
-		ALIGN64 psPeerHasMoreToRead HasMoreToRead;
-		ALIGN64 psPeerGetEventHandles GetEventHandles;
-		ALIGN64 psPeerAdjustMonitorsLayout AdjustMonitorsLayout;
-		ALIGN64 psPeerClientCapabilities ClientCapabilities;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerIsWriteBlocked IsWriteBlocked;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerDrainOutputBuffer DrainOutputBuffer;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerHasMoreToRead HasMoreToRead;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerGetEventHandles GetEventHandles;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerAdjustMonitorsLayout AdjustMonitorsLayout;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerClientCapabilities ClientCapabilities;
 #if defined(WITH_FREERDP_DEPRECATED)
 		WINPR_DEPRECATED_VAR("Use freerdp_peer::SspiNtlmHashCallback instead",
-		                     ALIGN64 psPeerComputeNtlmHash ComputeNtlmHash;)
+		                     WINPR_ATTR_NODISCARD ALIGN64 psPeerComputeNtlmHash ComputeNtlmHash;)
 #else
 	UINT64 reserved2;
 #endif
-		ALIGN64 psPeerLicenseCallback LicenseCallback;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerLicenseCallback LicenseCallback;
 
-		ALIGN64 psPeerSendChannelPacket SendChannelPacket;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerSendChannelPacket SendChannelPacket;
 
 		/**
 		 * @brief SetState Function pointer allowing to manually set the state of the
@@ -207,23 +208,29 @@ extern "C"
 		 *
 		 * \note Must be called after \b Initialize as that also modifies the state.
 		 */
-		ALIGN64 psPeerSetState SetState;
-		ALIGN64 psPeerReachedState ReachedState;
-		ALIGN64 psSspiNtlmHashCallback SspiNtlmHashCallback;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerSetState SetState;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerReachedState ReachedState;
+		WINPR_ATTR_NODISCARD ALIGN64 psSspiNtlmHashCallback SspiNtlmHashCallback;
 		/**
 		 * @brief RemoteCredentials Function pointer that will be called when remote
 		 * credentials guard are used by the peer and we receive the logonCreds (kerberos)
 		 * and supplementary creds (NTLM).
 		 */
-		ALIGN64 psPeerRemoteCredentials RemoteCredentials;
+		WINPR_ATTR_NODISCARD ALIGN64 psPeerRemoteCredentials RemoteCredentials;
 	};
 
 	FREERDP_API void freerdp_peer_context_free(freerdp_peer* client);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_peer_context_new(freerdp_peer* client);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_peer_context_new_ex(freerdp_peer* client, const rdpSettings* settings);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_peer_os_major_type_string(freerdp_peer* client);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_peer_os_minor_type_string(freerdp_peer* client);
 
 	FREERDP_API void freerdp_peer_free(freerdp_peer* client);
@@ -232,6 +239,7 @@ extern "C"
 	WINPR_ATTR_NODISCARD
 	FREERDP_API freerdp_peer* freerdp_peer_new(int sockfd);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_peer_set_local_and_hostname(freerdp_peer* client,
 	                                                     const struct sockaddr_storage* peer_addr);
 

@@ -3,9 +3,11 @@ set(MODULE_PREFIX "TEST_CORE")
 
 disable_warnings_for_directory(${CMAKE_CURRENT_BINARY_DIR})
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
 set(DRIVER ${MODULE_NAME}.c)
 
-set(TESTS TestVersion.c TestSettings.c)
+set(TESTS TestVersion.c TestSettings.c TestUtils.c)
 
 if(BUILD_TESTING_INTERNAL)
   list(APPEND TESTS TestStreamDump.c)
@@ -24,6 +26,16 @@ endif()
 create_test_sourcelist(SRCS ${DRIVER} ${TESTS})
 
 add_executable(${MODULE_NAME} ${SRCS})
+
+if(WITH_RESOURCE_VERSIONING)
+  target_compile_definitions(${MODULE_NAME} PRIVATE WITH_RESOURCE_VERSIONING)
+endif()
+if(FREERDP_USE_VENDOR_PRODUCT_CONFIG_DIR)
+  target_compile_definitions(${MODULE_NAME} PRIVATE FREERDP_USE_VENDOR_PRODUCT_CONFIG_DIR)
+endif()
+if(WITH_FULL_CONFIG_PATH)
+  add_compile_definitions(WITH_FULL_CONFIG_PATH)
+endif()
 
 add_compile_definitions(TESTING_OUTPUT_DIRECTORY="${PROJECT_BINARY_DIR}")
 add_compile_definitions(TESTING_SRC_DIRECTORY="${PROJECT_SOURCE_DIR}")

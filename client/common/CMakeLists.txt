@@ -19,6 +19,9 @@
 set(MODULE_NAME "freerdp-client")
 set(MODULE_PREFIX "FREERDP_CLIENT")
 
+set(PRIV_LIBS "")
+set(PUB_LIBS "")
+
 set(SRCS
     client.c
     cmdline.c
@@ -41,13 +44,6 @@ else()
   set(WITH_SSO_MIB OFF CACHE INTERNAL "unsupported platform")
 endif()
 
-if(WITH_SSO_MIB)
-  find_package(SSO_MIB REQUIRED)
-  if(SSO_MIB_INSTALL_LIBRARIES)
-    install(FILES ${SSO_MIB_INSTALL_LIBRARIES} DESTINATION ${CMAKE_INSTALL_LIBDIR})
-  endif()
-endif()
-
 if(NOT APPLE AND NOT WIN32 AND NOT ANDROID)
   set(OPT_FUSE_DEFAULT ON)
 else()
@@ -63,7 +59,7 @@ if(WITH_FUSE)
 
   include_directories(SYSTEM ${FUSE3_INCLUDE_DIRS})
   add_compile_definitions(WITH_FUSE)
-  list(APPEND LIBS ${FUSE3_LIBRARIES})
+  list(APPEND PRIV_LIBS ${FUSE3_LIBRARIES})
 
   add_compile_definitions(_FILE_OFFSET_BITS=64)
 endif()
@@ -81,22 +77,23 @@ if(WITH_SSO_MIB)
     add_dependencies(${MODULE_NAME} sso-mib-external)
   endif()
 
-  include_directories(${SSO_MIB_INCLUDE_DIRS})
+  find_package(sso-mib REQUIRED)
   add_compile_definitions(WITH_SSO_MIB)
-  list(APPEND LIBS ${SSO_MIB_LIBRARIES})
+  list(APPEND PRIV_LIBS sso-mib)
 endif()
 
-list(APPEND LIBS freerdp winpr)
+list(APPEND PUB_LIBS freerdp winpr)
 
 include(CheckLibraryExists)
 check_library_exists(m lround "" HAVE_LIB_M)
 if(HAVE_LIB_M)
-  list(APPEND LIBS m)
+  list(APPEND PUB_LIBS m)
 endif()
 
-target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include>)
+target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include/freerdp${FREERDP_VERSION_MAJOR}>)
 target_link_libraries(${MODULE_NAME} PRIVATE ${FREERDP_CHANNELS_CLIENT_LIBS})
-target_link_libraries(${MODULE_NAME} PUBLIC ${LIBS})
+target_link_libraries(${MODULE_NAME} PRIVATE ${PRIV_LIBS})
+target_link_libraries(${MODULE_NAME} PUBLIC ${PUB_LIBS})
 
 installwithrpath(
   TARGETS

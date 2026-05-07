@@ -21,7 +21,6 @@ Files-Excluded:
  resources/FreeRDP_OSX.icns
  resources/FreeRDP_Logo_Icon.ai
  scripts/OpenSSL-DownloadAndBuild.command
- scripts/android-*
  winpr/libwinpr/crt/unicode_builtin.c
  winpr/libwinpr/crt/unicode_android.c
  winpr/libwinpr/crt/unicode_apple.m

@@ -53,7 +53,7 @@
 
 /* HTTP channel response fields present flags. */
 #define HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID 0x1
-#define HTTP_CHANNEL_RESPONSE_OPTIONAL 0x2
+#define HTTP_CHANNEL_RESPONSE_FIELD_AUTHNCOOKIE 0x2
 #define HTTP_CHANNEL_RESPONSE_FIELD_UDPPORT 0x4
 
 /* HTTP extended auth. */
@@ -181,7 +181,7 @@ static const t_flag_mapping tunnel_response_fields_present[] = {
 
 static const t_flag_mapping channel_response_fields_present[] = {
 	{ HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID, "HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID" },
-	{ HTTP_CHANNEL_RESPONSE_OPTIONAL, "HTTP_CHANNEL_RESPONSE_OPTIONAL" },
+	{ HTTP_CHANNEL_RESPONSE_FIELD_AUTHNCOOKIE, "HTTP_CHANNEL_RESPONSE_FIELD_AUTHNCOOKIE" },
 	{ HTTP_CHANNEL_RESPONSE_FIELD_UDPPORT, "HTTP_CHANNEL_RESPONSE_FIELD_UDPPORT" }
 };
 
@@ -213,7 +213,7 @@ static const char* rdg_pkt_type_to_string(int type)
 {
 #define ENTRY(x) \
 	case x:      \
-		return "#x"
+		return #x
 
 	switch (type)
 	{
@@ -240,8 +240,8 @@ static const char* rdg_pkt_type_to_string(int type)
 
 static const char* flags_to_string(UINT32 flags, const t_flag_mapping* map, size_t elements)
 {
-	static char buffer[1024] = { 0 };
-	char fields[12] = { 0 };
+	static char buffer[1024] = WINPR_C_ARRAY_INIT;
+	char fields[12] = WINPR_C_ARRAY_INIT;
 
 	for (size_t x = 0; x < elements; x++)
 	{
@@ -252,7 +252,7 @@ static const char* flags_to_string(UINT32 flags, const t_flag_mapping* map, size
 	}
 
 	(void)sprintf_s(fields, ARRAYSIZE(fields), " [%04" PRIx32 "]", flags);
-	winpr_str_append(fields, buffer, sizeof(buffer), NULL);
+	winpr_str_append(fields, buffer, sizeof(buffer), nullptr);
 	return buffer;
 }
 
@@ -327,10 +327,11 @@ static BOOL rdg_write_chunked(BIO* bio, wStream* sPacket)
 {
 	size_t len = 0;
 	int status = 0;
-	wStream* sChunk = NULL;
+	wStream* sChunk = nullptr;
 	char chunkSize[11];
 	(void)sprintf_s(chunkSize, sizeof(chunkSize), "%" PRIXz "\r\n", Stream_Length(sPacket));
-	sChunk = Stream_New(NULL, strnlen(chunkSize, sizeof(chunkSize)) + Stream_Length(sPacket) + 2);
+	sChunk =
+	    Stream_New(nullptr, strnlen(chunkSize, sizeof(chunkSize)) + Stream_Length(sPacket) + 2);
 
 	if (!sChunk)
 		return FALSE;
@@ -351,10 +352,7 @@ static BOOL rdg_write_chunked(BIO* bio, wStream* sPacket)
 	status = BIO_write(bio, Stream_Buffer(sChunk), (int)len);
 	Stream_Free(sChunk, TRUE);
 
-	if (status != (SSIZE_T)len)
-		return FALSE;
-
-	return TRUE;
+	return (status == (SSIZE_T)len);
 }
 
 static BOOL rdg_write_packet(rdpRdg* rdg, wStream* sPacket)
@@ -369,7 +367,7 @@ static BOOL rdg_write_packet(rdpRdg* rdg, wStream* sPacket)
 static int rdg_socket_read(BIO* bio, BYTE* pBuffer, size_t size,
                            rdg_http_encoding_context* encodingContext)
 {
-	WINPR_ASSERT(encodingContext != NULL);
+	WINPR_ASSERT(encodingContext != nullptr);
 	if (size > INT32_MAX)
 		return -1;
 
@@ -426,42 +424,38 @@ static wStream* rdg_receive_packet(rdpRdg* rdg)
 {
 	const size_t header = sizeof(RdgPacketHeader);
 	size_t packetLength = 0;
-	wStream* s = Stream_New(NULL, 1024);
+	wStream* s = Stream_New(nullptr, 1024);
 
 	if (!s)
-		return NULL;
+		return nullptr;
 
 	if (!rdg_read_all(rdg->context, rdg->tlsOut, Stream_Buffer(s), header, &rdg->transferEncoding))
-	{
-		Stream_Free(s, TRUE);
-		return NULL;
-	}
+		goto fail;
 
 	Stream_Seek(s, 4);
 	Stream_Read_UINT32(s, packetLength);
 
 	if ((packetLength > INT_MAX) || !Stream_EnsureCapacity(s, packetLength) ||
 	    (packetLength < header))
-	{
-		Stream_Free(s, TRUE);
-		return NULL;
-	}
+		goto fail;
 
 	if (!rdg_read_all(rdg->context, rdg->tlsOut, Stream_Buffer(s) + header, packetLength - header,
 	                  &rdg->transferEncoding))
-	{
-		Stream_Free(s, TRUE);
-		return NULL;
-	}
+		goto fail;
 
-	Stream_SetLength(s, packetLength);
+	if (!Stream_SetLength(s, packetLength))
+		goto fail;
 	return s;
+
+fail:
+	Stream_Free(s, TRUE);
+	return nullptr;
 }
 
 static BOOL rdg_send_handshake(rdpRdg* rdg)
 {
 	BOOL status = FALSE;
-	wStream* s = Stream_New(NULL, 14);
+	wStream* s = Stream_New(nullptr, 14);
 
 	if (!s)
 		return FALSE;
@@ -487,7 +481,7 @@ static BOOL rdg_send_handshake(rdpRdg* rdg)
 
 static BOOL rdg_send_extauth_sspi(rdpRdg* rdg)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 	BOOL status = 0;
 	UINT32 packetSize = 8 + 4 + 2;
 
@@ -498,7 +492,7 @@ static BOOL rdg_send_extauth_sspi(rdpRdg* rdg)
 		return FALSE;
 	packetSize += authToken->cbBuffer;
 
-	s = Stream_New(NULL, packetSize);
+	s = Stream_New(nullptr, packetSize);
 
 	if (!s)
 		return FALSE;
@@ -519,11 +513,11 @@ static BOOL rdg_send_extauth_sspi(rdpRdg* rdg)
 
 static BOOL rdg_send_tunnel_request(rdpRdg* rdg)
 {
-	wStream* s = NULL;
-	BOOL status = 0;
+	wStream* s = nullptr;
+	BOOL status = FALSE;
 	UINT32 packetSize = 16;
 	UINT16 fieldsPresent = 0;
-	WCHAR* PAACookie = NULL;
+	WCHAR* PAACookie = nullptr;
 	size_t PAACookieLen = 0;
 	const UINT32 capabilities = HTTP_CAPABILITY_TYPE_QUAR_SOH |
 	                            HTTP_CAPABILITY_MESSAGING_CONSENT_SIGN |
@@ -535,23 +529,17 @@ static BOOL rdg_send_tunnel_request(rdpRdg* rdg)
 		    ConvertUtf8ToWCharAlloc(rdg->context->settings->GatewayAccessToken, &PAACookieLen);
 
 		if (!PAACookie || (PAACookieLen > UINT16_MAX / sizeof(WCHAR)))
-		{
-			free(PAACookie);
-			return FALSE;
-		}
+			goto fail;
 
 		PAACookieLen += 1; /* include \0 */
 		packetSize += 2 + (UINT32)(PAACookieLen) * sizeof(WCHAR);
 		fieldsPresent = HTTP_TUNNEL_PACKET_FIELD_PAA_COOKIE;
 	}
 
-	s = Stream_New(NULL, packetSize);
+	s = Stream_New(nullptr, packetSize);
 
 	if (!s)
-	{
-		free(PAACookie);
-		return FALSE;
-	}
+		goto fail;
 
 	Stream_Write_UINT16(s, PKT_TYPE_TUNNEL_CREATE); /* Type (2 bytes) */
 	Stream_Write_UINT16(s, 0);                      /* Reserved (2 bytes) */
@@ -563,11 +551,14 @@ static BOOL rdg_send_tunnel_request(rdpRdg* rdg)
 	if (PAACookie)
 	{
 		Stream_Write_UINT16(s, (UINT16)PAACookieLen * sizeof(WCHAR)); /* PAA cookie string length */
-		Stream_Write_UTF16_String(s, PAACookie, PAACookieLen);
+		if (!Stream_Write_UTF16_String(s, PAACookie, PAACookieLen))
+			goto fail;
 	}
 
 	Stream_SealLength(s);
 	status = rdg_write_packet(rdg, s);
+
+fail:
 	Stream_Free(s, TRUE);
 	free(PAACookie);
 
@@ -581,8 +572,8 @@ static BOOL rdg_send_tunnel_request(rdpRdg* rdg)
 
 static BOOL rdg_send_tunnel_authorization(rdpRdg* rdg)
 {
-	wStream* s = NULL;
-	BOOL status = 0;
+	wStream* s = nullptr;
+	BOOL status = FALSE;
 	WINPR_ASSERT(rdg);
 	size_t clientNameLen = 0;
 	WCHAR* clientName = freerdp_settings_get_string_as_utf16(
@@ -592,43 +583,38 @@ static BOOL rdg_send_tunnel_authorization(rdpRdg* rdg)
 
 	const size_t packetSize = 12ull + clientNameLen * sizeof(WCHAR);
 	if (!clientName || (clientNameLen >= UINT16_MAX / sizeof(WCHAR)) || (packetSize > UINT32_MAX))
-	{
-		free(clientName);
-		return FALSE;
-	}
+		goto fail;
 
-	s = Stream_New(NULL, packetSize);
+	s = Stream_New(nullptr, packetSize);
 
 	if (!s)
-	{
-		free(clientName);
-		return FALSE;
-	}
+		goto fail;
 
 	Stream_Write_UINT16(s, PKT_TYPE_TUNNEL_AUTH);                  /* Type (2 bytes) */
 	Stream_Write_UINT16(s, 0);                                     /* Reserved (2 bytes) */
 	Stream_Write_UINT32(s, (UINT32)packetSize);                    /* PacketLength (4 bytes) */
 	Stream_Write_UINT16(s, 0);                                     /* FieldsPresent (2 bytes) */
 	Stream_Write_UINT16(s, (UINT16)clientNameLen * sizeof(WCHAR)); /* Client name string length */
-	Stream_Write_UTF16_String(s, clientName, clientNameLen);
+	if (!Stream_Write_UTF16_String(s, clientName, clientNameLen))
+		goto fail;
 	Stream_SealLength(s);
 	status = rdg_write_packet(rdg, s);
+
+fail:
 	Stream_Free(s, TRUE);
 	free(clientName);
 
 	if (status)
-	{
 		rdg->state = RDG_CLIENT_STATE_TUNNEL_AUTHORIZE;
-	}
 
 	return status;
 }
 
 static BOOL rdg_send_channel_create(rdpRdg* rdg)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 	BOOL status = FALSE;
-	WCHAR* serverName = NULL;
+	WCHAR* serverName = nullptr;
 	size_t serverNameLen = 0;
 
 	WINPR_ASSERT(rdg);
@@ -640,7 +626,7 @@ static BOOL rdg_send_channel_create(rdpRdg* rdg)
 	if (!serverName || (serverNameLen >= UINT16_MAX / sizeof(WCHAR)) || (packetSize > UINT32_MAX))
 		goto fail;
 
-	s = Stream_New(NULL, packetSize);
+	s = Stream_New(nullptr, packetSize);
 
 	if (!s)
 		goto fail;
@@ -654,7 +640,9 @@ static BOOL rdg_send_channel_create(rdpRdg* rdg)
 	                    (UINT16)rdg->context->settings->ServerPort); /* Resource port (2 bytes) */
 	Stream_Write_UINT16(s, 3);                                       /* Protocol number (2 bytes) */
 	Stream_Write_UINT16(s, (UINT16)serverNameLen * sizeof(WCHAR));
-	Stream_Write_UTF16_String(s, serverName, serverNameLen);
+	if (!Stream_Write_UTF16_String(s, serverName, serverNameLen))
+		goto fail;
+
 	Stream_SealLength(s);
 	status = rdg_write_packet(rdg, s);
 fail:
@@ -670,7 +658,7 @@ fail:
 static BOOL rdg_set_auth_header(rdpCredsspAuth* auth, HttpRequest* request)
 {
 	const SecBuffer* authToken = credssp_auth_get_output_buffer(auth);
-	char* base64AuthToken = NULL;
+	char* base64AuthToken = nullptr;
 
 	if (authToken)
 	{
@@ -696,18 +684,18 @@ static BOOL rdg_set_auth_header(rdpCredsspAuth* auth, HttpRequest* request)
 static wStream* rdg_build_http_request(rdpRdg* rdg, const char* method,
                                        TRANSFER_ENCODING transferEncoding)
 {
-	wStream* s = NULL;
-	HttpRequest* request = NULL;
-	const char* uri = NULL;
+	wStream* s = nullptr;
+	HttpRequest* request = nullptr;
+	const char* uri = nullptr;
 
 	if (!rdg || !method)
-		return NULL;
+		return nullptr;
 
 	uri = http_context_get_uri(rdg->http);
 	request = http_request_new();
 
 	if (!request)
-		return NULL;
+		return nullptr;
 
 	if (!http_request_set_method(request, method) || !http_request_set_uri(request, uri))
 		goto out;
@@ -720,11 +708,14 @@ static wStream* rdg_build_http_request(rdpRdg* rdg, const char* method,
 
 	else if (rdg->extAuth == HTTP_EXTENDED_AUTH_BEARER)
 	{
-		http_request_set_auth_scheme(request, "Bearer");
-		http_request_set_auth_param(request, rdg->context->settings->GatewayHttpExtAuthBearer);
+		if (!http_request_set_auth_scheme(request, "Bearer"))
+			goto out;
+		if (!http_request_set_auth_param(request, rdg->context->settings->GatewayHttpExtAuthBearer))
+			goto out;
 	}
 
-	http_request_set_transfer_encoding(request, transferEncoding);
+	if (!http_request_set_transfer_encoding(request, transferEncoding))
+		goto out;
 
 	s = http_request_write(rdg->http, request);
 out:
@@ -740,8 +731,8 @@ static BOOL rdg_recv_auth_token(wLog* log, rdpCredsspAuth* auth, HttpResponse* r
 {
 	size_t len = 0;
 	size_t authTokenLength = 0;
-	BYTE* authTokenData = NULL;
-	SecBuffer authToken = { 0 };
+	BYTE* authTokenData = nullptr;
+	SecBuffer authToken = WINPR_C_ARRAY_INIT;
 	int rc = 0;
 
 	if (!auth || !response)
@@ -777,16 +768,13 @@ static BOOL rdg_recv_auth_token(wLog* log, rdpCredsspAuth* auth, HttpResponse* r
 		free(authTokenData);
 
 	rc = credssp_auth_authenticate(auth);
-	if (rc < 0)
-		return FALSE;
-
-	return TRUE;
+	return (rc >= 0);
 }
 
 static BOOL rdg_skip_seed_payload(rdpContext* context, rdpTls* tls, size_t lastResponseLength,
                                   rdg_http_encoding_context* transferEncoding)
 {
-	BYTE seed_payload[10] = { 0 };
+	BYTE seed_payload[10] = WINPR_C_ARRAY_INIT;
 	const size_t size = sizeof(seed_payload);
 
 	/* Per [MS-TSGU] 3.3.5.1 step 4, after final OK response RDG server sends
@@ -810,7 +798,7 @@ static BOOL rdg_process_handshake_response(rdpRdg* rdg, wStream* s)
 	UINT16 extendedAuth = 0;
 	BYTE verMajor = 0;
 	BYTE verMinor = 0;
-	const char* error = NULL;
+	const char* error = nullptr;
 	WLog_Print(rdg->log, WLOG_DEBUG, "Handshake response received");
 
 	if (rdg->state != RDG_CLIENT_STATE_HANDSHAKE)
@@ -879,7 +867,7 @@ static BOOL rdg_process_tunnel_response_optional(rdpRdg* rdg, wStream* s, UINT16
 		}
 
 		/* Read serverCert */
-		if (!rdg_read_http_unicode_string(rdg->log, s, NULL, NULL))
+		if (!rdg_read_http_unicode_string(rdg->log, s, nullptr, nullptr))
 		{
 			WLog_Print(rdg->log, WLOG_ERROR, "Failed to read server certificate");
 			return FALSE;
@@ -888,7 +876,7 @@ static BOOL rdg_process_tunnel_response_optional(rdpRdg* rdg, wStream* s, UINT16
 
 	if (fieldsPresent & HTTP_TUNNEL_RESPONSE_FIELD_CONSENT_MSG)
 	{
-		const WCHAR* msg = NULL;
+		const WCHAR* msg = nullptr;
 		UINT16 msgLenBytes = 0;
 		rdpContext* context = rdg->context;
 
@@ -914,7 +902,7 @@ static BOOL rdg_process_tunnel_response(rdpRdg* rdg, wStream* s)
 	UINT16 serverVersion = 0;
 	UINT16 fieldsPresent = 0;
 	UINT32 errorCode = 0;
-	const char* error = NULL;
+	const char* error = nullptr;
 	WLog_Print(rdg->log, WLOG_DEBUG, "Tunnel response received");
 
 	if (rdg->state != RDG_CLIENT_STATE_TUNNEL_CREATE)
@@ -950,7 +938,7 @@ static BOOL rdg_process_tunnel_authorization_response(rdpRdg* rdg, wStream* s)
 {
 	UINT32 errorCode = 0;
 	UINT16 fieldsPresent = 0;
-	const char* error = NULL;
+	const char* error = nullptr;
 	WLog_Print(rdg->log, WLOG_DEBUG, "Tunnel authorization received");
 
 	if (rdg->state != RDG_CLIENT_STATE_TUNNEL_AUTHORIZE)
@@ -1018,8 +1006,8 @@ static BOOL rdg_process_extauth_sspi(rdpRdg* rdg, wStream* s)
 {
 	INT32 errorCode = 0;
 	UINT16 authBlobLen = 0;
-	SecBuffer authToken = { 0 };
-	BYTE* authTokenData = NULL;
+	SecBuffer authToken = WINPR_C_ARRAY_INIT;
+	BYTE* authTokenData = nullptr;
 
 	WINPR_ASSERT(rdg);
 
@@ -1038,14 +1026,14 @@ static BOOL rdg_process_extauth_sspi(rdpRdg* rdg, wStream* s)
 		if (credssp_auth_is_complete(rdg->auth))
 		{
 			credssp_auth_free(rdg->auth);
-			rdg->auth = NULL;
+			rdg->auth = nullptr;
 			return rdg_send_tunnel_request(rdg);
 		}
 		return FALSE;
 	}
 
 	authTokenData = malloc(authBlobLen);
-	if (authTokenData == NULL)
+	if (authTokenData == nullptr)
 		return FALSE;
 	Stream_Read(s, authTokenData, authBlobLen);
 
@@ -1063,11 +1051,42 @@ static BOOL rdg_process_extauth_sspi(rdpRdg* rdg, wStream* s)
 	return FALSE;
 }
 
+static BOOL rdg_process_channel_response_optional(rdpRdg* rdg, wStream* s, UINT16 fieldsPresent)
+{
+	if ((fieldsPresent & HTTP_CHANNEL_RESPONSE_FIELD_CHANNELID) != 0)
+	{
+		if (!Stream_CheckAndLogRequiredCapacityWLog(rdg->log, s, 4))
+			return FALSE;
+		const UINT32 channelId = Stream_Get_UINT32(s);
+		WLog_Print(rdg->log, WLOG_DEBUG, "TODO: Got channelId=%" PRIu32, channelId);
+	}
+	if ((fieldsPresent & HTTP_CHANNEL_RESPONSE_FIELD_UDPPORT) != 0)
+	{
+		if (!Stream_CheckAndLogRequiredCapacityWLog(rdg->log, s, 2))
+			return FALSE;
+		const UINT16 udpPort = Stream_Get_UINT16(s);
+		WLog_Print(rdg->log, WLOG_DEBUG, "TODO: Got udpPort=%" PRIu32, udpPort);
+	}
+	if ((fieldsPresent & HTTP_CHANNEL_RESPONSE_FIELD_AUTHNCOOKIE) != 0)
+	{
+		if (!Stream_CheckAndLogRequiredCapacityWLog(rdg->log, s, 2))
+			return FALSE;
+		const UINT16 blobLen = Stream_Get_UINT16(s);
+		if (!Stream_CheckAndLogRequiredCapacityWLog(rdg->log, s, blobLen))
+			return FALSE;
+		WLog_Print(rdg->log, WLOG_DEBUG, "TODO: Got UDP auth blob=%" PRIu32, blobLen);
+		if (!Stream_SafeSeek(s, blobLen))
+			return FALSE;
+	}
+
+	return TRUE;
+}
+
 static BOOL rdg_process_channel_response(rdpRdg* rdg, wStream* s)
 {
 	UINT16 fieldsPresent = 0;
 	UINT32 errorCode = 0;
-	const char* error = NULL;
+	const char* error = nullptr;
 	WLog_Print(rdg->log, WLOG_DEBUG, "Channel response received");
 
 	if (rdg->state != RDG_CLIENT_STATE_CHANNEL_CREATE)
@@ -1093,6 +1112,9 @@ static BOOL rdg_process_channel_response(rdpRdg* rdg, wStream* s)
 		return FALSE;
 	}
 
+	if (!rdg_process_channel_response_optional(rdg, s, fieldsPresent))
+		return FALSE;
+
 	rdg->state = RDG_CLIENT_STATE_OPENED;
 	return TRUE;
 }
@@ -1102,7 +1124,7 @@ static BOOL rdg_process_packet(rdpRdg* rdg, wStream* s)
 	BOOL status = TRUE;
 	UINT16 type = 0;
 	UINT32 packetLength = 0;
-	Stream_SetPosition(s, 0);
+	Stream_ResetPosition(s);
 
 	if (!Stream_CheckAndLogRequiredLengthWLog(rdg->log, s, 8))
 		return FALSE;
@@ -1164,7 +1186,7 @@ static BOOL rdg_process_packet(rdpRdg* rdg, wStream* s)
 DWORD rdg_get_event_handles(rdpRdg* rdg, HANDLE* events, DWORD count)
 {
 	DWORD nCount = 0;
-	WINPR_ASSERT(rdg != NULL);
+	WINPR_ASSERT(rdg != nullptr);
 
 	if (rdg->tlsOut && rdg->tlsOut->bio)
 	{
@@ -1196,7 +1218,7 @@ static BOOL rdg_get_gateway_credentials(rdpContext* context, rdp_auth_reason rea
 			freerdp_set_last_error_log(instance->context, FREERDP_ERROR_CONNECT_CANCELLED);
 			return FALSE;
 		case AUTH_NO_CREDENTIALS:
-			WLog_INFO(TAG, "No credentials provided - using NULL identity");
+			WLog_INFO(TAG, "No credentials provided - using nullptr identity");
 			return TRUE;
 		case AUTH_FAILED:
 		default:
@@ -1208,7 +1230,7 @@ static BOOL rdg_auth_init(rdpRdg* rdg, rdpTls* tls, TCHAR* authPkg)
 {
 	rdpContext* context = rdg->context;
 	rdpSettings* settings = context->settings;
-	SEC_WINNT_AUTH_IDENTITY identity = { 0 };
+	SEC_WINNT_AUTH_IDENTITY identity = WINPR_C_ARRAY_INIT;
 	int rc = 0;
 
 	rdg->auth = credssp_auth_new(context);
@@ -1254,11 +1276,11 @@ static BOOL rdg_auth_init(rdpRdg* rdg, rdpTls* tls, TCHAR* authPkg)
 			return FALSE;
 
 		if (!settings->GatewayUsername)
-			identityArg = NULL;
+			identityArg = nullptr;
 	}
 
 	if (!credssp_auth_setup_client(rdg->auth, "HTTP", settings->GatewayHostname, identityArg,
-	                               rdg->smartcard ? rdg->smartcard->pkinitArgs : NULL))
+	                               rdg->smartcard ? rdg->smartcard->pkinitArgs : nullptr))
 	{
 		sspi_FreeAuthIdentity(&identity);
 		return FALSE;
@@ -1268,10 +1290,7 @@ static BOOL rdg_auth_init(rdpRdg* rdg, rdpTls* tls, TCHAR* authPkg)
 	credssp_auth_set_flags(rdg->auth, ISC_REQ_CONFIDENTIALITY | ISC_REQ_MUTUAL_AUTH);
 
 	rc = credssp_auth_authenticate(rdg->auth);
-	if (rc < 0)
-		return FALSE;
-
-	return TRUE;
+	return (rc >= 0);
 }
 
 static BOOL rdg_send_http_request(rdpRdg* rdg, rdpTls* tls, const char* method,
@@ -1293,15 +1312,15 @@ static BOOL rdg_send_http_request(rdpRdg* rdg, rdpTls* tls, const char* method,
 static BOOL rdg_tls_connect(rdpRdg* rdg, rdpTls* tls, const char* peerAddress, UINT32 timeout)
 {
 	long status = 0;
-	BIO* layerBio = NULL;
-	BIO* bufferedBio = NULL;
-	rdpTransportLayer* layer = NULL;
+	BIO* layerBio = nullptr;
+	BIO* bufferedBio = nullptr;
+	rdpTransportLayer* layer = nullptr;
 	rdpSettings* settings = rdg->context->settings;
 	rdpTransport* transport = freerdp_get_transport(rdg->context);
 	const char* peerHostname = settings->GatewayHostname;
 	UINT16 peerPort = (UINT16)settings->GatewayPort;
-	const char* proxyUsername = NULL;
-	const char* proxyPassword = NULL;
+	const char* proxyUsername = nullptr;
+	const char* proxyPassword = nullptr;
 	BOOL isProxyConnection =
 	    proxy_prepare(settings, &peerHostname, &peerPort, &proxyUsername, &proxyPassword);
 
@@ -1375,8 +1394,8 @@ static BOOL rdg_establish_data_connection(rdpRdg* rdg, rdpTls* tls, const char* 
                                           const char* peerAddress, UINT32 timeout,
                                           BOOL* rpcFallback)
 {
-	char buffer[64] = { 0 };
-	HttpResponse* response = NULL;
+	char buffer[64] = WINPR_C_ARRAY_INIT;
+	HttpResponse* response = nullptr;
 
 	if (!rdg_tls_connect(rdg, tls, peerAddress, timeout))
 		return FALSE;
@@ -1456,12 +1475,12 @@ static BOOL rdg_establish_data_connection(rdpRdg* rdg, rdpTls* tls, const char* 
 			}
 		}
 		credssp_auth_free(rdg->auth);
-		rdg->auth = NULL;
+		rdg->auth = nullptr;
 	}
 	else
 	{
 		credssp_auth_free(rdg->auth);
-		rdg->auth = NULL;
+		rdg->auth = nullptr;
 
 		if (!rdg_send_http_request(rdg, tls, method, TransferEncodingIdentity))
 			return FALSE;
@@ -1507,7 +1526,7 @@ static BOOL rdg_establish_data_connection(rdpRdg* rdg, rdpTls* tls, const char* 
 				 */
 				if (http_context_is_websocket_upgrade_enabled(rdg->http))
 				{
-					long fd = BIO_get_fd(tls->bio, NULL);
+					long fd = BIO_get_fd(tls->bio, nullptr);
 					if (fd >= 0)
 						closesocket((SOCKET)fd);
 					http_context_enable_websocket_upgrade(rdg->http, FALSE);
@@ -1569,7 +1588,7 @@ static BOOL rdg_establish_data_connection(rdpRdg* rdg, rdpTls* tls, const char* 
 static BOOL rdg_tunnel_connect(rdpRdg* rdg)
 {
 	BOOL status = 0;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 	rdg_send_handshake(rdg);
 
 	while (rdg->state < RDG_CLIENT_STATE_OPENED)
@@ -1600,12 +1619,12 @@ BOOL rdg_connect(rdpRdg* rdg, DWORD timeout, BOOL* rpcFallback)
 {
 	BOOL status = 0;
 	SOCKET outConnSocket = 0;
-	char* peerAddress = NULL;
+	char* peerAddress = nullptr;
 	BOOL rpcFallbackLocal = FALSE;
 
-	WINPR_ASSERT(rdg != NULL);
+	WINPR_ASSERT(rdg != nullptr);
 	freerdp_set_last_error(rdg->context, ERROR_SUCCESS);
-	status = rdg_establish_data_connection(rdg, rdg->tlsOut, "RDG_OUT_DATA", NULL, timeout,
+	status = rdg_establish_data_connection(rdg, rdg->tlsOut, "RDG_OUT_DATA", nullptr, timeout,
 	                                       &rpcFallbackLocal);
 
 	if (status)
@@ -1639,7 +1658,7 @@ BOOL rdg_connect(rdpRdg* rdg, DWORD timeout, BOOL* rpcFallback)
 		{
 			http_context_enable_websocket_upgrade(rdg->http, FALSE);
 			credssp_auth_free(rdg->auth);
-			rdg->auth = NULL;
+			rdg->auth = nullptr;
 		}
 
 		transport_set_layer(rdg->context->rdp->transport, TRANSPORT_LAYER_CLOSED);
@@ -1648,10 +1667,7 @@ BOOL rdg_connect(rdpRdg* rdg, DWORD timeout, BOOL* rpcFallback)
 
 	status = rdg_tunnel_connect(rdg);
 
-	if (!status)
-		return FALSE;
-
-	return TRUE;
+	return (status);
 }
 
 static int rdg_write_websocket_data_packet(rdpRdg* rdg, const BYTE* buf, int isize)
@@ -1688,7 +1704,7 @@ static int rdg_write_websocket_data_packet(rdpRdg* rdg, const BYTE* buf, int isi
 	maskingKey.u32 = (maskingKey.u32 & 0xffff) << 16 | (maskingKey.u32 >> 16);
 
 	WINPR_ASSERT(rdg->tlsOut);
-	wStream sPacket = { 0 };
+	wStream sPacket = WINPR_C_ARRAY_INIT;
 	Stream_StaticConstInit(&sPacket, buf, (size_t)isize);
 	if (!websocket_context_mask_and_send(rdg->tlsOut->bio, sWS, &sPacket, maskingKey.u32))
 		return -1;
@@ -1700,7 +1716,7 @@ static int rdg_write_chunked_data_packet(rdpRdg* rdg, const BYTE* buf, int isize
 {
 	int status = 0;
 	size_t len = 0;
-	wStream* sChunk = NULL;
+	wStream* sChunk = nullptr;
 
 	if (isize > UINT16_MAX)
 		return -1;
@@ -1710,9 +1726,9 @@ static int rdg_write_chunked_data_packet(rdpRdg* rdg, const BYTE* buf, int isize
 		return 0;
 
 	const size_t packetSize = size + 10;
-	char chunkSize[11] = { 0 };
+	char chunkSize[11] = WINPR_C_ARRAY_INIT;
 	(void)sprintf_s(chunkSize, sizeof(chunkSize), "%" PRIxz "\r\n", packetSize);
-	sChunk = Stream_New(NULL, strnlen(chunkSize, sizeof(chunkSize)) + packetSize + 2);
+	sChunk = Stream_New(nullptr, strnlen(chunkSize, sizeof(chunkSize)) + packetSize + 2);
 
 	if (!sChunk)
 		return -1;
@@ -1748,7 +1764,7 @@ static int rdg_write_data_packet(rdpRdg* rdg, const BYTE* buf, int isize)
 static BOOL rdg_process_close_packet(rdpRdg* rdg, wStream* s)
 {
 	int status = -1;
-	wStream* sClose = NULL;
+	wStream* sClose = nullptr;
 	UINT32 errorCode = 0;
 	UINT32 packetSize = 12;
 
@@ -1760,7 +1776,7 @@ static BOOL rdg_process_close_packet(rdpRdg* rdg, wStream* s)
 	if (errorCode != 0)
 		freerdp_set_last_error_log(rdg->context, errorCode);
 
-	sClose = Stream_New(NULL, packetSize);
+	sClose = Stream_New(nullptr, packetSize);
 	if (!sClose)
 		return FALSE;
 
@@ -1772,16 +1788,16 @@ static BOOL rdg_process_close_packet(rdpRdg* rdg, wStream* s)
 	status = rdg_write_packet(rdg, sClose);
 	Stream_Free(sClose, TRUE);
 
-	return (status < 0 ? FALSE : TRUE);
+	return ((status >= 0));
 }
 
 static BOOL rdg_process_keep_alive_packet(rdpRdg* rdg)
 {
 	int status = -1;
-	wStream* sKeepAlive = NULL;
+	wStream* sKeepAlive = nullptr;
 	size_t packetSize = 8;
 
-	sKeepAlive = Stream_New(NULL, packetSize);
+	sKeepAlive = Stream_New(nullptr, packetSize);
 
 	if (!sKeepAlive)
 		return FALSE;
@@ -1793,12 +1809,12 @@ static BOOL rdg_process_keep_alive_packet(rdpRdg* rdg)
 	status = rdg_write_packet(rdg, sKeepAlive);
 	Stream_Free(sKeepAlive, TRUE);
 
-	return (status < 0 ? FALSE : TRUE);
+	return ((status >= 0));
 }
 
 static BOOL rdg_process_service_message(rdpRdg* rdg, wStream* s)
 {
-	const WCHAR* msg = NULL;
+	const WCHAR* msg = nullptr;
 	UINT16 msgLenBytes = 0;
 	rdpContext* context = rdg->context;
 	WINPR_ASSERT(context);
@@ -1826,7 +1842,7 @@ static BOOL rdg_process_unknown_packet(rdpRdg* rdg, int type)
 
 static BOOL rdg_process_control_packet(rdpRdg* rdg, int type, size_t packetLength)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 	size_t readCount = 0;
 	int status = 0;
 	size_t payloadSize = packetLength - sizeof(RdgPacketHeader);
@@ -1839,7 +1855,7 @@ static BOOL rdg_process_control_packet(rdpRdg* rdg, int type, size_t packetLengt
 
 	if (payloadSize)
 	{
-		s = Stream_New(NULL, payloadSize);
+		s = Stream_New(nullptr, payloadSize);
 
 		if (!s)
 			return FALSE;
@@ -1875,7 +1891,7 @@ static BOOL rdg_process_control_packet(rdpRdg* rdg, int type, size_t packetLengt
 			}
 		}
 
-		Stream_SetPosition(s, 0);
+		Stream_ResetPosition(s);
 	}
 
 	switch (type)
@@ -1914,7 +1930,7 @@ static BOOL rdg_process_control_packet(rdpRdg* rdg, int type, size_t packetLengt
 
 static int rdg_read_data_packet(rdpRdg* rdg, BYTE* buffer, size_t size)
 {
-	RdgPacketHeader header = { 0 };
+	RdgPacketHeader header = WINPR_C_ARRAY_INIT;
 	size_t readCount = 0;
 	size_t readSize = 0;
 	int status = 0;
@@ -2179,12 +2195,12 @@ static int rdg_bio_free(BIO* bio)
 
 static BIO_METHOD* BIO_s_rdg(void)
 {
-	static BIO_METHOD* bio_methods = NULL;
+	static BIO_METHOD* bio_methods = nullptr;
 
-	if (bio_methods == NULL)
+	if (bio_methods == nullptr)
 	{
 		if (!(bio_methods = BIO_meth_new(BIO_TYPE_TSG, "RDGateway")))
-			return NULL;
+			return nullptr;
 
 		BIO_meth_set_write(bio_methods, rdg_bio_write);
 		BIO_meth_set_read(bio_methods, rdg_bio_read);
@@ -2201,11 +2217,11 @@ static BIO_METHOD* BIO_s_rdg(void)
 rdpRdg* rdg_new(rdpContext* context)
 {
 	if (!context)
-		return NULL;
+		return nullptr;
 
 	rdpRdg* rdg = (rdpRdg*)calloc(1, sizeof(rdpRdg));
 	if (!rdg)
-		return NULL;
+		return nullptr;
 
 	rdg->log = WLog_Get(TAG);
 	rdg->state = RDG_CLIENT_STATE_INITIAL;
@@ -2217,7 +2233,8 @@ rdpRdg* rdg_new(rdpContext* context)
 	if (rdg->context->settings->GatewayAccessToken)
 		rdg->extAuth = HTTP_EXTENDED_AUTH_PAA;
 
-	UuidCreate(&rdg->guid);
+	if (UuidCreate(&rdg->guid) != RPC_S_OK)
+		goto rdg_alloc_error;
 
 	rdg->tlsOut = freerdp_tls_new(rdg->context);
 
@@ -2293,7 +2310,7 @@ rdg_alloc_error:
 	WINPR_PRAGMA_DIAG_IGNORED_MISMATCHED_DEALLOC
 	rdg_free(rdg);
 	WINPR_PRAGMA_DIAG_POP
-	return NULL;
+	return nullptr;
 }
 
 void rdg_free(rdpRdg* rdg)
@@ -2321,7 +2338,7 @@ void rdg_free(rdpRdg* rdg)
 BIO* rdg_get_front_bio_and_take_ownership(rdpRdg* rdg)
 {
 	if (!rdg)
-		return NULL;
+		return nullptr;
 
 	rdg->attached = TRUE;
 	return rdg->frontBio;

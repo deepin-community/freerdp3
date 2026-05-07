@@ -49,6 +49,11 @@ extern "C"
 		UINT32 outputTargetHeight;
 		BOOL windowMapped;
 		BOOL handleInUpdateSurfaceArea;
+#if defined(WITH_GFX_AV1)
+		FREERDP_AV1_CONTEXT* av1; /** @since version 3.25.0 */
+#else
+	    void* reservedAV1;
+#endif
 	};
 	typedef struct gdi_gfx_surface gdiGfxSurface;
 
@@ -64,6 +69,7 @@ extern "C"
 	typedef struct gdi_gfx_cache_entry gdiGfxCacheEntry;
 
 	FREERDP_API BOOL gdi_graphics_pipeline_init(rdpGdi* gdi, RdpgfxClientContext* gfx);
+
 	FREERDP_API BOOL gdi_graphics_pipeline_init_ex(rdpGdi* gdi, RdpgfxClientContext* gfx,
 	                                               pcRdpgfxMapWindowForSurface map,
 	                                               pcRdpgfxUnmapWindowForSurface unmap,

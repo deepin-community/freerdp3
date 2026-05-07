@@ -1,19 +1,233 @@
+freerdp3 (3.26.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release, with 3 High ranking CVE (no numbers assigned yet)
+  * d/copyright: remove Files-Excluded: scripts/android-*
+  * d/patches/: remove
+  * d/control,d/rules: drop sdl2 support (pkg.freerdp3.sdl2 build profile)
+  * d/rules: -DWITH_INTERNAL_MD4=ON (enable internal md4),
+    due to libssl/libcrypto does not provide it (anymore?)
+  * d/libfreerdp-client3-3.symbols: add new symbol
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 06 May 2026 12:32:12 +0300
+
+freerdp3 (3.25.0+dfsg-5) unstable; urgency=medium
+
+  * core-instance-fix-deprecation-guards.patch: another fix
+    for deprecated symbols
+  * 2 patches from upstream to fix linking with libsso-mib (Closes: #1135164)
+  * fuse is linux-only
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Thu, 30 Apr 2026 20:35:20 +0300
+
+freerdp3 (3.25.0+dfsg-4) unstable; urgency=medium
+
+  * AuthenticateEx-Deprecation.diff: update from the actual upstream commit
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sun, 26 Apr 2026 18:53:50 +0300
+
+freerdp3 (3.25.0+dfsg-3) unstable; urgency=medium
+
+  [ Luca Boccassi ]
+  * Enable FIDO2/WebAuthN passthrough
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sat, 25 Apr 2026 19:30:01 +0300
+
+freerdp3 (3.25.0+dfsg-2) unstable; urgency=medium
+
+  * AuthenticateEx-Deprecation.diff: fix wrong deprecation condition
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sat, 25 Apr 2026 19:06:48 +0300
+
+freerdp3 (3.25.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release, with the following fixes:
+    CVE-2026-40254 drive channel path traversal via terminal ..
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3xpj-m4hx-8vmx
+  * update .symbols files (add new symbols, and drop +dfsg-1 from existing)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Fri, 24 Apr 2026 21:30:05 +0300
+
+freerdp3 (3.24.2+dfsg-1) unstable; urgency=medium
+
+  * new upstream bugfix/security release:
+    CVE-2026-33952 DoS via WINPR_ASSERT in rts_read_auth_verifier_no_checks
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4v4p-9v5x-hc93
+    CVE-2026-33977 DoS via WINPR_ASSERT in IMA ADPCM audio decoder (dsp.c:331)
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8f2g-3q27-6xm5
+    CVE-2026-33995 double free in kerberos_AcceptSecurityContext
+      and kerberos_IntitalizeSecurityContextA
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-mv25-f4p2-5mxx
+    CVE-2026-33984 ClearCodec resize_vbar_entry() Heap OOB Write
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8469-2xcx-frf6
+    CVE-2026-33983 Progressive Codec Quant BYTE Underflow - UB + CPU DoS
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4gfm-4p52-h478
+    CVE-2026-33985 ClearCodec Glyph Cache Count Desync - Heap OOB Read
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-x6gr-8p7h-5h85
+    CVE-2026-33986 H.264 YUV Buffer Dimension Desync - Heap OOB Write
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-h6qw-wxvm-hf97
+    CVE-2026-33987 Persistent Cache bmpSize Desync - Heap OOB Write
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-ff8h-p5vc-wcwc
+    CVE-2026-33982 Persistent Cache Allocator Mismatch - Heap OOB Read
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8jm9-2925-g4v2
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 25 Mar 2026 20:00:40 +0300
+
+freerdp3 (3.24.1+dfsg-1) unstable; urgency=medium
+
+  * new upstream bugfix release
+  * remove patches
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 18 Mar 2026 13:14:14 +0300
+
+freerdp3 (3.24.0+dfsg-2) unstable; urgency=medium
+
+  * winpr-sam-fix-reading-SAM-entries.patch:
+    fix regression with gnome-remote-desktop testsuite
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sun, 15 Mar 2026 00:04:01 +0300
+
+freerdp3 (3.24.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release, with enhancements, bugfixes, and more security fixes:
+    CVE-2026-29774 Heap-buffer-overflow in avc420_yuv_to_rgb via OOB regionRects
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-5q35-hv9x-7794
+    CVE-2026-29775 Heap-buffer-overflow in bitmap_cache_put via OOB cacheId
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-h666-rfw3-jhvj
+    CVE-2026-29776 Integer Underflow in update_read_cache_bitmap_order
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-c747-x4wf-cqrr
+    CVE-2026-31806 (HIGH) Heap Buffer Overflow in nsc_process_message()
+      via Unchecked SURFACE_BITS_COMMAND Bitmap Dimensions
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-rrqm-46rj-cmx2
+    CVE-2026-31883 `size_t` underflow in ADPCM decoder leads to
+      heap-buffer-overflow write
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-85x9-4xxp-xhm5
+    CVE-2026-31884 Division-by-zero in ADPCM decoders when `nBlockAlign` is 0
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-jp7m-94ww-p56r
+    CVE-2026-31885 Out-of-bounds read in ADPCM decoders
+      due to missing predictor/step_index bounds checks
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-h23r-3988-3wf3
+    CVE-2026-31897 Out-of-bounds read in `freerdp_bitmap_decompress_planar` 
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-xgv6-r22m-7c9x
+  * d/libfreerdp3-3.symbols,d/libwinpr3-3.symbols: add new symbols
+  * d/libfreerdp-client3-3.symbols: REMOVE unused symbols
+     add_device del_device msusb_*
+    These are internal symbols which should not be used
+  * d/control, d/rules: libfuse is linux-only
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Fri, 13 Mar 2026 21:23:00 +0300
+
+freerdp3 (3.23.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release, with enhancements and more security fixes:
+    CVE-2026-25941 Out-of-bounds read in rdpgfx_recv_wire_to_surface_2_pdu
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3546-x645-5cf8
+    CVE-2026-25942 Global-buffer-overflow in xf_rail_server_execute_result
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-78q6-67m7-wwf6
+    CVE-2026-25952 Heap-use-after-free in xf_SetWindowMinMaxInfo
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-cgqm-cwjg-7w9x
+    CVE-2026-25953 Heap-use-after-free in xf_AppUpdateWindowFromSurface
+      (freed appWindow)
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-p6rq-rxpc-rh3p
+    CVE-2026-25954 Heap-use-after-free in xf_rail_server_local_move_size
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-cc88-4j37-mw6j
+    CVE-2026-25955 Heap-use-after-free in xf_AppUpdateWindowFromSurface
+      (stale XImage)
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4g54-x8v7-559x
+    CVE-2026-25959 Heap-use-after-free in xf_cliprdr_provide_data_
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-78xg-v4p2-4w3c
+    CVE-2026-25997 Heap-use-after-free in xf_clipboard_format_equal
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-q5j3-m6jf-3jq4
+    CVE-2026-26271 Buffer Overread in FreeRDP Icon Processing
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-hr4m-ph4g-48j6
+      (note: there's apparently some issue linking the CVE# to this advisory)
+    CVE-2026-26986 Heap-use-after-free in rail_window_free
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-crqx-g6x5-rx47
+    CVE-2026-27015 Smartcard NDR Alignment Padding Triggers Reachable
+      WINPR_ASSERT Abort (Client DoS)
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-7g72-39pq-4725
+    CVE-2026-26955 Heap Out-of-Bounds Write in ClearCodec Surface Command
+      Handler via Missing Bounds Validation
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-mr6w-ch7c-mqqj
+    CVE-2026-26965 Heap Out-of-Bounds Write in Planar Bitmap RLE Decompression
+      via Destination Offset
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-5vgf-mw4f-r33h
+  * libwinpr3-3.symbols, libfreerdp3-3.symbols,
+    libfreerdp-server-proxy3-3.symbols: add newly appeared symbols
+  * libfreerdp-shadow3-3.symbols: remove rdtk_* symbols.
+    rdtk is now optional and defaults-off because it is unmaintained.
+    It weren't used much anyway.  In debian, this library has no reverse
+    dependencies outide of freerdp3.  So let's just drop these symbols for now,
+    and if a problem occurs, we can fix it later
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 25 Feb 2026 17:24:26 +0300
+
+freerdp3 (3.22.0+dfsg-3) unstable; urgency=medium
+
+  * d/control: add libwinpr3-3:Replaces: libwinpr2-2 to override wlog.7.
+    There's no upgrade path from freerdp2 in bookworm to freerdp3 in trixie,
+    so if the user had freerdp2 installed in bookworm and upgraded the system
+    to trixie, it is very likely they still have freerdp2 installed (obsolete
+    package).  And the new libwinp3-3 ships the same manpage as the old
+    libwinpr2-2.  Allow replacing this file when installing new libwinpr3-3.
+    Do not add Breaks: though, since this way, all freerdp2 packages has to
+    be removed (which might be a good thing in the end, but for that we ought
+    to provide xfreerdp2 etc binaries too).  Also Breaks libwinpr2-2t64, since
+    apparently some users managed to install the t64 packages on a bookworm
+    system somehow.  (Closes: #1127622)
+  * rename source package back to freerdp3.  It turned out this is too much
+    pain (security tracker, bug reports, autopkgtests, etc) for nothing.
+    Suggest renaming it to freerdp at freerdp4 time.
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 11 Feb 2026 12:08:45 +0300
+
+freerdp (3.22.0+dfsg-2) unstable; urgency=medium
+
+  * package rename.  We had freerdp, freerdp2, freerdp3, - due to big rewrite
+    upstream from 1.x to 2.x which was going in parallel with 1.x, and it was
+    unclear when 2.x will be ready.  Next, during 2.x to 3.x, it was a steady
+    update, which stayed compatible with 2.x series.  But the project itself
+    is named "freerdp" without any version suffix.  And we had no upgrade path
+    from bookworm (which has freerdp2 only) to trixie (freerdp3 only).  There's
+    no actual reason to carry the suffix, at least not anymore.  Let's name it
+    "freerdp" without any suffix, and provide compatibility end-user packages
+    with compatibility naming.  Rename source package from freerdp3 to freerdp
+  * rename end-user binary packages: freerdp3-x11, freerdp3-sdl,
+    freerdp3-wayland, freerdp3-proxy, freerdp3-proxy-modules, winpr3-utils
+    to drop the "3" version suffix from both the name of the package and
+    the name of the binary.  Provide transitional packages with old names,
+    containing symlinks to new binaries
+  * update CVE references in the previous changelog entry
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Tue, 10 Feb 2026 12:24:09 +0300
+
 freerdp3 (3.22.0+dfsg-1) unstable; urgency=medium
 
   * new upstream major bugfix release, with overhaul of SDL3 client and
     multiple security fixes for the following client-side vulnerabilities:
-    CVE-2026-23948
-    CVE-2026-24682
-    CVE-2026-24683
-    CVE-2026-24676
-    CVE-2026-24677
-    CVE-2026-24678
-    CVE-2026-24684
-    CVE-2026-24679
-    CVE-2026-24681
-    CVE-2026-24675
-    CVE-2026-24491
-    CVE-2026-24680
+    CVE-2026-23948 NULL Pointer Dereference in rdp_write_logon_info_v2()
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-6f3c-qvqq-2px5
+    CVE-2026-24491 Heap-use-after-free in video_timer
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4x6j-w49r-869g
+    CVE-2026-24675 Heap-use-after-free in urb_select_interface
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-x9jr-99h2-g7mj
+    CVE-2026-24676 Heap-use-after-free in audio_format_compatible
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-qh5p-frq4-pgxj
+    CVE-2026-24677 Heap-buffer-overflow in ecam_encoder_compress_h264
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-xw37-j744-f8v7
+    CVE-2026-24678 Heap-use-after-free in cam_v4l_stream_capture_thread
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-6gvg-29wx-6v7h
+    CVE-2026-24679 Heap-buffer-overflow in urb_select_interface
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-2jp4-67x6-gv7x
+    CVE-2026-24680 Heap-use-after-free in update_pointer_new(SDL)
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-j893-9wg8-33rc
+    CVE-2026-24681 Heap-use-after-free in urb_bulk_transfer_cb
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-ccvv-hg2w-6x9j
+    CVE-2026-24682 Heap-buffer-overflow in audio_formats_free
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-vcw2-pqgw-mx6g
+    CVE-2026-24683 Heap-use-after-free in ainput_send_input_event
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-45pf-68pj-fg8q
+    CVE-2026-24684 Heap-use-after-free in play_thread
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-vcgv-xgjp-h83q
   * update libfreerdp symbols file (add new symbols)
 
  -- Michael Tokarev <mjt@tls.msk.ru>  Thu, 29 Jan 2026 11:22:26 +0300

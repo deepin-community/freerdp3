@@ -12,6 +12,7 @@ CXXFLAGS += $(CPPFLAGS) -DNDEBUG
 empty :=
 
 DEB_CMAKE_EXTRA_FLAGS = \
+    -DGIT_REVISION=DEB_VERSION_REVISION \
     -DCMAKE_INSTALL_INCLUDEDIR=include/$(DEB_HOST_MULTIARCH) \
     -DCMAKE_SKIP_RPATH=FALSE \
     -DCMAKE_SKIP_INSTALL_RPATH=TRUE \
@@ -25,8 +26,8 @@ DEB_CMAKE_EXTRA_FLAGS = \
     -DWITH_CLIENT_INTERFACE=OFF \
     -DWITH_CLIENT_SDL=ON \
     -DWITH_CLIENT_SDL_VERSIONED=OFF \
-    -DWITH_CLIENT_SDL2=$(if $(filter pkg.freerdp3.sdl2,${DEB_BUILD_PROFILES}),ON,OFF) \
-    -DWITH_CLIENT_SDL3=$(if $(filter pkg.freerdp3.sdl2,${DEB_BUILD_PROFILES}),OFF,ON) \
+    -DWITH_CLIENT_SDL2=OFF \
+    -DWITH_CLIENT_SDL3=ON \
     -DWITH_SDL_IMAGE_DIALOGS=ON \
     -DWITH_WEBVIEW=OFF \
     -DWITH_PULSE=ON \
@@ -48,10 +49,11 @@ DEB_CMAKE_EXTRA_FLAGS = \
     -DWITH_SMARTCARD_EMULATE=ON \
     -DRDTK_FORCE_STATIC_BUILD=ON \
     -DUWAC_FORCE_STATIC_BUILD=ON \
-    -DWITH_BINARY_VERSIONING=ON \
+    -DWITH_BINARY_VERSIONING=OFF \
     -DWITH_VERBOSE_WINPR_ASSERT=OFF \
     -DWITH_INSTALL_CLIENT_DESKTOP_FILES=ON \
     -DWITH_JSONC_REQUIRED=ON \
+    -DWITH_INTERNAL_MD4=ON \
     $(empty)
 
 ifneq (,$(filter armel,$(DEB_HOST_ARCH)))
@@ -79,6 +81,9 @@ ifneq (,$(filter linux,$(DEB_HOST_ARCH_OS)))
         -DWITH_VAAPI_H264_ENCODING=ON \
         -DCHANNEL_RDPECAM=ON \
         -DCHANNEL_RDPECAM_CLIENT=ON \
+        -DCHANNEL_RDPEWA=ON \
+        -DCHANNEL_RDPEWA_CLIENT=ON \
+        -DWITH_SSO_MIB=ON \
         $(empty)
 else
     DEB_CMAKE_EXTRA_FLAGS += \
@@ -88,6 +93,7 @@ else
 
     DEB_CMAKE_EXTRA_FLAGS += \
         -DWITH_ALSA=OFF \
+        -DWITH_FUSE=OFF \
         -DWITH_LIBSYSTEMD=OFF \
         -DWITH_WAYLAND=OFF \
         $(empty)
@@ -95,13 +101,14 @@ endif
 
 # Ubuntu can't have ffmpeg in main
 # Ubuntu doesn't yet have cjson or pkcs11-helper
-# or uriparser in main
+# or sso-mib or uriparser in main
 ifeq ($(shell dpkg-vendor --is Ubuntu && echo yes),yes)
     DEB_CMAKE_EXTRA_FLAGS += \
         -DWITH_FFMPEG=OFF \
         -DWITH_GSM=OFF \
         -DWITH_CAIRO=ON \
         -DWITH_PKCS11=OFF \
+        -DWITH_SSO_MIB=OFF \
         -DWITH_SWSCALE=OFF \
         -DWITH_URIPARSER=OFF \
         -DCHANNEL_RDPECAM_CLIENT=OFF \
@@ -119,7 +126,11 @@ endif
 %:
 	dh $@
 
-override_dh_auto_configure:
+override_dh_auto_configure-indep:
+override_dh_auto_build-indep:
+override_dh_auto_install-indep:
+
+override_dh_auto_configure-arch:
 	dh_auto_configure -- $(DEB_CMAKE_EXTRA_FLAGS)
 
 # all packages depends on exact same version of libwinpr3-3: link docs to it

@@ -68,11 +68,11 @@ extern "C"
 	typedef struct
 	{
 		ALIGN64 void* userContext;
-		ALIGN64 pTransportLayerRead Read;
-		ALIGN64 pTransportLayerWrite Write;
+		WINPR_ATTR_NODISCARD ALIGN64 pTransportLayerRead Read;
+		WINPR_ATTR_NODISCARD ALIGN64 pTransportLayerWrite Write;
 		ALIGN64 pTransportLayerFkt Close;
-		ALIGN64 pTransportLayerWait Wait;
-		ALIGN64 pTransportLayerGetEvent GetEvent;
+		WINPR_ATTR_NODISCARD ALIGN64 pTransportLayerWait Wait;
+		WINPR_ATTR_NODISCARD ALIGN64 pTransportLayerGetEvent GetEvent;
 		UINT64 reserved[64 - 6]; /* Reserve some space for ABI compatibility */
 	} rdpTransportLayer;
 
@@ -110,29 +110,36 @@ extern "C"
 
 	struct rdp_transport_io
 	{
-		pTCPConnect TCPConnect;
-		pTransportFkt TLSConnect;
-		pTransportFkt TLSAccept;
-		pTransportAttach TransportAttach;
-		pTransportFkt TransportDisconnect;
-		pTransportRWFkt ReadPdu;                   /* Reads a whole PDU from the transport */
-		pTransportRWFkt WritePdu;                  /* Writes a whole PDU to the transport */
-		pTransportRead ReadBytes;                  /* Reads up to a requested amount of bytes */
-		pTransportGetPublicKey GetPublicKey;       /** @since version 3.2.0 */
-		pTransportSetBlockingMode SetBlockingMode; /** @since version 3.3.0 */
-		pTransportConnectLayer ConnectLayer;       /** @since 3.9.0 */
-		pTransportAttachLayer AttachLayer;         /** @since 3.9.0 */
+		WINPR_ATTR_NODISCARD pTCPConnect TCPConnect;
+		WINPR_ATTR_NODISCARD pTransportFkt TLSConnect;
+		WINPR_ATTR_NODISCARD pTransportFkt TLSAccept;
+		WINPR_ATTR_NODISCARD pTransportAttach TransportAttach;
+		WINPR_ATTR_NODISCARD pTransportFkt TransportDisconnect;
+		WINPR_ATTR_NODISCARD pTransportRWFkt ReadPdu;  /* Reads a whole PDU from the transport */
+		WINPR_ATTR_NODISCARD pTransportRWFkt WritePdu; /* Writes a whole PDU to the transport */
+		WINPR_ATTR_NODISCARD pTransportRead ReadBytes; /* Reads up to a requested amount of bytes */
+		WINPR_ATTR_NODISCARD pTransportGetPublicKey GetPublicKey;       /** @since version 3.2.0 */
+		WINPR_ATTR_NODISCARD pTransportSetBlockingMode SetBlockingMode; /** @since version 3.3.0 */
+		WINPR_ATTR_NODISCARD pTransportConnectLayer ConnectLayer;       /** @since 3.9.0 */
+		WINPR_ATTR_NODISCARD pTransportAttachLayer AttachLayer;         /** @since 3.9.0 */
 		UINT64 reserved[64 - 12];                  /* Reserve some space for ABI compatibility */
 	};
 	typedef struct rdp_transport_io rdpTransportIo;
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_io_callback_set_event(rdpContext* context, BOOL set);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const rdpTransportIo* freerdp_get_io_callbacks(rdpContext* context);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_set_io_callbacks(rdpContext* context,
 	                                          const rdpTransportIo* io_callbacks);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_set_io_callback_context(rdpContext* context, void* usercontext);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API void* freerdp_get_io_callback_context(rdpContext* context);
 
 	/* PDU parser.
@@ -141,13 +148,18 @@ extern "C"
 	 *         >0 -> PDU header complete, length of PDU.
 	 *         <0 -> Abort, an error occurred
 	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API SSIZE_T transport_parse_pdu(rdpTransport* transport, wStream* s, BOOL* incomplete);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpContext* transport_get_context(rdpTransport* transport);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpTransport* freerdp_get_transport(rdpContext* context);
 
 	/**
 	 * @brief Free a transport layer instance
-	 * @param layer A pointer to the layer to free or \b NULL
+	 * @param layer A pointer to the layer to free or \b nullptr
 	 * @since version 3.9.0
 	 */
 	FREERDP_API void transport_layer_free(rdpTransportLayer* layer);
@@ -160,7 +172,7 @@ extern "C"
 	 * @param transport A pointer to the transport instance to use
 	 * @param contextSize The size of the context to use. If \b 0 no rdpTransportLayer::userContext
 	 * is allocated or freed.
-	 * @return A new transport layer instance or \b NULL in case of failure
+	 * @return A new transport layer instance or \b nullptr in case of failure
 	 * @since version 3.9.0
 	 */
 	WINPR_ATTR_MALLOC(transport_layer_free, 1)

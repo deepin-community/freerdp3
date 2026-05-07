@@ -78,6 +78,7 @@ UINT32 shadow_encoder_create_frame_id(rdpShadowEncoder* encoder)
 	return frameId;
 }
 
+WINPR_ATTR_NODISCARD
 static int shadow_encoder_init_grid(rdpShadowEncoder* encoder)
 {
 	UINT32 tileSize = 0;
@@ -114,13 +115,13 @@ static int shadow_encoder_uninit_grid(rdpShadowEncoder* encoder)
 	if (encoder->gridBuffer)
 	{
 		free(encoder->gridBuffer);
-		encoder->gridBuffer = NULL;
+		encoder->gridBuffer = nullptr;
 	}
 
 	if (encoder->grid)
 	{
 		free((void*)encoder->grid);
-		encoder->grid = NULL;
+		encoder->grid = nullptr;
 	}
 
 	encoder->gridWidth = 0;
@@ -128,6 +129,7 @@ static int shadow_encoder_uninit_grid(rdpShadowEncoder* encoder)
 	return 0;
 }
 
+WINPR_ATTR_NODISCARD
 static int shadow_encoder_init_rfx(rdpShadowEncoder* encoder)
 {
 	if (!encoder->rfx)
@@ -143,7 +145,8 @@ static int shadow_encoder_init_rfx(rdpShadowEncoder* encoder)
 	{
 		const UINT32 mode =
 		    freerdp_settings_get_uint32(encoder->server->settings, FreeRDP_RemoteFxRlgrMode);
-		rfx_context_set_mode(encoder->rfx, WINPR_ASSERTING_INT_CAST(RLGR_MODE, mode));
+		if (!rfx_context_set_mode(encoder->rfx, WINPR_ASSERTING_INT_CAST(RLGR_MODE, mode)))
+			goto fail;
 	}
 	rfx_context_set_pixel_format(encoder->rfx, PIXEL_FORMAT_BGRX32);
 	encoder->codecs |= FREERDP_CODEC_REMOTEFX;
@@ -153,6 +156,7 @@ fail:
 	return -1;
 }
 
+WINPR_ATTR_NODISCARD
 static int shadow_encoder_init_nsc(rdpShadowEncoder* encoder)
 {
 	rdpContext* context = (rdpContext*)encoder->client;
@@ -188,6 +192,7 @@ fail:
 	return -1;
 }
 
+WINPR_ATTR_NODISCARD
 static int shadow_encoder_init_planar(rdpShadowEncoder* encoder)
 {
 	DWORD planarFlags = 0;
@@ -219,6 +224,7 @@ fail:
 	return -1;
 }
 
+WINPR_ATTR_NODISCARD
 static int shadow_encoder_init_interleaved(rdpShadowEncoder* encoder)
 {
 	if (!encoder->interleaved)
@@ -237,6 +243,7 @@ fail:
 	return -1;
 }
 
+WINPR_ATTR_NODISCARD
 static int shadow_encoder_init_h264(rdpShadowEncoder* encoder)
 {
 	if (!encoder->h264)
@@ -267,6 +274,46 @@ fail:
 	return -1;
 }
 
+#if defined(WITH_GFX_AV1)
+WINPR_ATTR_NODISCARD
+static int shadow_encoder_init_av1(rdpShadowEncoder* encoder, UINT32 codecs)
+{
+	WINPR_ASSERT(encoder);
+
+	UINT32 profile = 0;
+	if ((codecs & FREERDP_CODEC_AV1_I444) != 0)
+		profile = 1;
+
+	if (!encoder->av1)
+		encoder->av1 = freerdp_av1_context_new(TRUE);
+
+	if (!encoder->av1)
+		goto fail;
+
+	if (!freerdp_av1_context_reset(encoder->av1, encoder->width, encoder->height))
+		goto fail;
+
+	if (!freerdp_av1_context_set_option(encoder->av1, FREERDP_AV1_CONTEXT_OPTION_PROFILE, profile))
+		goto fail;
+
+	if (!freerdp_av1_context_set_option(encoder->av1, FREERDP_AV1_CONTEXT_OPTION_RATECONTROL,
+	                                    encoder->server->AV1RateControlMode))
+		goto fail;
+	if (!freerdp_av1_context_set_option(encoder->av1, FREERDP_AV1_CONTEXT_OPTION_BITRATE,
+	                                    encoder->server->AV1BitRate))
+		goto fail;
+
+	encoder->codecs &= ~(FREERDP_CODEC_AV1_I420 | FREERDP_CODEC_AV1_I444);
+	encoder->codecs |= codecs;
+	return 1;
+fail:
+	freerdp_av1_context_free(encoder->av1);
+	encoder->av1 = nullptr;
+	return -1;
+}
+#endif
+
+WINPR_ATTR_NODISCARD
 static int shadow_encoder_init_progressive(rdpShadowEncoder* encoder)
 {
 	WINPR_ASSERT(encoder);
@@ -286,16 +333,18 @@ fail:
 	return -1;
 }
 
+WINPR_ATTR_NODISCARD
 static int shadow_encoder_init(rdpShadowEncoder* encoder)
 {
 	encoder->width = encoder->server->screen->width;
 	encoder->height = encoder->server->screen->height;
 	encoder->maxTileWidth = 64;
 	encoder->maxTileHeight = 64;
-	shadow_encoder_init_grid(encoder);
+	if (shadow_encoder_init_grid(encoder) < 0)
+		return -1;
 
 	if (!encoder->bs)
-		encoder->bs = Stream_New(NULL, 4ULL * encoder->maxTileWidth * encoder->maxTileHeight);
+		encoder->bs = Stream_New(nullptr, 4ULL * encoder->maxTileWidth * encoder->maxTileHeight);
 
 	if (!encoder->bs)
 		return -1;
@@ -308,7 +357,7 @@ static int shadow_encoder_uninit_rfx(rdpShadowEncoder* encoder)
 	if (encoder->rfx)
 	{
 		rfx_context_free(encoder->rfx);
-		encoder->rfx = NULL;
+		encoder->rfx = nullptr;
 	}
 
 	encoder->codecs &= (UINT32)~FREERDP_CODEC_REMOTEFX;
@@ -320,7 +369,7 @@ static int shadow_encoder_uninit_nsc(rdpShadowEncoder* encoder)
 	if (encoder->nsc)
 	{
 		nsc_context_free(encoder->nsc);
-		encoder->nsc = NULL;
+		encoder->nsc = nullptr;
 	}
 
 	encoder->codecs &= (UINT32)~FREERDP_CODEC_NSCODEC;
@@ -332,7 +381,7 @@ static int shadow_encoder_uninit_planar(rdpShadowEncoder* encoder)
 	if (encoder->planar)
 	{
 		freerdp_bitmap_planar_context_free(encoder->planar);
-		encoder->planar = NULL;
+		encoder->planar = nullptr;
 	}
 
 	encoder->codecs &= (UINT32)~FREERDP_CODEC_PLANAR;
@@ -344,7 +393,7 @@ static int shadow_encoder_uninit_interleaved(rdpShadowEncoder* encoder)
 	if (encoder->interleaved)
 	{
 		bitmap_interleaved_context_free(encoder->interleaved);
-		encoder->interleaved = NULL;
+		encoder->interleaved = nullptr;
 	}
 
 	encoder->codecs &= (UINT32)~FREERDP_CODEC_INTERLEAVED;
@@ -356,12 +405,25 @@ static int shadow_encoder_uninit_h264(rdpShadowEncoder* encoder)
 	if (encoder->h264)
 	{
 		h264_context_free(encoder->h264);
-		encoder->h264 = NULL;
+		encoder->h264 = nullptr;
 	}
 
 	encoder->codecs &= (UINT32) ~(FREERDP_CODEC_AVC420 | FREERDP_CODEC_AVC444);
 	return 1;
 }
+
+#if defined(WITH_GFX_AV1)
+static int shadow_encoder_uninit_av1(rdpShadowEncoder* encoder)
+{
+	WINPR_ASSERT(encoder);
+
+	freerdp_av1_context_free(encoder->av1);
+	encoder->av1 = nullptr;
+
+	encoder->codecs &= (UINT32) ~(FREERDP_CODEC_AV1_I420 | FREERDP_CODEC_AV1_I444);
+	return 1;
+}
+#endif
 
 static int shadow_encoder_uninit_progressive(rdpShadowEncoder* encoder)
 {
@@ -369,7 +431,7 @@ static int shadow_encoder_uninit_progressive(rdpShadowEncoder* encoder)
 	if (encoder->progressive)
 	{
 		progressive_context_free(encoder->progressive);
-		encoder->progressive = NULL;
+		encoder->progressive = nullptr;
 	}
 
 	encoder->codecs &= (UINT32)~FREERDP_CODEC_PROGRESSIVE;
@@ -383,7 +445,7 @@ static int shadow_encoder_uninit(rdpShadowEncoder* encoder)
 	if (encoder->bs)
 	{
 		Stream_Free(encoder->bs, TRUE);
-		encoder->bs = NULL;
+		encoder->bs = nullptr;
 	}
 
 	shadow_encoder_uninit_rfx(encoder);
@@ -394,6 +456,9 @@ static int shadow_encoder_uninit(rdpShadowEncoder* encoder)
 
 	shadow_encoder_uninit_interleaved(encoder);
 	shadow_encoder_uninit_h264(encoder);
+#if defined(WITH_GFX_AV1)
+	shadow_encoder_uninit_av1(encoder);
+#endif
 
 	shadow_encoder_uninit_progressive(encoder);
 
@@ -488,17 +553,30 @@ int shadow_encoder_prepare(rdpShadowEncoder* encoder, UINT32 codecs)
 			return -1;
 	}
 
+#if defined(WITH_GFX_AV1)
+	const UINT32 cmask = codecs & (FREERDP_CODEC_AV1_I420 | FREERDP_CODEC_AV1_I444);
+	const UINT32 emask = encoder->codecs & (FREERDP_CODEC_AV1_I420 | FREERDP_CODEC_AV1_I444);
+	if (cmask != emask)
+	{
+		WLog_DBG(TAG, "initializing AV1 encoder");
+		status = shadow_encoder_init_av1(encoder, codecs);
+
+		if (status < 0)
+			return -1;
+	}
+#endif
+
 	return 1;
 }
 
 rdpShadowEncoder* shadow_encoder_new(rdpShadowClient* client)
 {
-	rdpShadowEncoder* encoder = NULL;
+	rdpShadowEncoder* encoder = nullptr;
 	rdpShadowServer* server = client->server;
 	encoder = (rdpShadowEncoder*)calloc(1, sizeof(rdpShadowEncoder));
 
 	if (!encoder)
-		return NULL;
+		return nullptr;
 
 	encoder->client = client;
 	encoder->server = server;
@@ -508,7 +586,7 @@ rdpShadowEncoder* shadow_encoder_new(rdpShadowClient* client)
 	if (shadow_encoder_init(encoder) < 0)
 	{
 		shadow_encoder_free(encoder);
-		return NULL;
+		return nullptr;
 	}
 
 	return encoder;

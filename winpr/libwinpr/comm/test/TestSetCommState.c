@@ -37,7 +37,7 @@ static void init_empty_dcb(DCB* pDcb)
 
 static BOOL test_fParity(HANDLE hComm)
 {
-	DCB dcb = { 0 };
+	DCB dcb = WINPR_C_ARRAY_INIT;
 	BOOL result = 0;
 
 	init_empty_dcb(&dcb);
@@ -122,7 +122,7 @@ static BOOL test_fParity(HANDLE hComm)
 
 static BOOL test_SerialSys(HANDLE hComm)
 {
-	DCB dcb = { 0 };
+	DCB dcb = WINPR_C_ARRAY_INIT;
 	BOOL result = 0;
 
 	init_empty_dcb(&dcb);
@@ -208,8 +208,8 @@ static BOOL test_SerCx2Sys(HANDLE hComm)
 
 static BOOL test_generic(HANDLE hComm)
 {
-	DCB dcb = { 0 };
-	DCB dcb2 = { 0 };
+	DCB dcb = WINPR_C_ARRAY_INIT;
+	DCB dcb2 = WINPR_C_ARRAY_INIT;
 	BOOL result = 0;
 
 	init_empty_dcb(&dcb);
@@ -259,9 +259,9 @@ static BOOL test_generic(HANDLE hComm)
 
 int TestSetCommState(int argc, char* argv[])
 {
-	struct stat statbuf = { 0 };
+	struct stat statbuf = WINPR_C_ARRAY_INIT;
 	BOOL result = 0;
-	HANDLE hComm = NULL;
+	HANDLE hComm = nullptr;
 
 	if (stat("/dev/ttyS0", &statbuf) < 0)
 	{
@@ -276,7 +276,7 @@ int TestSetCommState(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	hComm = CreateFile("COM1", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+	hComm = CreateFile("COM1", GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
 	if (hComm == INVALID_HANDLE_VALUE)
 	{
 		(void)fprintf(stderr, "CreateFileA failure: 0x%x\n", GetLastError());

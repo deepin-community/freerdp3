@@ -20,7 +20,10 @@
 #ifndef FREERDP_METRICS_H
 #define FREERDP_METRICS_H
 
+#include <winpr/wtypes.h>
+
 #include <freerdp/api.h>
+#include <freerdp/types.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -37,6 +40,7 @@ extern "C"
 	};
 	typedef struct rdp_metrics rdpMetrics;
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API double metrics_write_bytes(rdpMetrics* metrics, UINT32 UncompressedBytes,
 	                                       UINT32 CompressedBytes);
 

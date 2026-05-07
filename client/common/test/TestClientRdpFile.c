@@ -240,17 +240,17 @@ static char testRdpFileUTF8[] =
 static char* append(const char* fmt, ...)
 {
 	int rc = 0;
-	char* dst = NULL;
-	va_list ap = { 0 };
+	char* dst = nullptr;
+	va_list ap = WINPR_C_ARRAY_INIT;
 
 	va_start(ap, fmt);
-	rc = vsnprintf(NULL, 0, fmt, ap);
+	rc = vsnprintf(nullptr, 0, fmt, ap);
 	va_end(ap);
 	if (rc < 0)
-		return NULL;
+		return nullptr;
 	dst = malloc((size_t)rc + 1);
 	if (!dst)
-		return NULL;
+		return nullptr;
 
 	va_start(ap, fmt);
 	rc = vsnprintf(dst, (size_t)rc + 1, fmt, ap);
@@ -258,7 +258,7 @@ static char* append(const char* fmt, ...)
 	if (rc < 0)
 	{
 		free(dst);
-		return NULL;
+		return nullptr;
 	}
 	return dst;
 }
@@ -278,7 +278,7 @@ static FILE* test_fopen(const char* name, const char* mode)
 static void* read_rdp_data(const char* name, size_t* plen)
 {
 	BOOL success = FALSE;
-	char* json = NULL;
+	char* json = nullptr;
 	FILE* fp = test_fopen(name, "r");
 	if (!fp)
 		goto fail;
@@ -305,11 +305,11 @@ static void* read_rdp_data(const char* name, size_t* plen)
 fail:
 	if (!success)
 	{
-		char buffer[128] = { 0 };
+		char buffer[128] = WINPR_C_ARRAY_INIT;
 		WLog_ERR(__func__, "failed to read data from '%s': %s", name,
 		         winpr_strerror(errno, buffer, sizeof(buffer)));
 		free(json);
-		json = NULL;
+		json = nullptr;
 	}
 
 	if (fp)
@@ -340,7 +340,7 @@ static bool save_settings(const rdpSettings* settings, const char* name)
 static char* get_json_name(const char* base, bool unchecked)
 {
 	size_t namelen = 0;
-	char* name = NULL;
+	char* name = nullptr;
 	winpr_asprintf(&name, &namelen, "%s%s.json", base, unchecked ? ".unchecked" : "");
 	return name;
 }
@@ -391,7 +391,7 @@ fail:
 	if (!rc)
 	{
 		freerdp_settings_free(settings);
-		return NULL;
+		return nullptr;
 	}
 	return settings;
 }
@@ -401,7 +401,7 @@ static rdpSettings* load_from_file(const char* name, bool unchecked)
 	size_t datalen = 0;
 	void* data = read_rdp_data(name, &datalen);
 	if (!data)
-		return NULL;
+		return nullptr;
 	rdpSettings* settings = load_from(data, datalen, unchecked);
 	free(data);
 	return settings;
@@ -423,7 +423,7 @@ static bool test_data(const char* json, const void* data, size_t len, bool unche
 		goto fail;
 #endif
 	wLog* log = WLog_Get(__func__);
-	WLog_Print(log, WLOG_INFO, "Test cast '%s'", json);
+	WLog_Print(log, WLOG_INFO, "Test case '%s'", json);
 	if (freerdp_settings_print_diff(log, WLOG_ERROR, expect, settings))
 		goto fail;
 	rc = true;
@@ -438,7 +438,7 @@ static HANDLE FindFirstFileUTF8(LPCSTR pszSearchPath, WIN32_FIND_DATAW* FindData
 	HANDLE hdl = INVALID_HANDLE_VALUE;
 	if (!pszSearchPath)
 		return hdl;
-	WCHAR* wpath = ConvertUtf8ToWCharAlloc(pszSearchPath, NULL);
+	WCHAR* wpath = ConvertUtf8ToWCharAlloc(pszSearchPath, nullptr);
 	if (!wpath)
 		return hdl;
 
@@ -453,7 +453,7 @@ static bool test_rdp_file(const char* base, bool allowCreate, bool unchecked)
 	bool rc = false;
 
 	size_t rdplen = 0;
-	char* rdp = NULL;
+	char* rdp = nullptr;
 	winpr_asprintf(&rdp, &rdplen, "%s.rdp", base);
 	char* json = get_json_name(base, unchecked);
 	size_t datalen = 0;
@@ -500,7 +500,7 @@ static bool test_rdp_files(bool allowCreate)
 	if (!path)
 		goto fail;
 
-	WIN32_FIND_DATAW FindData = { 0 };
+	WIN32_FIND_DATAW FindData = WINPR_C_ARRAY_INIT;
 	hdl = FindFirstFileUTF8(path, &FindData);
 
 	if (hdl == INVALID_HANDLE_VALUE)
@@ -517,8 +517,8 @@ static bool test_rdp_files(bool allowCreate)
 	{
 		if ((FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
 		{
-			char cFileName[6 * MAX_PATH] = { 0 };
-			char rdp[6 * MAX_PATH] = { 0 };
+			char cFileName[6 * MAX_PATH] = WINPR_C_ARRAY_INIT;
+			char rdp[6 * MAX_PATH] = WINPR_C_ARRAY_INIT;
 			ConvertWCharToUtf8(FindData.cFileName, cFileName, sizeof(cFileName));
 			const size_t len = strnlen(cFileName, sizeof(cFileName));
 			if (len < 4)
@@ -546,19 +546,20 @@ int TestClientRdpFile(int argc, char* argv[])
 	int rc = -1;
 	int iValue = 0;
 	UINT32 uValue = 0;
-	const UINT32* puValue = NULL;
-	const char* sValue = NULL;
-	char* utfname = NULL;
-	char* uniname = NULL;
-	char* base = NULL;
-	char* tmp = NULL;
+	const UINT32* puValue = nullptr;
+	const char* sValue = nullptr;
+	char* utfname = nullptr;
+	char* uniname = nullptr;
+	char* base = nullptr;
+	char* tmp = nullptr;
 	UINT64 id = 0;
-	rdpFile* file = NULL;
-	rdpSettings* settings = NULL;
+	rdpFile* file = nullptr;
+	rdpSettings* settings = nullptr;
 
 	WINPR_UNUSED(argc);
 	WINPR_UNUSED(argv);
-	winpr_RAND(&id, sizeof(id));
+	if (winpr_RAND(&id, sizeof(id)) < 0)
+		return -1;
 
 	/* UTF8 */
 #if defined(CHANNEL_URBDRC_CLIENT) && defined(CHANNEL_RDPECAM_CLIENT)
@@ -657,7 +658,7 @@ int TestClientRdpFile(int argc, char* argv[])
 	/* Check [MS-RDPECAM] related options */
 #if defined(CHANNEL_RDPECAM_CLIENT)
 	{
-		ADDIN_ARGV* args = NULL;
+		ADDIN_ARGV* args = nullptr;
 		iValue =
 		    freerdp_client_rdp_file_get_integer_option(file, "encode redirected video capture");
 		if (iValue != 1)
@@ -774,18 +775,22 @@ int TestClientRdpFile(int argc, char* argv[])
 	if (iValue != 456)
 		return -1;
 
-	const char microsoft[] = "microsoft";
-	sValue = freerdp_client_rdp_file_get_string_option(file, "vendor string");
-	if (strncmp(sValue, microsoft, sizeof(microsoft)) != 0)
+	{
+		const char microsoft[] = "microsoft";
+		sValue = freerdp_client_rdp_file_get_string_option(file, "vendor string");
+		if (strncmp(sValue, microsoft, sizeof(microsoft)) != 0)
+			goto fail;
+	}
+	{
+		const char apple[] = "apple";
+		if (freerdp_client_rdp_file_set_string_option(file, "vendor string", "apple") == 0)
+			goto fail;
+		sValue = freerdp_client_rdp_file_get_string_option(file, "vendor string");
+		if (strncmp(sValue, apple, sizeof(apple)) != 0)
+			goto fail;
+	}
+	if (freerdp_client_rdp_file_set_string_option(file, "fruits", "banana,oranges") == 0)
 		goto fail;
-
-	const char apple[] = "apple";
-	freerdp_client_rdp_file_set_string_option(file, "vendor string", "apple");
-	sValue = freerdp_client_rdp_file_get_string_option(file, "vendor string");
-	if (strncmp(sValue, apple, sizeof(apple)) != 0)
-		goto fail;
-
-	freerdp_client_rdp_file_set_string_option(file, "fruits", "banana,oranges");
 
 	if (freerdp_client_rdp_file_set_integer_option(file, "numbers", 123456789) == -1)
 	{
@@ -802,7 +807,7 @@ int TestClientRdpFile(int argc, char* argv[])
 	base = append("%s/rdp-file-test-%" PRIx64, tmp, id);
 	if (!base)
 		goto fail;
-	if (!CreateDirectoryA(base, NULL))
+	if (!CreateDirectoryA(base, nullptr))
 		goto fail;
 	utfname = append("%s/utfname", base);
 	uniname = append("%s/uniname", base);

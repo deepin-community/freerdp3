@@ -100,10 +100,7 @@ BOOL er_read_universal_tag(wStream* s, BYTE tag, BOOL pc)
 
 	Stream_Read_UINT8(s, byte);
 
-	if (byte != (ER_CLASS_UNIV | ER_PC(pc) | (ER_TAG_MASK & tag)))
-		return FALSE;
-
-	return TRUE;
+	return (byte == (ER_CLASS_UNIV | ER_PC(pc) | (ER_TAG_MASK & tag)));
 }
 
 /**
@@ -337,7 +334,7 @@ BOOL er_read_BOOL(wStream* s, BOOL* value)
 	if (length != 1)
 		return FALSE;
 	Stream_Read_UINT8(s, v);
-	*value = (v ? TRUE : FALSE);
+	*value = v != 0;
 	return TRUE;
 }
 
@@ -361,7 +358,7 @@ BOOL er_read_integer(wStream* s, UINT32* value)
 	er_read_universal_tag(s, ER_TAG_INTEGER, FALSE);
 	er_read_length(s, &length);
 
-	if (value == NULL)
+	if (value == nullptr)
 	{
 		Stream_Seek(s, WINPR_ASSERTING_INT_CAST(size_t, length));
 		return TRUE;

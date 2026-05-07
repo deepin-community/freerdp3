@@ -20,7 +20,7 @@ static const TCHAR testPathPrefixDeviceNamespace[] = _T("\\\\?\\GLOBALROOT");
 int TestPathCchStripPrefix(int argc, char* argv[])
 {
 	HRESULT status = 0;
-	TCHAR Path[PATHCCH_MAX_CCH] = { 0 };
+	TCHAR Path[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
 
 	WINPR_UNUSED(argc);
 	WINPR_UNUSED(argv);
@@ -68,8 +68,8 @@ int TestPathCchStripPrefix(int argc, char* argv[])
 		return -1;
 	}
 
-	/* NULL Path */
-	status = PathCchStripPrefix(NULL, PATHCCH_MAX_CCH);
+	/* nullptr Path */
+	status = PathCchStripPrefix(nullptr, PATHCCH_MAX_CCH);
 	if (status != E_INVALIDARG)
 	{
 		_tprintf(

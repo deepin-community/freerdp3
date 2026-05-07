@@ -23,6 +23,9 @@
 
 #include <winpr/collections.h>
 
+#include "../log.h"
+#define TAG WINPR_TAG("pubsub")
+
 /**
  * Events (C# Programming Guide)
  * http://msdn.microsoft.com/en-us/library/awbftdfh.aspx
@@ -71,7 +74,7 @@ void PubSub_Unlock(wPubSub* pubSub)
 
 wEventType* PubSub_FindEventType(wPubSub* pubSub, const char* EventName)
 {
-	wEventType* event = NULL;
+	wEventType* event = nullptr;
 
 	WINPR_ASSERT(pubSub);
 	WINPR_ASSERT(EventName);
@@ -94,13 +97,19 @@ void PubSub_AddEventTypes(wPubSub* pubSub, wEventType* events, size_t count)
 	if (pubSub->synchronized)
 		PubSub_Lock(pubSub);
 
-	while (pubSub->count + count >= pubSub->size)
-	{
-		size_t new_size = 0;
-		wEventType* new_event = NULL;
+	const size_t required = pubSub->count + count;
+	WINPR_ASSERT((required >= pubSub->count) && (required >= count));
 
-		new_size = pubSub->size * 2;
-		new_event = (wEventType*)realloc(pubSub->events, new_size * sizeof(wEventType));
+	if (required >= pubSub->size)
+	{
+		size_t new_size = pubSub->size;
+		do
+		{
+			WINPR_ASSERT(new_size <= SIZE_MAX - 128ull);
+			new_size += 128ull;
+		} while (new_size <= required);
+
+		wEventType* new_event = (wEventType*)realloc(pubSub->events, new_size * sizeof(wEventType));
 		if (!new_event)
 			goto fail;
 		pubSub->size = new_size;
@@ -117,11 +126,11 @@ fail:
 
 int PubSub_Subscribe(wPubSub* pubSub, const char* EventName, ...)
 {
-	wEventType* event = NULL;
+	wEventType* event = nullptr;
 	int status = -1;
 	WINPR_ASSERT(pubSub);
 
-	va_list ap = { 0 };
+	va_list ap = WINPR_C_ARRAY_INIT;
 	va_start(ap, EventName);
 	pEventHandler EventHandler = va_arg(ap, pEventHandler);
 
@@ -149,12 +158,12 @@ int PubSub_Subscribe(wPubSub* pubSub, const char* EventName, ...)
 
 int PubSub_Unsubscribe(wPubSub* pubSub, const char* EventName, ...)
 {
-	wEventType* event = NULL;
+	wEventType* event = nullptr;
 	int status = -1;
 	WINPR_ASSERT(pubSub);
 	WINPR_ASSERT(EventName);
 
-	va_list ap = { 0 };
+	va_list ap = WINPR_C_ARRAY_INIT;
 	va_start(ap, EventName);
 	pEventHandler EventHandler = va_arg(ap, pEventHandler);
 
@@ -171,7 +180,7 @@ int PubSub_Unsubscribe(wPubSub* pubSub, const char* EventName, ...)
 		{
 			if (event->EventHandlers[index] == EventHandler)
 			{
-				event->EventHandlers[index] = NULL;
+				event->EventHandlers[index] = nullptr;
 				event->EventHandlerCount--;
 				MoveMemory((void*)&event->EventHandlers[index],
 				           (void*)&event->EventHandlers[index + 1],
@@ -190,25 +199,23 @@ int PubSub_Unsubscribe(wPubSub* pubSub, const char* EventName, ...)
 
 int PubSub_OnEvent(wPubSub* pubSub, const char* EventName, void* context, const wEventArgs* e)
 {
-	wEventType* event = NULL;
-	int status = -1;
+	WINPR_ASSERT(pubSub);
+	WINPR_ASSERT(EventName);
+	WINPR_ASSERT(e);
 
 	if (!pubSub)
+	{
+		WLog_ERR(TAG, "pubSub(%s)=nullptr!", EventName);
 		return -1;
-	WINPR_ASSERT(e);
+	}
 
 	if (pubSub->synchronized)
 		PubSub_Lock(pubSub);
 
-	event = PubSub_FindEventType(pubSub, EventName);
-
-	if (pubSub->synchronized)
-		PubSub_Unlock(pubSub);
-
+	int status = 0;
+	wEventType* event = PubSub_FindEventType(pubSub, EventName);
 	if (event)
 	{
-		status = 0;
-
 		for (size_t index = 0; index < event->EventHandlerCount; index++)
 		{
 			if (event->EventHandlers[index])
@@ -218,6 +225,8 @@ int PubSub_OnEvent(wPubSub* pubSub, const char* EventName, void* context, const 
 			}
 		}
 	}
+	if (pubSub->synchronized)
+		PubSub_Unlock(pubSub);
 
 	return status;
 }
@@ -231,7 +240,7 @@ wPubSub* PubSub_New(BOOL synchronized)
 	wPubSub* pubSub = (wPubSub*)calloc(1, sizeof(wPubSub));
 
 	if (!pubSub)
-		return NULL;
+		return nullptr;
 
 	pubSub->synchronized = synchronized;
 
@@ -251,7 +260,7 @@ fail:
 	WINPR_PRAGMA_DIAG_IGNORED_MISMATCHED_DEALLOC
 	PubSub_Free(pubSub);
 	WINPR_PRAGMA_DIAG_POP
-	return NULL;
+	return nullptr;
 }
 
 void PubSub_Free(wPubSub* pubSub)

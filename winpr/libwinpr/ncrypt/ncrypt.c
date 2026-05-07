@@ -36,15 +36,15 @@ SECURITY_STATUS checkNCryptHandle(NCRYPT_HANDLE handle, NCryptHandleType matchTy
 {
 	if (!handle)
 	{
-		WLog_VRB(TAG, "invalid handle 'NULL'");
+		WLog_VRB(TAG, "invalid handle 'nullptr'");
 		return ERROR_INVALID_PARAMETER;
 	}
 
 	const NCryptBaseHandle* base = (NCryptBaseHandle*)handle;
 	if (memcmp(base->magic, NCRYPT_MAGIC, ARRAYSIZE(NCRYPT_MAGIC)) != 0)
 	{
-		char magic1[ARRAYSIZE(NCRYPT_MAGIC) + 1] = { 0 };
-		char magic2[ARRAYSIZE(NCRYPT_MAGIC) + 1] = { 0 };
+		char magic1[ARRAYSIZE(NCRYPT_MAGIC) + 1] = WINPR_C_ARRAY_INIT;
+		char magic2[ARRAYSIZE(NCRYPT_MAGIC) + 1] = WINPR_C_ARRAY_INIT;
 
 		memcpy(magic1, base->magic, ARRAYSIZE(NCRYPT_MAGIC));
 		memcpy(magic2, NCRYPT_MAGIC, ARRAYSIZE(NCRYPT_MAGIC));
@@ -81,7 +81,7 @@ void* ncrypt_new_handle(NCryptHandleType kind, size_t len, NCryptGetPropertyFn g
 {
 	NCryptBaseHandle* ret = calloc(1, len);
 	if (!ret)
-		return NULL;
+		return nullptr;
 
 	memcpy(ret->magic, NCRYPT_MAGIC, sizeof(ret->magic));
 	ret->type = kind;
@@ -97,7 +97,7 @@ SECURITY_STATUS winpr_NCryptDefault_dtor(NCRYPT_HANDLE handle)
 	{
 		memset(h->magic, 0, sizeof(h->magic));
 		h->type = WINPR_NCRYPT_INVALID;
-		h->releaseFn = NULL;
+		h->releaseFn = nullptr;
 		free(h);
 	}
 	return ERROR_SUCCESS;
@@ -107,20 +107,20 @@ SECURITY_STATUS NCryptEnumStorageProviders(DWORD* wProviderCount,
                                            NCryptProviderName** ppProviderList,
                                            WINPR_ATTR_UNUSED DWORD dwFlags)
 {
-	NCryptProviderName* ret = NULL;
+	NCryptProviderName* ret = nullptr;
 	size_t stringAllocSize = 0;
 #ifdef WITH_PKCS11
-	LPWSTR strPtr = NULL;
-	static const WCHAR emptyComment[] = { 0 };
+	LPWSTR strPtr = nullptr;
+	static const WCHAR emptyComment[1] = WINPR_C_ARRAY_INIT;
 	size_t copyAmount = 0;
 #endif
 
 	*wProviderCount = 0;
-	*ppProviderList = NULL;
+	*ppProviderList = nullptr;
 
 #ifdef WITH_PKCS11
 	*wProviderCount += 1;
-	stringAllocSize += (_wcslen(MS_SCARD_PROV) + 1) * 2;
+	stringAllocSize += (_wcslen(MS_SMART_CARD_KEY_STORAGE_PROVIDER) + 1) * sizeof(WCHAR);
 	stringAllocSize += sizeof(emptyComment);
 #endif
 
@@ -135,8 +135,8 @@ SECURITY_STATUS NCryptEnumStorageProviders(DWORD* wProviderCount,
 	strPtr = (LPWSTR)(ret + *wProviderCount);
 
 	ret->pszName = strPtr;
-	copyAmount = (_wcslen(MS_SCARD_PROV) + 1) * 2;
-	memcpy(strPtr, MS_SCARD_PROV, copyAmount);
+	copyAmount = (_wcslen(MS_SMART_CARD_KEY_STORAGE_PROVIDER) + 1) * sizeof(WCHAR);
+	memcpy(strPtr, MS_SMART_CARD_KEY_STORAGE_PROVIDER, copyAmount);
 	strPtr += copyAmount / 2;
 
 	ret->pszComment = strPtr;
@@ -152,7 +152,7 @@ SECURITY_STATUS NCryptEnumStorageProviders(DWORD* wProviderCount,
 SECURITY_STATUS NCryptOpenStorageProvider(NCRYPT_PROV_HANDLE* phProvider, LPCWSTR pszProviderName,
                                           DWORD dwFlags)
 {
-	return winpr_NCryptOpenStorageProviderEx(phProvider, pszProviderName, dwFlags, NULL);
+	return winpr_NCryptOpenStorageProviderEx(phProvider, pszProviderName, dwFlags, nullptr);
 }
 
 SECURITY_STATUS winpr_NCryptOpenStorageProviderEx(NCRYPT_PROV_HANDLE* phProvider,
@@ -164,9 +164,9 @@ SECURITY_STATUS winpr_NCryptOpenStorageProviderEx(NCRYPT_PROV_HANDLE* phProvider
 	                        (_wcscmp(pszProviderName, MS_SCARD_PROV) == 0)))
 		return NCryptOpenP11StorageProviderEx(phProvider, pszProviderName, dwFlags, modulePaths);
 
-	char buffer[128] = { 0 };
-	(void)ConvertWCharToUtf8(pszProviderName, buffer, sizeof(buffer));
+	char* buffer = ConvertWCharToUtf8Alloc(pszProviderName, nullptr);
 	WLog_WARN(TAG, "provider '%s' not supported", buffer);
+	free(buffer);
 	return ERROR_NOT_SUPPORTED;
 #else
 	WLog_WARN(TAG, "rebuild with -DWITH_PKCS11=ON to enable smartcard logon support");
@@ -228,7 +228,7 @@ SECURITY_STATUS NCryptGetProperty(NCRYPT_HANDLE hObject, LPCWSTR pszProperty, PB
                                   DWORD cbOutput, DWORD* pcbResult, DWORD dwFlags)
 {
 	NCryptKeyGetPropertyEnum property = NCRYPT_PROPERTY_UNKNOWN;
-	NCryptBaseHandle* base = NULL;
+	NCryptBaseHandle* base = nullptr;
 
 	if (!hObject)
 		return ERROR_INVALID_PARAMETER;
@@ -246,7 +246,7 @@ SECURITY_STATUS NCryptGetProperty(NCRYPT_HANDLE hObject, LPCWSTR pszProperty, PB
 
 SECURITY_STATUS NCryptFreeObject(NCRYPT_HANDLE hObject)
 {
-	NCryptBaseHandle* base = NULL;
+	NCryptBaseHandle* base = nullptr;
 	SECURITY_STATUS ret = checkNCryptHandle(hObject, WINPR_NCRYPT_INVALID);
 	if (ret != ERROR_SUCCESS)
 		return ret;
@@ -358,6 +358,6 @@ const char* winpr_NCryptGetModulePath(NCRYPT_PROV_HANDLE phProvider)
 #if defined(WITH_PKCS11)
 	return NCryptGetModulePath(phProvider);
 #else
-	return NULL;
+	return nullptr;
 #endif
 }

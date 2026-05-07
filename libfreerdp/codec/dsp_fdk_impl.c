@@ -29,6 +29,10 @@
 
 #include "dsp_fdk_impl.h"
 
+#if (defined(__STDC_VERSION__) && (__STDC_VERSION__ < 202003L))
+#define nullptr NULL
+#endif
+
 #define WLOG_TRACE 0
 #define WLOG_DEBUG 1
 #define WLOG_INFO 2
@@ -219,7 +223,7 @@ static void log_enc_info(const AACENC_InfoStruct* info, fdk_log_fkt_t log)
 
 	for (size_t x = 0; x < 64; x++)
 	{
-		rc = snprintf(&confBuf[offset], remain - offset, "0x%02x%s", (int)info->confBuf[x],
+		rc = snprintf(&confBuf[offset], remain - offset, "0x%02x%s", (unsigned)info->confBuf[x],
 		              (x > 0) ? ", " : "");
 		if (rc <= 0)
 			return;
@@ -319,7 +323,7 @@ int fdk_aac_dsp_impl_init(void** handle, int encoder, fdk_log_fkt_t log)
 	else
 	{
 		HANDLE_AACDECODER* h = (HANDLE_AACDECODER*)handle;
-		assert(NULL == *h);
+		assert(nullptr == *h);
 
 		*h = aacDecoder_Open(TT_MP4_RAW, 1);
 		if (!*h)
@@ -350,7 +354,7 @@ void fdk_aac_dsp_impl_uninit(void** handle, int encoder, fdk_log_fkt_t log)
 			aacDecoder_Close(*h);
 	}
 
-	*handle = NULL;
+	*handle = nullptr;
 }
 
 ssize_t fdk_aac_dsp_impl_decode_read(void* handle, void* dst, size_t dstSize, fdk_log_fkt_t log)
@@ -427,7 +431,7 @@ int fdk_aac_dsp_impl_config(void* handle, size_t* pbuffersize, int encoder, unsi
 		                                   { AACENC_BITRATE, bytes_per_second * 8 },
 		                                   { AACENC_TRANSMUX, 0 },
 		                                   { AACENC_AFTERBURNER, 1 } };
-	HANDLE_AACENCODER self = NULL;
+	HANDLE_AACENCODER self = nullptr;
 	if (encoder)
 		self = (HANDLE_AACENCODER)handle;
 	else
@@ -453,7 +457,7 @@ int fdk_aac_dsp_impl_config(void* handle, size_t* pbuffersize, int encoder, unsi
 		}
 	}
 
-	AACENC_ERROR err = aacEncEncode(self, NULL, NULL, NULL, NULL);
+	AACENC_ERROR err = aacEncEncode(self, nullptr, nullptr, nullptr, nullptr);
 	if (err != AACENC_OK)
 	{
 		log(WLOG_ERROR, "aacEncEncode failed with %s", enc_err_str(err));
@@ -503,8 +507,8 @@ ssize_t fdk_aac_dsp_impl_decode_fill(void* handle, const void* data, size_t size
 {
 	assert(handle);
 	assert(log);
-
-	UINT leftBytes = size;
+	assert(size <= UINT_MAX);
+	UINT leftBytes = (UINT)size;
 	HANDLE_AACDECODER self = (HANDLE_AACDECODER)handle;
 
 	union
@@ -514,7 +518,7 @@ ssize_t fdk_aac_dsp_impl_decode_fill(void* handle, const void* data, size_t size
 	} cnv;
 	cnv.cpv = data;
 	UCHAR* pBuffer[] = { cnv.puc };
-	const UINT bufferSize[] = { size };
+	const UINT bufferSize[] = { leftBytes };
 
 	assert(handle);
 	assert(data || (size == 0));
@@ -554,8 +558,11 @@ ssize_t fdk_aac_dsp_impl_stream_info(void* handle, int encoder, fdk_log_fkt_t lo
 			log(WLOG_ERROR, "aacDecoder_GetStreamInfo failed");
 			return -1;
 		}
-
-		const size_t rsize = sizeof(INT_PCM) * info->numChannels * info->frameSize;
+		if (info->numChannels <= 0)
+			return -1;
+		if (info->frameSize <= 0)
+			return -1;
+		const size_t rsize = sizeof(INT_PCM) * (size_t)info->numChannels * (size_t)info->frameSize;
 		return (ssize_t)rsize;
 	}
 }

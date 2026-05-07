@@ -36,8 +36,8 @@
 static BOOL test_signed_integer_read_write_equal(INT32 value)
 {
 	INT32 rvalue = 0;
-	BYTE buffer[32] = { 0 };
-	wStream sbuffer = { 0 };
+	BYTE buffer[32] = WINPR_C_ARRAY_INIT;
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
 	wStream* s = Stream_StaticInit(&sbuffer, buffer, sizeof(buffer));
 	WINPR_ASSERT(s);
 
@@ -46,12 +46,8 @@ static BOOL test_signed_integer_read_write_equal(INT32 value)
 		(void)fprintf(stderr, "[%s(%" PRId32 ")] failed to write to stream\n", __func__, value);
 		return FALSE;
 	}
-	if (!Stream_SetPosition(s, 0))
-	{
-		(void)fprintf(stderr, "[%s(%" PRId32 ")] failed to reset stream position\n", __func__,
-		              value);
-		return FALSE;
-	}
+	Stream_ResetPosition(s);
+
 	if (!freerdp_read_four_byte_signed_integer(s, &rvalue))
 	{
 		(void)fprintf(stderr, "[%s(%" PRId32 ")] failed to read from stream\n", __func__, value);
@@ -68,8 +64,8 @@ static BOOL test_signed_integer_read_write_equal(INT32 value)
 
 static BOOL test_signed_integer_write_oor(INT32 value)
 {
-	BYTE buffer[32] = { 0 };
-	wStream sbuffer = { 0 };
+	BYTE buffer[32] = WINPR_C_ARRAY_INIT;
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
 	wStream* s = Stream_StaticInit(&sbuffer, buffer, sizeof(buffer));
 	WINPR_ASSERT(s);
 
@@ -103,7 +99,8 @@ static BOOL test_signed_integers(void)
 	for (size_t x = 0; x < 100000; x++)
 	{
 		INT32 val = 0;
-		winpr_RAND(&val, sizeof(val));
+		if (winpr_RAND(&val, sizeof(val)) < 0)
+			return FALSE;
 		val = MAX(val, 0);
 		val = MIN(val, FREERDP_FOUR_BYTE_SIGNED_INT_MAX);
 
@@ -120,8 +117,8 @@ static BOOL test_float_read_write_equal(double value)
 {
 	BYTE exp = 0;
 	double rvalue = FP_NAN;
-	BYTE buffer[32] = { 0 };
-	wStream sbuffer = { 0 };
+	BYTE buffer[32] = WINPR_C_ARRAY_INIT;
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
 	wStream* s = Stream_StaticInit(&sbuffer, buffer, sizeof(buffer));
 	WINPR_ASSERT(s);
 
@@ -130,11 +127,8 @@ static BOOL test_float_read_write_equal(double value)
 		(void)fprintf(stderr, "[%s(%lf)] failed to write to stream\n", __func__, value);
 		return FALSE;
 	}
-	if (!Stream_SetPosition(s, 0))
-	{
-		(void)fprintf(stderr, "[%s(%lf)] failed to reset stream position\n", __func__, value);
-		return FALSE;
-	}
+	Stream_ResetPosition(s);
+
 	if (!freerdp_read_four_byte_float_exp(s, &rvalue, &exp))
 	{
 		(void)fprintf(stderr, "[%s(%lf)] failed to read from stream\n", __func__, value);
@@ -153,8 +147,8 @@ static BOOL test_float_read_write_equal(double value)
 
 static BOOL test_floag_write_oor(double value)
 {
-	BYTE buffer[32] = { 0 };
-	wStream sbuffer = { 0 };
+	BYTE buffer[32] = WINPR_C_ARRAY_INIT;
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
 	wStream* s = Stream_StaticInit(&sbuffer, buffer, sizeof(buffer));
 	WINPR_ASSERT(s);
 
@@ -172,7 +166,11 @@ static double get(void)
 	double val = NAN;
 	do
 	{
-		winpr_RAND(&val, sizeof(val));
+		if (winpr_RAND(&val, sizeof(val)) < 0)
+		{
+			// NOLINTNEXTLINE(concurrency-mt-unsafe)
+			exit(-1);
+		}
 	} while ((val < 0.0) || (val > FREERDP_FOUR_BYTE_FLOAT_MAX) || isnan(val) || isinf(val));
 	return val;
 }

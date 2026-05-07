@@ -28,7 +28,7 @@
 #include <emmintrin.h>
 #include <pmmintrin.h>
 
-static primitives_t* generic = NULL;
+static primitives_t* generic = nullptr;
 
 /* ------------------------------------------------------------------------- */
 SSE3_SCD_ROUTINE(sse2_lShiftC_16s, INT16, generic->lShiftC_16s, _mm_slli_epi16, int16_t,
@@ -54,7 +54,7 @@ static pstatus_t sse2_lShiftC_16s_inplace(INT16* WINPR_RESTRICT pSrcDst, UINT32 
 	if (len < 16) /* pointless if too small */
 		return generic->lShiftC_16s_inplace(pSrcDst, val, ulen);
 
-	UINT32 offBeatMask = (1 << (shifts - 1)) - 1;
+	UINT32 offBeatMask = (1u << (shifts - 1)) - 1;
 	if ((ULONG_PTR)pSrcDst & offBeatMask)
 	{
 		/* Incrementing the pointer skips over 16-byte boundary. */

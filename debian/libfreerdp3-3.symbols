@@ -1,5 +1,5 @@
 libfreerdp3.so.3 libfreerdp3-3 #MINVER#
-* Build-Depends-Package: freerdp3-dev
+* Build-Depends-Package: freerdp-dev
  Bitmap_Alloc@Base 3.0.0
  Bitmap_SetDimensions@Base 3.0.0
  Bitmap_SetRectangle@Base 3.0.0
@@ -380,6 +380,11 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_extract_key_value@Base 3.9.0
  freerdp_focus_required@Base 3.0.0
  freerdp_free@Base 3.0.0
+ freerdp_getApplicationDetailsProduct@Base 3.23.0
+ freerdp_getApplicationDetailsString@Base 3.23.0
+ freerdp_getApplicationDetailsStringW@Base 3.23.0
+ freerdp_getApplicationDetailsVendor@Base 3.23.0
+ freerdp_getApplicationDetailsVersion@Base 3.23.0
  freerdp_get_build_config@Base 3.0.0
  freerdp_get_build_revision@Base 3.0.0
  freerdp_get_common_access_token@Base 3.16.0
@@ -396,6 +401,7 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_get_error_info_name@Base 3.0.0
  freerdp_get_error_info_string@Base 3.0.0
  freerdp_get_event_handles@Base 3.0.0
+ freerdp_get_gateway_usage_method@Base 3.24.0
  freerdp_get_io_callback_context@Base 3.0.0
  freerdp_get_io_callbacks@Base 3.0.0
  freerdp_get_keyboard_default_layout_for_locale@Base 3.6.2
@@ -438,6 +444,8 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_image_fill_ex@Base 3.13.0
  freerdp_image_scale@Base 3.0.0
  freerdp_input_keyboard_flags_string@Base 3.19.0
+ freerdp_input_keypress_flags_string@Base 3.24.0
+ freerdp_input_mouse_flags_string@Base 3.24.0
  freerdp_input_send_extended_mouse_event@Base 3.0.0
  freerdp_input_send_focus_in_event@Base 3.0.0
  freerdp_input_send_keyboard_event@Base 3.0.0
@@ -519,6 +527,7 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_send_error_info@Base 3.0.0
  freerdp_server_license_issuers_copy@Base 3.0.0
  freerdp_server_license_issuers_free@Base 3.0.0
+ freerdp_setApplicationDetails@Base 3.23.0
  freerdp_set_common_access_token@Base 3.16.0
  freerdp_set_error_info@Base 3.0.0
  freerdp_set_focus@Base 3.0.0
@@ -597,6 +606,13 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  freerdp_utils_aad_get_wellknown_object@Base 3.10.2
  freerdp_utils_aad_get_wellknown_string@Base 3.10.2
  freerdp_utils_aad_wellknwon_value_name@Base 3.10.2
+ freerdp_video_available@Base 3.24.0
+ freerdp_video_context_free@Base 3.24.0
+ freerdp_video_context_new@Base 3.24.0
+ freerdp_video_context_reconfigure@Base 3.24.0
+ freerdp_video_conversion_supported@Base 3.24.0
+ freerdp_video_format_string@Base 3.25.0
+ freerdp_video_sample_convert@Base 3.24.0
  freerdp_write_four_byte_float@Base 3.4.0
  freerdp_write_four_byte_signed_integer@Base 3.4.0
  gdi_BitBlt@Base 3.0.0
@@ -845,6 +861,7 @@ libfreerdp3.so.3 libfreerdp3-3 #MINVER#
  smartcard_call_context_add@Base 3.0.0
  smartcard_call_context_free@Base 3.0.0
  smartcard_call_context_new@Base 3.0.0
+ smartcard_call_context_new_with_context@Base 3.24.0
  smartcard_call_context_signal_stop@Base 3.0.0
  smartcard_call_get_context@Base 3.0.0
  smartcard_call_is_configured@Base 3.0.0

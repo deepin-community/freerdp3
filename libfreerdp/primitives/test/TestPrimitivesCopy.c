@@ -26,8 +26,9 @@
 static BOOL test_copy8u_func(void)
 {
 	primitives_t* prims = primitives_get();
-	BYTE ALIGN(data[COPY_TESTSIZE + 15]) = { 0 };
-	winpr_RAND(data, sizeof(data));
+	BYTE data[COPY_TESTSIZE + 15] = WINPR_C_ARRAY_INIT;
+	if (winpr_RAND(data, sizeof(data)) < 0)
+		return FALSE;
 
 	for (int soff = 0; soff < 16; ++soff)
 	{
@@ -35,7 +36,7 @@ static BOOL test_copy8u_func(void)
 		{
 			for (int length = 1; length <= COPY_TESTSIZE - doff; ++length)
 			{
-				BYTE ALIGN(dest[COPY_TESTSIZE + 15]) = { 0 };
+				BYTE dest[COPY_TESTSIZE + 15] = WINPR_C_ARRAY_INIT;
 
 				if (prims->copy_8u(data + soff, dest + doff, length) != PRIMITIVES_SUCCESS)
 					return FALSE;
@@ -60,8 +61,8 @@ static BOOL test_copy8u_func(void)
 /* ------------------------------------------------------------------------- */
 static BOOL test_copy8u_speed(void)
 {
-	BYTE ALIGN(src[MAX_TEST_SIZE + 4]);
-	BYTE ALIGN(dst[MAX_TEST_SIZE + 4]);
+	BYTE src[MAX_TEST_SIZE + 4] = WINPR_C_ARRAY_INIT;
+	BYTE dst[MAX_TEST_SIZE + 4] = WINPR_C_ARRAY_INIT;
 
 	if (!speed_test("copy_8u", "aligned", g_Iterations, (speed_test_fkt)generic->copy_8u,
 	                (speed_test_fkt)optimized->copy_8u, src, dst, MAX_TEST_SIZE))
@@ -79,9 +80,13 @@ static BYTE* rand_alloc(size_t w, size_t h, size_t bpp, size_t pad, BYTE** copy)
 	const size_t s = w * bpp + pad;
 	BYTE* ptr = calloc(s, h);
 	if (!ptr)
-		return NULL;
+		return nullptr;
 
-	winpr_RAND(ptr, s * h);
+	if (winpr_RAND(ptr, s * h) < 0)
+	{
+		free(ptr);
+		return nullptr;
+	}
 
 	if (copy)
 	{
@@ -89,7 +94,7 @@ static BYTE* rand_alloc(size_t w, size_t h, size_t bpp, size_t pad, BYTE** copy)
 		if (!ptr2)
 		{
 			free(ptr);
-			return NULL;
+			return nullptr;
 		}
 		memcpy(ptr2, ptr, s * h);
 		*copy = ptr2;
@@ -131,22 +136,22 @@ static BOOL test_copy_no_overlap_off(BOOL verbose, UINT32 srcFormat, UINT32 dstF
 
 	const UINT32 sstride = (w + sxoff) * sbpp + pad;
 	const UINT32 dstride = (w + dxoff) * dbpp + pad;
-	BYTE* dst2 = NULL;
-	BYTE* src2 = NULL;
+	BYTE* dst2 = nullptr;
+	BYTE* src2 = nullptr;
 	BYTE* dst1 = rand_alloc(w + dxoff, h + dyoff, dbpp, pad, &dst2);
 	BYTE* src1 = rand_alloc(w + sxoff, h + syoff, sbpp, pad, &src2);
 	if (!dst1 || !dst2 || !src1 || !src2)
 		goto fail;
 
 	if (gen->copy_no_overlap(dst1, dstFormat, dstride, dxoff, dyoff, w, h, src1, srcFormat, sstride,
-	                         sxoff, syoff, NULL, flags) != PRIMITIVES_SUCCESS)
+	                         sxoff, syoff, nullptr, flags) != PRIMITIVES_SUCCESS)
 		goto fail;
 
 	if (memcmp(src1, src2, 1ULL * sstride * h) != 0)
 		goto fail;
 
 	if (prims->copy_no_overlap(dst2, dstFormat, dstride, dxoff, dyoff, w, h, src1, srcFormat,
-	                           sstride, sxoff, syoff, NULL, flags) != PRIMITIVES_SUCCESS)
+	                           sstride, sxoff, syoff, nullptr, flags) != PRIMITIVES_SUCCESS)
 		goto fail;
 
 	if (memcmp(src1, src2, 1ULL * sstride * h) != 0)
@@ -167,8 +172,8 @@ static BOOL test_copy_no_overlap_off(BOOL verbose, UINT32 srcFormat, UINT32 dstF
 				const UINT32 c2 = FreeRDPReadColor(&d2[(x + dxoff) * dbpp], dstFormat);
 				BYTE a1 = 0;
 				BYTE a2 = 0;
-				FreeRDPSplitColor(c1, dstFormat, NULL, NULL, NULL, &a1, NULL);
-				FreeRDPSplitColor(c2, dstFormat, NULL, NULL, NULL, &a2, NULL);
+				FreeRDPSplitColor(c1, dstFormat, nullptr, nullptr, nullptr, &a1, nullptr);
+				FreeRDPSplitColor(c2, dstFormat, nullptr, nullptr, nullptr, &a2, nullptr);
 				if (a1 != a2)
 					goto fail;
 			}

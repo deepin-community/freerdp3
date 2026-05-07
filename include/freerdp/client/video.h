@@ -58,11 +58,12 @@ extern "C"
 
 		pcVideoSetGeometry setGeometry;
 		pcVideoTimer timer;
-		pcVideoCreateSurface createSurface;
-		pcVideoShowSurface showSurface;
+		WINPR_ATTR_NODISCARD pcVideoCreateSurface createSurface;
+		WINPR_ATTR_NODISCARD pcVideoShowSurface showSurface;
 		pcVideoDeleteSurface deleteSurface;
 	};
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API VideoSurface* VideoClient_CreateCommonContext(size_t size, UINT32 x, UINT32 y,
 	                                                          UINT32 w, UINT32 h);
 	FREERDP_API void VideoClient_DestroyCommonContext(VideoSurface* surface);

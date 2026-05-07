@@ -128,6 +128,10 @@ bool sdl_push_user_event(Uint32 type, ...)
 			event->data1 = va_arg(ap, void*);
 			break;
 		case SDL_EVENT_USER_WINDOW_FULLSCREEN:
+			event->data1 = va_arg(ap, void*);
+			event->code = va_arg(ap, int);
+			event->data2 = reinterpret_cast<void*>(static_cast<uintptr_t>(va_arg(ap, int)));
+			break;
 		case SDL_EVENT_USER_WINDOW_RESIZEABLE:
 			event->data1 = va_arg(ap, void*);
 			event->code = va_arg(ap, int);
@@ -144,7 +148,10 @@ bool sdl_push_user_event(Uint32 type, ...)
 			return false;
 	}
 	va_end(ap);
-	return SDL_PushEvent(&ev) == 1;
+	const auto rc = SDL_PushEvent(&ev);
+	if (rc != 1)
+		SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[%s] SDL_PushEvent returned %d", __func__, rc);
+	return rc == 1;
 }
 
 bool sdl_push_quit()
@@ -467,6 +474,21 @@ namespace sdl::utils
 
 		return ss.str();
 	}
+
+	std::string toString(SDL_Rect rect)
+	{
+		std::stringstream ss;
+		ss << "SDL_Rect{" << rect.x << "x" << rect.y << "-" << rect.w << "x" << rect.h << "}";
+		return ss.str();
+	}
+
+	std::string toString(SDL_FRect rect)
+	{
+		std::stringstream ss;
+		ss << "SDL_Rect{" << rect.x << "x" << rect.y << "-" << rect.w << "x" << rect.h << "}";
+		return ss.str();
+	}
+
 } // namespace sdl::utils
 
 namespace sdl::error

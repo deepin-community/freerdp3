@@ -52,7 +52,7 @@ static UINT remdesk_virtual_channel_write(RemdeskServerContext* context, wStream
  */
 static UINT remdesk_send_ctl_result_pdu(RemdeskServerContext* context, UINT32 result)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 	REMDESK_CTL_RESULT_PDU pdu;
 	UINT error = 0;
 	pdu.result = result;
@@ -63,7 +63,7 @@ static UINT remdesk_send_ctl_result_pdu(RemdeskServerContext* context, UINT32 re
 		return error;
 	}
 
-	s = Stream_New(NULL, REMDESK_CHANNEL_CTL_SIZE + pdu.ctlHeader.ch.DataLength);
+	s = Stream_New(nullptr, REMDESK_CHANNEL_CTL_SIZE + pdu.ctlHeader.ch.DataLength);
 
 	if (!s)
 	{
@@ -95,7 +95,7 @@ out:
  */
 static UINT remdesk_send_ctl_version_info_pdu(RemdeskServerContext* context)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 	REMDESK_CTL_VERSION_INFO_PDU pdu;
 	UINT error = 0;
 
@@ -107,7 +107,7 @@ static UINT remdesk_send_ctl_version_info_pdu(RemdeskServerContext* context)
 
 	pdu.versionMajor = 1;
 	pdu.versionMinor = 2;
-	s = Stream_New(NULL, REMDESK_CHANNEL_CTL_SIZE + pdu.ctlHeader.ch.DataLength);
+	s = Stream_New(nullptr, REMDESK_CHANNEL_CTL_SIZE + pdu.ctlHeader.ch.DataLength);
 
 	if (!s)
 	{
@@ -169,7 +169,7 @@ static UINT remdesk_recv_ctl_remote_control_desktop_pdu(RemdeskServerContext* co
                                                         REMDESK_CHANNEL_HEADER* header)
 {
 	size_t cchStringW = 0;
-	REMDESK_CTL_REMOTE_CONTROL_DESKTOP_PDU pdu = { 0 };
+	REMDESK_CTL_REMOTE_CONTROL_DESKTOP_PDU pdu = WINPR_C_ARRAY_INIT;
 	UINT error = 0;
 	UINT32 msgLength = header->DataLength - 4;
 	const WCHAR* pStringW = Stream_ConstPointer(s);
@@ -185,9 +185,9 @@ static UINT remdesk_recv_ctl_remote_control_desktop_pdu(RemdeskServerContext* co
 		return ERROR_INVALID_DATA;
 
 	cchStringW++;
-	const size_t cbRaConnectionStringW = cchStringW * 2;
-	pdu.raConnectionString =
-	    ConvertWCharNToUtf8Alloc(raConnectionStringW, cbRaConnectionStringW / sizeof(WCHAR), NULL);
+	const size_t cbRaConnectionStringW = cchStringW * sizeof(WCHAR);
+	pdu.raConnectionString = ConvertWCharNToUtf8Alloc(
+	    raConnectionStringW, cbRaConnectionStringW / sizeof(WCHAR), nullptr);
 	if (!pdu.raConnectionString)
 		return ERROR_INTERNAL_ERROR;
 
@@ -209,8 +209,8 @@ static UINT remdesk_recv_ctl_authenticate_pdu(WINPR_ATTR_UNUSED RemdeskServerCon
                                               wStream* s, REMDESK_CHANNEL_HEADER* header)
 {
 	size_t cchTmpStringW = 0;
-	const WCHAR* expertBlobW = NULL;
-	REMDESK_CTL_AUTHENTICATE_PDU pdu = { 0 };
+	const WCHAR* expertBlobW = nullptr;
+	REMDESK_CTL_AUTHENTICATE_PDU pdu = WINPR_C_ARRAY_INIT;
 	UINT32 msgLength = header->DataLength - 4;
 	const WCHAR* pStringW = Stream_ConstPointer(s);
 	const WCHAR* raConnectionStringW = pStringW;
@@ -240,13 +240,13 @@ static UINT remdesk_recv_ctl_authenticate_pdu(WINPR_ATTR_UNUSED RemdeskServerCon
 		return ERROR_INVALID_DATA;
 
 	cchStringW++;
-	const size_t cbExpertBlobW = cchStringW * 2;
-	pdu.raConnectionString =
-	    ConvertWCharNToUtf8Alloc(raConnectionStringW, cbRaConnectionStringW / sizeof(WCHAR), NULL);
+	const size_t cbExpertBlobW = cchStringW * sizeof(WCHAR);
+	pdu.raConnectionString = ConvertWCharNToUtf8Alloc(
+	    raConnectionStringW, cbRaConnectionStringW / sizeof(WCHAR), nullptr);
 	if (!pdu.raConnectionString)
 		return ERROR_INTERNAL_ERROR;
 
-	pdu.expertBlob = ConvertWCharNToUtf8Alloc(expertBlobW, cbExpertBlobW / sizeof(WCHAR), NULL);
+	pdu.expertBlob = ConvertWCharNToUtf8Alloc(expertBlobW, cbExpertBlobW / sizeof(WCHAR), nullptr);
 	if (!pdu.expertBlob)
 	{
 		free(pdu.raConnectionString);
@@ -267,7 +267,7 @@ static UINT remdesk_recv_ctl_authenticate_pdu(WINPR_ATTR_UNUSED RemdeskServerCon
 static UINT remdesk_recv_ctl_verify_password_pdu(RemdeskServerContext* context, wStream* s,
                                                  REMDESK_CHANNEL_HEADER* header)
 {
-	REMDESK_CTL_VERIFY_PASSWORD_PDU pdu = { 0 };
+	REMDESK_CTL_VERIFY_PASSWORD_PDU pdu = WINPR_C_ARRAY_INIT;
 
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
 		return ERROR_INVALID_DATA;
@@ -278,7 +278,7 @@ static UINT remdesk_recv_ctl_verify_password_pdu(RemdeskServerContext* context, 
 
 	const size_t cbExpertBlobW = header->DataLength - 4;
 
-	pdu.expertBlob = ConvertWCharNToUtf8Alloc(expertBlobW, cbExpertBlobW / sizeof(WCHAR), NULL);
+	pdu.expertBlob = ConvertWCharNToUtf8Alloc(expertBlobW, cbExpertBlobW / sizeof(WCHAR), nullptr);
 	if (!pdu.expertBlob)
 		return ERROR_INTERNAL_ERROR;
 
@@ -426,14 +426,14 @@ static UINT remdesk_server_receive_pdu(RemdeskServerContext* context, wStream* s
 
 static DWORD WINAPI remdesk_server_thread(LPVOID arg)
 {
-	void* buffer = NULL;
-	HANDLE events[8] = { 0 };
-	HANDLE ChannelEvent = NULL;
+	void* buffer = nullptr;
+	HANDLE events[8] = WINPR_C_ARRAY_INIT;
+	HANDLE ChannelEvent = nullptr;
 	DWORD BytesReturned = 0;
 	UINT error = 0;
 	RemdeskServerContext* context = (RemdeskServerContext*)arg;
 	WINPR_ASSERT(context);
-	wStream* s = Stream_New(NULL, 4096);
+	wStream* s = Stream_New(nullptr, 4096);
 
 	if (!s)
 	{
@@ -524,7 +524,7 @@ static DWORD WINAPI remdesk_server_thread(LPVOID arg)
 				if (PduLength >= Stream_GetPosition(s))
 				{
 					Stream_SealLength(s);
-					Stream_SetPosition(s, 0);
+					Stream_ResetPosition(s);
 
 					error = remdesk_server_receive_pdu(context, s);
 					if (error)
@@ -534,7 +534,7 @@ static DWORD WINAPI remdesk_server_thread(LPVOID arg)
 						break;
 					}
 
-					Stream_SetPosition(s, 0);
+					Stream_ResetPosition(s);
 				}
 			}
 		}
@@ -565,18 +565,18 @@ static UINT remdesk_server_start(RemdeskServerContext* context)
 		return ERROR_INTERNAL_ERROR;
 	}
 
-	if (!(context->priv->StopEvent = CreateEvent(NULL, TRUE, FALSE, NULL)))
+	if (!(context->priv->StopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr)))
 	{
 		WLog_ERR(TAG, "CreateEvent failed!");
 		return ERROR_INTERNAL_ERROR;
 	}
 
 	if (!(context->priv->Thread =
-	          CreateThread(NULL, 0, remdesk_server_thread, (void*)context, 0, NULL)))
+	          CreateThread(nullptr, 0, remdesk_server_thread, (void*)context, 0, nullptr)))
 	{
 		WLog_ERR(TAG, "CreateThread failed!");
 		(void)CloseHandle(context->priv->StopEvent);
-		context->priv->StopEvent = NULL;
+		context->priv->StopEvent = nullptr;
 		return ERROR_INTERNAL_ERROR;
 	}
 
@@ -607,7 +607,7 @@ static UINT remdesk_server_stop(RemdeskServerContext* context)
 
 RemdeskServerContext* remdesk_server_context_new(HANDLE vcm)
 {
-	RemdeskServerContext* context = NULL;
+	RemdeskServerContext* context = nullptr;
 	context = (RemdeskServerContext*)calloc(1, sizeof(RemdeskServerContext));
 
 	if (context)
@@ -620,7 +620,7 @@ RemdeskServerContext* remdesk_server_context_new(HANDLE vcm)
 		if (!context->priv)
 		{
 			free(context);
-			return NULL;
+			return nullptr;
 		}
 
 		context->priv->Version = 1;

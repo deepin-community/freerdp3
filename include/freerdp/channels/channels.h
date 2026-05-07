@@ -36,20 +36,27 @@ extern "C"
 	/** @since version 3.9.0 */
 	typedef BOOL (*freerdp_channel_handle_fkt_t)(rdpContext* context, void* userdata);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int freerdp_channels_client_load(rdpChannels* channels, rdpSettings* settings,
 	                                             PVIRTUALCHANNELENTRY entry, void* data);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int freerdp_channels_client_load_ex(rdpChannels* channels, rdpSettings* settings,
 	                                                PVIRTUALCHANNELENTRYEX entryEx, void* data);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int freerdp_channels_load_plugin(rdpChannels* channels, rdpSettings* settings,
 	                                             const char* name, void* data);
 #if defined(WITH_FREERDP_DEPRECATED)
 	WINPR_DEPRECATED_VAR("Use freerdp_channels_get_event_handle",
-	                     FREERDP_API BOOL freerdp_channels_get_fds(
+	                     WINPR_ATTR_NODISCARD FREERDP_API BOOL freerdp_channels_get_fds(
 	                         rdpChannels* channels, freerdp* instance, void** read_fds,
 	                         int* read_count, void** write_fds, int* write_count));
 #endif
+
 	FREERDP_API BOOL freerdp_channels_check_fds(rdpChannels* channels, freerdp* instance);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API void* freerdp_channels_get_static_channel_interface(rdpChannels* channels,
 	                                                                const char* name);
 
@@ -63,23 +70,24 @@ extern "C"
 	 *  @note This function may be called even without the \b event-handle to be set, so it must be
 	 * capable of handling these calls properly.
 	 *
-	 *  @param channels A pointer to the channels instance to register with. Must not be \b NULL
+	 *  @param channels A pointer to the channels instance to register with. Must not be \b nullptr
 	 *  @param handle A \b event-handle to be used to notify the RDP main thread that the callback
 	 * function should be called again. Must not be \b INVALID_HANDLE_PARAM
 	 *  @param fkt The callback function responsible to handle the channel specifics. Must not be \b
-	 * NULL
+	 * nullptr
 	 *  @param userdata A pointer to a channel specific context. Most likely the channel context.
-	 * May be \b NULL if not required.
+	 * May be \b nullptr if not required.
 	 *
 	 *  @return \b TRUE if successful, \b FALSE if any error occurs.
 	 *  @since version 3.9.0 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_client_channel_register(rdpChannels* channels, HANDLE handle,
 	                                                 freerdp_channel_handle_fkt_t fkt,
 	                                                 void* userdata);
 
 	/** @brief Remove an existing registration for \b event-handle from the channels instance
 	 *
-	 *  @param channels A pointer to the channels instance to register with. Must not be \b NULL
+	 *  @param channels A pointer to the channels instance to register with. Must not be \b nullptr
 	 *  @param handle A \b event-handle to be used to notify the RDP main thread that the callback
 	 * function should be called again. Must not be \b INVALID_HANDLE_PARAM
 	 *
@@ -87,15 +95,23 @@ extern "C"
 	 *  @since version 3.9.0 */
 	FREERDP_API BOOL freerdp_client_channel_unregister(rdpChannels* channels, HANDLE handle);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API HANDLE freerdp_channels_get_event_handle(freerdp* instance);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API int freerdp_channels_process_pending_messages(freerdp* instance);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_channels_data(freerdp* instance, UINT16 channelId, const BYTE* data,
 	                                       size_t dataSize, UINT32 flags, size_t totalSize);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API UINT16 freerdp_channels_get_id_by_name(freerdp* instance, const char* channel_name);
+
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_channels_get_name_by_id(freerdp* instance, UINT16 channelId);
 
+	WINPR_ATTR_NODISCARD
 	FREERDP_API const WtsApiFunctionTable* FreeRDP_InitWtsApi(void);
 
 #ifdef __cplusplus

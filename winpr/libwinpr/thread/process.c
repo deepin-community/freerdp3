@@ -99,19 +99,19 @@
 static char* FindApplicationPath(char* application)
 {
 	LPCSTR pathName = "PATH";
-	char* path = NULL;
-	char* save = NULL;
+	char* path = nullptr;
+	char* save = nullptr;
 	DWORD nSize = 0;
-	LPSTR lpSystemPath = NULL;
-	char* filename = NULL;
+	LPSTR lpSystemPath = nullptr;
+	char* filename = nullptr;
 
 	if (!application)
-		return NULL;
+		return nullptr;
 
 	if (application[0] == '/')
 		return _strdup(application);
 
-	nSize = GetEnvironmentVariableA(pathName, NULL, 0);
+	nSize = GetEnvironmentVariableA(pathName, nullptr, 0);
 
 	if (!nSize)
 		return _strdup(application);
@@ -119,15 +119,15 @@ static char* FindApplicationPath(char* application)
 	lpSystemPath = (LPSTR)malloc(nSize);
 
 	if (!lpSystemPath)
-		return NULL;
+		return nullptr;
 
 	if (GetEnvironmentVariableA(pathName, lpSystemPath, nSize) != nSize - 1)
 	{
 		free(lpSystemPath);
-		return NULL;
+		return nullptr;
 	}
 
-	save = NULL;
+	save = nullptr;
 	path = strtok_s(lpSystemPath, ":", &save);
 
 	while (path)
@@ -140,8 +140,8 @@ static char* FindApplicationPath(char* application)
 		}
 
 		free(filename);
-		filename = NULL;
-		path = strtok_s(NULL, ":", &save);
+		filename = nullptr;
+		path = strtok_s(nullptr, ":", &save);
 	}
 
 	free(lpSystemPath);
@@ -162,22 +162,33 @@ static BOOL CreateProcessExA(HANDLE hToken, WINPR_ATTR_UNUSED DWORD dwLogonFlags
 {
 	pid_t pid = 0;
 	int numArgs = 0;
-	LPSTR* pArgs = NULL;
-	char** envp = NULL;
-	char* filename = NULL;
-	HANDLE thread = NULL;
-	HANDLE process = NULL;
-	WINPR_ACCESS_TOKEN* token = NULL;
-	LPTCH lpszEnvironmentBlock = NULL;
+	LPSTR* pArgs = nullptr;
+	char** envp = nullptr;
+	char* filename = nullptr;
+	HANDLE thread = nullptr;
+	HANDLE process = nullptr;
+	WINPR_ACCESS_TOKEN* token = nullptr;
+	LPTCH lpszEnvironmentBlock = nullptr;
 	BOOL ret = FALSE;
 	sigset_t oldSigMask;
 	sigset_t newSigMask;
 	BOOL restoreSigMask = FALSE;
 	numArgs = 0;
-	lpszEnvironmentBlock = NULL;
+	lpszEnvironmentBlock = nullptr;
 	/* https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa
 	 */
-	if (lpCommandLine)
+
+	if (lpCommandLine && lpApplicationName)
+	{
+		char* str = nullptr;
+		size_t len = 0;
+		winpr_asprintf(&str, &len, "%s %s", lpApplicationName, lpCommandLine);
+		if (!str)
+			return FALSE;
+		pArgs = CommandLineToArgvA(str, &numArgs);
+		free(str);
+	}
+	else if (lpCommandLine)
 		pArgs = CommandLineToArgvA(lpCommandLine, &numArgs);
 	else
 		pArgs = CommandLineToArgvA(lpApplicationName, &numArgs);
@@ -206,7 +217,7 @@ static BOOL CreateProcessExA(HANDLE hToken, WINPR_ATTR_UNUSED DWORD dwLogonFlags
 
 	filename = FindApplicationPath(pArgs[0]);
 
-	if (NULL == filename)
+	if (nullptr == filename)
 		goto finish;
 
 	/* block all signals so that the child can safely reset the caller's handlers */
@@ -227,19 +238,19 @@ static BOOL CreateProcessExA(HANDLE hToken, WINPR_ATTR_UNUSED DWORD dwLogonFlags
 #ifndef __sun
 		int maxfd = 0;
 #endif
-		sigset_t set = { 0 };
-		struct sigaction act = { 0 };
+		sigset_t set = WINPR_C_ARRAY_INIT;
+		struct sigaction act = WINPR_C_ARRAY_INIT;
 		/* set default signal handlers */
 		act.sa_handler = SIG_DFL;
 		act.sa_flags = 0;
 		sigemptyset(&act.sa_mask);
 
 		for (int sig = 1; sig < NSIG; sig++)
-			sigaction(sig, &act, NULL);
+			sigaction(sig, &act, nullptr);
 
 		/* unblock all signals */
 		sigfillset(&set);
-		pthread_sigmask(SIG_UNBLOCK, &set, NULL);
+		pthread_sigmask(SIG_UNBLOCK, &set, nullptr);
 
 		if (lpStartupInfo)
 		{
@@ -345,7 +356,7 @@ finish:
 
 	/* restore caller's original signal mask */
 	if (restoreSigMask)
-		pthread_sigmask(SIG_SETMASK, &oldSigMask, NULL);
+		pthread_sigmask(SIG_SETMASK, &oldSigMask, nullptr);
 
 	free(filename);
 	free((void*)pArgs);
@@ -375,7 +386,7 @@ BOOL CreateProcessA(LPCSTR lpApplicationName, LPSTR lpCommandLine,
                     DWORD dwCreationFlags, LPVOID lpEnvironment, LPCSTR lpCurrentDirectory,
                     LPSTARTUPINFOA lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation)
 {
-	return CreateProcessExA(NULL, 0, lpApplicationName, lpCommandLine, lpProcessAttributes,
+	return CreateProcessExA(nullptr, 0, lpApplicationName, lpCommandLine, lpProcessAttributes,
 	                        lpThreadAttributes, bInheritHandles, dwCreationFlags, lpEnvironment,
 	                        lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
 }
@@ -390,8 +401,80 @@ BOOL CreateProcessW(WINPR_ATTR_UNUSED LPCWSTR lpApplicationName,
                     WINPR_ATTR_UNUSED LPSTARTUPINFOW lpStartupInfo,
                     WINPR_ATTR_UNUSED LPPROCESS_INFORMATION lpProcessInformation)
 {
-	WLog_ERR("TODO", "TODO: implement");
-	return FALSE;
+	WINPR_ASSERT(lpStartupInfo);
+	WINPR_ASSERT(lpProcessInformation);
+
+	LPSTR lpApplicationNameA = nullptr;
+	LPSTR lpCommandLineA = nullptr;
+	LPSTR lpCurrentDirectoryA = nullptr;
+	STARTUPINFOA StartupInfoA = { .cb = sizeof(STARTUPINFOA),
+		                          .lpReserved = nullptr,
+		                          .lpDesktop = nullptr,
+		                          .lpTitle = nullptr,
+		                          .dwX = lpStartupInfo->dwX,
+		                          .dwY = lpStartupInfo->dwY,
+		                          .dwXSize = lpStartupInfo->dwXSize,
+		                          .dwYSize = lpStartupInfo->dwYSize,
+		                          .dwXCountChars = lpStartupInfo->dwXCountChars,
+		                          .dwYCountChars = lpStartupInfo->dwYCountChars,
+		                          .dwFillAttribute = lpStartupInfo->dwFillAttribute,
+		                          .dwFlags = lpStartupInfo->dwFlags,
+		                          .wShowWindow = lpStartupInfo->wShowWindow,
+		                          .cbReserved2 = lpStartupInfo->cbReserved2,
+		                          .lpReserved2 = lpStartupInfo->lpReserved2,
+		                          .hStdInput = lpStartupInfo->hStdInput,
+		                          .hStdOutput = lpStartupInfo->hStdOutput,
+		                          .hStdError = lpStartupInfo->hStdError };
+
+	BOOL rc = FALSE;
+	if (lpApplicationName)
+	{
+		lpApplicationNameA = ConvertWCharToUtf8Alloc(lpApplicationName, nullptr);
+		if (!lpApplicationNameA)
+			goto fail;
+	}
+	if (lpCommandLine)
+	{
+		lpCommandLineA = ConvertWCharToUtf8Alloc(lpCommandLine, nullptr);
+		if (!lpCommandLineA)
+			goto fail;
+	}
+	if (lpCurrentDirectory)
+	{
+		lpCurrentDirectoryA = ConvertWCharToUtf8Alloc(lpCurrentDirectory, nullptr);
+		if (!lpCurrentDirectoryA)
+			goto fail;
+	}
+	if (lpStartupInfo->lpReserved)
+	{
+		StartupInfoA.lpReserved = ConvertWCharToUtf8Alloc(lpStartupInfo->lpReserved, nullptr);
+		if (!StartupInfoA.lpReserved)
+			goto fail;
+	}
+	if (lpStartupInfo->lpDesktop)
+	{
+		StartupInfoA.lpDesktop = ConvertWCharToUtf8Alloc(lpStartupInfo->lpDesktop, nullptr);
+		if (!StartupInfoA.lpDesktop)
+			goto fail;
+	}
+	if (lpStartupInfo->lpTitle)
+	{
+		StartupInfoA.lpTitle = ConvertWCharToUtf8Alloc(lpStartupInfo->lpTitle, nullptr);
+		if (!StartupInfoA.lpTitle)
+			goto fail;
+	}
+
+	rc = CreateProcessA(lpApplicationNameA, lpCommandLineA, lpProcessAttributes, lpThreadAttributes,
+	                    bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectoryA,
+	                    &StartupInfoA, lpProcessInformation);
+fail:
+	free(lpApplicationNameA);
+	free(lpCommandLineA);
+	free(lpCurrentDirectoryA);
+	free(StartupInfoA.lpDesktop);
+	free(StartupInfoA.lpReserved);
+	free(StartupInfoA.lpTitle);
+	return rc;
 }
 
 BOOL CreateProcessAsUserA(HANDLE hToken, LPCSTR lpApplicationName, LPSTR lpCommandLine,
@@ -451,7 +534,7 @@ BOOL CreateProcessWithTokenA(WINPR_ATTR_UNUSED HANDLE hToken, WINPR_ATTR_UNUSED 
                              LPSTARTUPINFOA lpStartupInfo,
                              LPPROCESS_INFORMATION lpProcessInformation)
 {
-	return CreateProcessExA(NULL, 0, lpApplicationName, lpCommandLine, NULL, NULL, FALSE,
+	return CreateProcessExA(nullptr, 0, lpApplicationName, lpCommandLine, nullptr, nullptr, FALSE,
 	                        dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo,
 	                        lpProcessInformation);
 }
@@ -477,7 +560,7 @@ VOID ExitProcess(UINT uExitCode)
 
 BOOL GetExitCodeProcess(HANDLE hProcess, LPDWORD lpExitCode)
 {
-	WINPR_PROCESS* process = NULL;
+	WINPR_PROCESS* process = nullptr;
 
 	if (!hProcess)
 		return FALSE;
@@ -493,7 +576,7 @@ BOOL GetExitCodeProcess(HANDLE hProcess, LPDWORD lpExitCode)
 HANDLE _GetCurrentProcess(VOID)
 {
 	WLog_ERR("TODO", "TODO: implement");
-	return NULL;
+	return nullptr;
 }
 
 DWORD GetCurrentProcessId(VOID)
@@ -503,7 +586,7 @@ DWORD GetCurrentProcessId(VOID)
 
 BOOL TerminateProcess(HANDLE hProcess, WINPR_ATTR_UNUSED UINT uExitCode)
 {
-	WINPR_PROCESS* process = NULL;
+	WINPR_PROCESS* process = nullptr;
 	process = (WINPR_PROCESS*)hProcess;
 
 	if (!process || (process->pid <= 0))
@@ -551,7 +634,14 @@ static DWORD ProcessCleanupHandle(HANDLE handle)
 	if (process->fd > 0)
 	{
 		if (waitpid(process->pid, &process->status, WNOHANG) == process->pid)
-			process->dwExitCode = (DWORD)process->status;
+		{
+			if (WIFEXITED(process->status))
+				process->dwExitCode = (DWORD)WEXITSTATUS(process->status);
+			else if (WIFSIGNALED(process->status))
+				process->dwExitCode = (DWORD)(128 + WTERMSIG(process->status));
+			else
+				process->dwExitCode = (DWORD)process->status;
+		}
 	}
 	return WAIT_OBJECT_0;
 }
@@ -560,23 +650,23 @@ static HANDLE_OPS ops = { ProcessHandleIsHandle,
 	                      ProcessHandleCloseHandle,
 	                      ProcessGetFd,
 	                      ProcessCleanupHandle, /* CleanupHandle */
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL,
-	                      NULL };
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr,
+	                      nullptr };
 
 static int pidfd_open(pid_t pid)
 {
@@ -616,11 +706,11 @@ static int pidfd_open(pid_t pid)
 
 HANDLE CreateProcessHandle(pid_t pid)
 {
-	WINPR_PROCESS* process = NULL;
+	WINPR_PROCESS* process = nullptr;
 	process = (WINPR_PROCESS*)calloc(1, sizeof(WINPR_PROCESS));
 
 	if (!process)
-		return NULL;
+		return nullptr;
 
 	process->pid = pid;
 	process->common.Type = HANDLE_TYPE_PROCESS;

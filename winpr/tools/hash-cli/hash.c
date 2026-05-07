@@ -61,11 +61,11 @@ int main(int argc, char* argv[])
 	int format = 0;
 	unsigned long version = 1;
 	BYTE NtHash[16];
-	char* User = NULL;
+	char* User = nullptr;
 	size_t UserLength = 0;
-	char* Domain = NULL;
+	char* Domain = nullptr;
 	size_t DomainLength = 0;
-	char* Password = NULL;
+	char* Password = nullptr;
 	size_t PasswordLength = 0;
 	errno = 0;
 
@@ -117,7 +117,7 @@ int main(int argc, char* argv[])
 				return usage_and_exit();
 			}
 
-			version = strtoul(argv[index], NULL, 0);
+			version = strtoul(argv[index], nullptr, 0);
 
 			if (((version != 1) && (version != 2)) || (errno != 0))
 			{
@@ -153,7 +153,11 @@ int main(int argc, char* argv[])
 		printf("missing username or password\n\n");
 		return usage_and_exit();
 	}
-	winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT);
+	if (!winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT))
+	{
+		printf("winpr_InitializeSSL failed\n\n");
+		return usage_and_exit();
+	}
 
 	UserLength = strlen(User);
 	PasswordLength = strlen(Password);

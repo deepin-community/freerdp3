@@ -27,4 +27,4 @@ static const char SDL_CLIENT_VENDOR[] = "@VENDOR@";
 static const char SDL_CLIENT_UUID[] = "@SDL_CLIENT_UUID@";
 static const char SDL_CLIENT_COPYRIGHT[] = "FreeRDP project";
 static const char SDL_CLIENT_URL[] = "@PROJECT_URL@";
-static const char SDL_CLIENT_TYPE[] = "application"; 
+static const char SDL_CLIENT_TYPE[] = "application";
