@@ -22,6 +22,7 @@
 
 #include <freerdp/api.h>
 #include <freerdp/types.h>
+#include <freerdp/config.h>
 
 #include <freerdp/codec/nsc.h>
 #include <freerdp/codec/color.h>
@@ -33,11 +34,40 @@ extern "C"
 
 	typedef struct S_CLEAR_CONTEXT CLEAR_CONTEXT;
 
-	FREERDP_API int clear_compress(CLEAR_CONTEXT* WINPR_RESTRICT clear,
-	                               const BYTE* WINPR_RESTRICT pSrcData, UINT32 SrcSize,
-	                               BYTE** WINPR_RESTRICT ppDstData,
-	                               UINT32* WINPR_RESTRICT pDstSize);
+	/** @brief compress an image to clear codec data
+	 *  @warning not implemented
+	 *  @bug The API does not allow to properly pass an image
+	 *  @deprecated should not be used
+	 */
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
+	WINPR_DEPRECATED_VAR("Broken API definition, compression was never implemented",
+	                     WINPR_ATTR_NODISCARD FREERDP_API int clear_compress(
+	                         CLEAR_CONTEXT* WINPR_RESTRICT clear,
+	                         const BYTE* WINPR_RESTRICT pSrcData, UINT32 SrcSize,
+	                         BYTE** WINPR_RESTRICT ppDstData, UINT32* WINPR_RESTRICT pDstSize));
+#endif
 
+	/** @brief decompress clear codec data
+	 *
+	 *  @param clear The context to use for decompression, must not be \b nullptr, must have been
+	 * created with \ref Compressor = FALSE
+	 *  @param pSrcData A pointer to the data to feed to the decoder
+	 *  @param SrcSize The size in bytes of the source data
+	 *  @param nWidth The width in pixels of the output rectangle
+	 *  @param nHeight The height in lines of the output rectangle
+	 *  @param pDstData A pointer to the output image data, must not be \b nullptr
+	 *  @param DstFormat The bitmap format of the output buffer. Must not change during \ref clear
+	 * lifecycle.
+	 *  @param nDstStep The size in bytes of a destination image line
+	 *  @param nXDst The x offset in pixels in the destination buffer
+	 *  @param nYDst The y offset in lines in the destination buffer
+	 *  @param nDstWidth The width in pixels of the output buffer
+	 *  @param nDstHeight The height in lines of the output buffer
+	 *  @param palette An optional color palette to use if the output format is 8 bit
+	 *
+	 *  @return \b 0 in case of success, a negative error code otherwise.
+	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API INT32 clear_decompress(CLEAR_CONTEXT* WINPR_RESTRICT clear,
 	                                   const BYTE* WINPR_RESTRICT pSrcData, UINT32 SrcSize,
 	                                   UINT32 nWidth, UINT32 nHeight, BYTE* WINPR_RESTRICT pDstData,
@@ -45,12 +75,29 @@ extern "C"
 	                                   UINT32 nYDst, UINT32 nDstWidth, UINT32 nDstHeight,
 	                                   const gdiPalette* WINPR_RESTRICT palette);
 
+	/** @brief reset the clear codec state.
+	 *
+	 *  @warning This does not reset internal buffers, these are not bound to the context lifecycle
+	 *
+	 *  @param clear the context to reset, must not be \b nullptr
+	 *
+	 *  @return \b TRUE for success, \b FALSE otherwise
+	 */
+	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL clear_context_reset(CLEAR_CONTEXT* WINPR_RESTRICT clear);
 
+	/** @brief free a clear codec context and all attached buffers.
+	 *
+	 *  @param clear The context to clear, may be \b nullptr
+	 */
 	FREERDP_API void clear_context_free(CLEAR_CONTEXT* WINPR_RESTRICT clear);
 
+	/** @brief allocate a clear codec context
+	 *
+	 *  @param Compressor Allocate for compression (set to \b TRUE ) or decompression
+	 *  @return An allocated context or \b nullptr in case of an error
+	 */
 	WINPR_ATTR_MALLOC(clear_context_free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API CLEAR_CONTEXT* clear_context_new(BOOL Compressor);
 
 #ifdef __cplusplus

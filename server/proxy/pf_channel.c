@@ -41,6 +41,7 @@ struct sChannelStateTracker
 	proxyData* pdata;
 };
 
+WINPR_ATTR_NODISCARD
 static BOOL channelTracker_resetCurrentPacket(ChannelStateTracker* tracker)
 {
 	WINPR_ASSERT(tracker);
@@ -56,10 +57,10 @@ static BOOL channelTracker_resetCurrentPacket(ChannelStateTracker* tracker)
 	}
 
 	if (create)
-		tracker->currentPacket = Stream_New(NULL, 10ULL * 1024ULL);
+		tracker->currentPacket = Stream_New(nullptr, 10ULL * 1024ULL);
 	if (!tracker->currentPacket)
 		return FALSE;
-	Stream_SetPosition(tracker->currentPacket, 0);
+	Stream_ResetPosition(tracker->currentPacket);
 	return TRUE;
 }
 
@@ -88,7 +89,7 @@ fail:
 	WINPR_PRAGMA_DIAG_IGNORED_MISMATCHED_DEALLOC
 	channelTracker_free(ret);
 	WINPR_PRAGMA_DIAG_POP
-	return NULL;
+	return nullptr;
 }
 
 PfChannelResult channelTracker_update(ChannelStateTracker* tracker, const BYTE* xdata, size_t xsize,
@@ -176,9 +177,9 @@ void channelTracker_free(ChannelStateTracker* t)
 PfChannelResult channelTracker_flushCurrent(ChannelStateTracker* t, BOOL first, BOOL last,
                                             BOOL toBack)
 {
-	proxyData* pdata = NULL;
-	pServerContext* ps = NULL;
-	pServerStaticChannelContext* channel = NULL;
+	proxyData* pdata = nullptr;
+	pServerContext* ps = nullptr;
+	pServerStaticChannelContext* channel = nullptr;
 	UINT32 flags = CHANNEL_FLAG_FIRST;
 	BOOL r = 0;
 	const char* direction = toBack ? "F->B" : "B->F";
@@ -200,7 +201,7 @@ PfChannelResult channelTracker_flushCurrent(ChannelStateTracker* t, BOOL first, 
 
 	if (toBack)
 	{
-		proxyChannelDataEventInfo ev = { 0 };
+		proxyChannelDataEventInfo ev = WINPR_C_ARRAY_INIT;
 
 		ev.channel_id = WINPR_ASSERTING_INT_CAST(UINT16, channel->front_channel_id);
 		ev.channel_name = channel->channel_name;
@@ -224,12 +225,13 @@ PfChannelResult channelTracker_flushCurrent(ChannelStateTracker* t, BOOL first, 
 	return r ? PF_CHANNEL_RESULT_DROP : PF_CHANNEL_RESULT_ERROR;
 }
 
+WINPR_ATTR_NODISCARD
 static PfChannelResult pf_channel_generic_back_data(proxyData* pdata,
                                                     const pServerStaticChannelContext* channel,
                                                     const BYTE* xdata, size_t xsize, UINT32 flags,
                                                     size_t totalSize)
 {
-	proxyChannelDataEventInfo ev = { 0 };
+	proxyChannelDataEventInfo ev = WINPR_C_ARRAY_INIT;
 
 	WINPR_ASSERT(pdata);
 	WINPR_ASSERT(channel);
@@ -258,12 +260,13 @@ static PfChannelResult pf_channel_generic_back_data(proxyData* pdata,
 	}
 }
 
+WINPR_ATTR_NODISCARD
 static PfChannelResult pf_channel_generic_front_data(proxyData* pdata,
                                                      const pServerStaticChannelContext* channel,
                                                      const BYTE* xdata, size_t xsize, UINT32 flags,
                                                      size_t totalSize)
 {
-	proxyChannelDataEventInfo ev = { 0 };
+	proxyChannelDataEventInfo ev = WINPR_C_ARRAY_INIT;
 
 	WINPR_ASSERT(pdata);
 	WINPR_ASSERT(channel);

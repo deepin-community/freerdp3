@@ -95,7 +95,7 @@ static BOOL win_shadow_input_mouse_event(rdpShadowSubsystem* subsystem, rdpShado
                                          UINT16 flags, UINT16 x, UINT16 y)
 {
 	UINT rc = 1;
-	INPUT event = { 0 };
+	INPUT event = WINPR_C_ARRAY_INIT;
 	float width;
 	float height;
 
@@ -180,7 +180,7 @@ static BOOL win_shadow_input_extended_mouse_event(rdpShadowSubsystem* subsystem,
                                                   UINT16 y)
 {
 	UINT rc = 1;
-	INPUT event = { 0 };
+	INPUT event = WINPR_C_ARRAY_INIT;
 	float width;
 	float height;
 
@@ -247,7 +247,7 @@ static int win_shadow_surface_copy(winShadowSubsystem* subsystem)
 	int status = 1;
 	int nDstStep = 0;
 	DWORD DstFormat;
-	BYTE* pDstData = NULL;
+	BYTE* pDstData = nullptr;
 	rdpShadowServer* server;
 	rdpShadowSurface* surface;
 	RECTANGLE_16 surfaceRect;
@@ -315,7 +315,7 @@ static int win_shadow_surface_copy(winShadowSubsystem* subsystem)
 		return status;
 
 	if (!freerdp_image_copy_no_overlap(surface->data, surface->format, surface->scanline, x, y,
-	                                   width, height, pDstData, DstFormat, nDstStep, x, y, NULL,
+	                                   width, height, pDstData, DstFormat, nDstStep, x, y, nullptr,
 	                                   FREERDP_FLIP_NONE))
 		return ERROR_INTERNAL_ERROR;
 
@@ -426,13 +426,13 @@ static UINT32 win_shadow_enum_monitors(MONITOR_DEF* monitors, UINT32 maxMonitors
 	DWORD iDevNum = 0;
 	int numMonitors = 0;
 	MONITOR_DEF* monitor;
-	DISPLAY_DEVICE displayDevice = { 0 };
+	DISPLAY_DEVICE displayDevice = WINPR_C_ARRAY_INIT;
 
 	displayDevice.cb = sizeof(DISPLAY_DEVICE);
 
-	if (EnumDisplayDevices(NULL, iDevNum, &displayDevice, 0))
+	if (EnumDisplayDevices(nullptr, iDevNum, &displayDevice, 0))
 	{
-		hdc = CreateDC(displayDevice.DeviceName, NULL, NULL, NULL);
+		hdc = CreateDC(displayDevice.DeviceName, nullptr, nullptr, nullptr);
 		desktopWidth = GetDeviceCaps(hdc, HORZRES);
 		desktopHeight = GetDeviceCaps(hdc, VERTRES);
 		index = 0;
@@ -493,7 +493,8 @@ static int win_shadow_subsystem_start(rdpShadowSubsystem* arg)
 	if (!subsystem)
 		return -1;
 
-	if (!(thread = CreateThread(NULL, 0, win_shadow_subsystem_thread, (void*)subsystem, 0, NULL)))
+	if (!(thread =
+	          CreateThread(nullptr, 0, win_shadow_subsystem_thread, (void*)subsystem, 0, nullptr)))
 	{
 		WLog_ERR(TAG, "Failed to create thread");
 		return -1;
@@ -529,7 +530,7 @@ static rdpShadowSubsystem* win_shadow_subsystem_new(void)
 	subsystem = (winShadowSubsystem*)calloc(1, sizeof(winShadowSubsystem));
 
 	if (!subsystem)
-		return NULL;
+		return nullptr;
 
 	subsystem->base.SynchronizeEvent = win_shadow_input_synchronize_event;
 	subsystem->base.KeyboardEvent = win_shadow_input_keyboard_event;

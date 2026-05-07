@@ -82,8 +82,8 @@ static BOOL CompareBitmap(const BYTE* srcA, UINT32 srcAFormat, const BYTE* srcB,
 			const BYTE* b = &lineB[x * FreeRDPGetBytesPerPixel(srcBFormat)];
 			UINT32 colorA = FreeRDPReadColor(a, srcAFormat);
 			UINT32 colorB = FreeRDPReadColor(b, srcBFormat);
-			FreeRDPSplitColor(colorA, srcAFormat, &sR, &sG, &sB, &sA, NULL);
-			FreeRDPSplitColor(colorB, srcBFormat, &dR, &dG, &dB, &dA, NULL);
+			FreeRDPSplitColor(colorA, srcAFormat, &sR, &sG, &sB, &sA, nullptr);
+			FreeRDPSplitColor(colorB, srcBFormat, &dR, &dG, &dB, &dA, nullptr);
 
 			if (fabs((double)sR - dR) > maxDiff)
 				return FALSE;
@@ -117,7 +117,7 @@ static BOOL RunTestPlanar(BITMAP_PLANAR_CONTEXT* encplanar, BITMAP_PLANAR_CONTEX
 		return FALSE;
 
 	BYTE* compressedBitmap = freerdp_bitmap_compress_planar(encplanar, srcBitmap, srcFormat, width,
-	                                                        height, 0, NULL, &dstSize);
+	                                                        height, 0, nullptr, &dstSize);
 	BYTE* decompressedBitmap =
 	    (BYTE*)calloc(height, 1ULL * width * FreeRDPGetBytesPerPixel(dstFormat));
 
@@ -187,7 +187,7 @@ static BOOL RunTestPlanarSingleColor(BITMAP_PLANAR_CONTEXT* planar, const UINT32
 			BOOL failed = TRUE;
 			const UINT32 srcSize = width * height * FreeRDPGetBytesPerPixel(srcFormat);
 			const UINT32 dstSize = width * height * FreeRDPGetBytesPerPixel(dstFormat);
-			BYTE* compressedBitmap = NULL;
+			BYTE* compressedBitmap = nullptr;
 			BYTE* bmp = malloc(srcSize);
 			BYTE* decompressedBitmap = (BYTE*)malloc(dstSize);
 
@@ -206,7 +206,7 @@ static BOOL RunTestPlanarSingleColor(BITMAP_PLANAR_CONTEXT* planar, const UINT32
 			}
 
 			compressedBitmap = freerdp_bitmap_compress_planar(planar, bmp, srcFormat, width, height,
-			                                                  0, NULL, &compressedSize);
+			                                                  0, nullptr, &compressedSize);
 
 			if (!compressedBitmap)
 				goto fail_loop;
@@ -287,7 +287,12 @@ static UINT32 prand(UINT32 max)
 	UINT32 tmp = 0;
 	if (max <= 1)
 		return 1;
-	winpr_RAND(&tmp, sizeof(tmp));
+	if (winpr_RAND(&tmp, sizeof(tmp)) < 0)
+	{
+		(void)fprintf(stderr, "winpr_RAND failed, retry...\n");
+		// NOLINTNEXTLINE(concurrency-mt-unsafe)
+		exit(-1);
+	}
 	return tmp % (max - 1) + 1;
 }
 
@@ -303,9 +308,9 @@ static BOOL FuzzPlanar(void)
 
 	for (UINT32 x = 0; x < 100; x++)
 	{
-		BYTE data[0x10000] = { 0 };
+		BYTE data[0x10000] = WINPR_C_ARRAY_INIT;
 		size_t dataSize = 0x10000;
-		BYTE dstData[0x10000] = { 0 };
+		BYTE dstData[0x10000] = WINPR_C_ARRAY_INIT;
 
 		UINT32 DstFormat = 0;
 		UINT32 nDstStep = 0;
@@ -384,10 +389,10 @@ static BOOL FuzzPlanar(void)
 		       ", nDstHeight=%" PRIu32 ", nDstStep=%" PRIu32 ", total size=%" PRIuz "\n",
 		       FreeRDPGetColorFormatName(DstFormat), nXDst, nYDst, nDstWidth, nDstHeight, nDstStep,
 		       sizeof(dstData));
-		freerdp_planar_switch_bgr(planar, ((prand(2) % 2) != 0) ? TRUE : FALSE);
+		freerdp_planar_switch_bgr(planar, ((prand(2) % 2) != 0));
 		freerdp_bitmap_decompress_planar(planar, data, dataSize, prand(4096), prand(4096), dstData,
 		                                 DstFormat, nDstStep, nXDst, nYDst, nDstWidth, nDstHeight,
-		                                 ((prand(2) % 2) != 0) ? TRUE : FALSE);
+		                                 ((prand(2) % 2) != 0));
 	}
 
 	rc = TRUE;

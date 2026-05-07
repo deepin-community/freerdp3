@@ -144,7 +144,7 @@ void* winpr_unwind_backtrace(DWORD size)
 		 * there seems to be no consensus on what to return from this function.
 		 * so we just warn about unexpected return codes and return the context regardless.
 		 */
-		char buffer[64] = { 0 };
+		char buffer[64] = WINPR_C_ARRAY_INIT;
 		WLog_WARN(TAG, "_Unwind_Backtrace failed with %s",
 		          unwind_reason_str_buffer(rc, buffer, sizeof(buffer)));
 	}
@@ -152,7 +152,7 @@ void* winpr_unwind_backtrace(DWORD size)
 	return ctx;
 fail:
 	winpr_unwind_backtrace_free(ctx);
-	return NULL;
+	return nullptr;
 }
 
 void winpr_unwind_backtrace_free(void* buffer)
@@ -173,14 +173,14 @@ char** winpr_unwind_backtrace_symbols(void* buffer, size_t* used)
 		char** cpp;
 	} cnv;
 	unwind_context_t* ctx = buffer;
-	cnv.cpp = NULL;
+	cnv.cpp = nullptr;
 
 	if (!ctx)
-		return NULL;
+		return nullptr;
 
 	cnv.pv = calloc(ctx->pos * (sizeof(char*) + UNWIND_MAX_LINE_SIZE), sizeof(char*));
 	if (!cnv.pv)
-		return NULL;
+		return nullptr;
 
 	if (used)
 		*used = ctx->pos;
@@ -189,15 +189,16 @@ char** winpr_unwind_backtrace_symbols(void* buffer, size_t* used)
 	{
 		char* msg = cnv.cp + ctx->pos * sizeof(char*) + x * UNWIND_MAX_LINE_SIZE;
 		const unwind_info_t* info = &ctx->info[x];
-		Dl_info dlinfo = { 0 };
+		Dl_info dlinfo = WINPR_C_ARRAY_INIT;
 		int rc = dladdr(info->pc.pv, &dlinfo);
 
 		cnv.cpp[x] = msg;
 
 		if (rc == 0)
-			(void)_snprintf(msg, UNWIND_MAX_LINE_SIZE, "unresolvable, address=%p", info->pc.pv);
+			(void)_snprintf(msg, UNWIND_MAX_LINE_SIZE, "address=%p, unresolvable", info->pc.pv);
 		else
-			(void)_snprintf(msg, UNWIND_MAX_LINE_SIZE, "dli_fname=%s [%p], dli_sname=%s [%p]",
+			(void)_snprintf(msg, UNWIND_MAX_LINE_SIZE,
+			                "address=%p dli_fname=%s [%p], dli_sname=%s [%p]", info->pc.pv,
 			                dlinfo.dli_fname, dlinfo.dli_fbase, dlinfo.dli_sname, dlinfo.dli_saddr);
 	}
 

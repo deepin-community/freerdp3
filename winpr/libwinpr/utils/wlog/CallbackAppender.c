@@ -47,7 +47,7 @@ static BOOL WLog_CallbackAppender_WriteMessage(wLog* log, wLogAppender* appender
 	if (!appender)
 		return FALSE;
 
-	char prefix[WLOG_MAX_PREFIX_SIZE] = { 0 };
+	char prefix[WLOG_MAX_PREFIX_SIZE] = WINPR_C_ARRAY_INIT;
 	WLog_Layout_GetMessagePrefix(log, appender->Layout, cmessage, prefix, sizeof(prefix));
 
 	wLogCallbackAppender* callbackAppender = (wLogCallbackAppender*)appender;
@@ -68,7 +68,7 @@ static BOOL WLog_CallbackAppender_WriteDataMessage(wLog* log, wLogAppender* appe
 	if (!appender)
 		return FALSE;
 
-	char prefix[WLOG_MAX_PREFIX_SIZE] = { 0 };
+	char prefix[WLOG_MAX_PREFIX_SIZE] = WINPR_C_ARRAY_INIT;
 	WLog_Layout_GetMessagePrefix(log, appender->Layout, cmessage, prefix, sizeof(prefix));
 
 	wLogCallbackAppender* callbackAppender = (wLogCallbackAppender*)appender;
@@ -89,7 +89,7 @@ static BOOL WLog_CallbackAppender_WriteImageMessage(wLog* log, wLogAppender* app
 	if (!appender)
 		return FALSE;
 
-	char prefix[WLOG_MAX_PREFIX_SIZE] = { 0 };
+	char prefix[WLOG_MAX_PREFIX_SIZE] = WINPR_C_ARRAY_INIT;
 	WLog_Layout_GetMessagePrefix(log, appender->Layout, cmessage, prefix, sizeof(prefix));
 
 	wLogCallbackAppender* callbackAppender = (wLogCallbackAppender*)appender;
@@ -110,7 +110,7 @@ static BOOL WLog_CallbackAppender_WritePacketMessage(wLog* log, wLogAppender* ap
 	if (!appender)
 		return FALSE;
 
-	char prefix[WLOG_MAX_PREFIX_SIZE] = { 0 };
+	char prefix[WLOG_MAX_PREFIX_SIZE] = WINPR_C_ARRAY_INIT;
 	WLog_Layout_GetMessagePrefix(log, appender->Layout, cmessage, prefix, sizeof(prefix));
 
 	wLogCallbackAppender* callbackAppender = (wLogCallbackAppender*)appender;
@@ -142,7 +142,7 @@ static BOOL WLog_CallbackAppender_Set(wLogAppender* appender, const char* settin
 
 static void WLog_CallbackAppender_Free(wLogAppender* appender)
 {
-	wLogCallbackAppender* callbackAppender = NULL;
+	wLogCallbackAppender* callbackAppender = nullptr;
 	if (!appender)
 	{
 		return;
@@ -159,7 +159,7 @@ wLogAppender* WLog_CallbackAppender_New(WINPR_ATTR_UNUSED wLog* log)
 	wLogCallbackAppender* CallbackAppender =
 	    (wLogCallbackAppender*)calloc(1, sizeof(wLogCallbackAppender));
 	if (!CallbackAppender)
-		return NULL;
+		return nullptr;
 
 	CallbackAppender->common.Type = WLOG_APPENDER_CALLBACK;
 	CallbackAppender->common.Open = WLog_CallbackAppender_Open;

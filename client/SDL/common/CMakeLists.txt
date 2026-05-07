@@ -19,9 +19,12 @@
 add_subdirectory(aad)
 add_subdirectory(res)
 
-add_library(
-  sdl-common-prefs STATIC sdl_prefs.hpp sdl_prefs.cpp scoped_guard.hpp sdl_common_utils.hpp sdl_common_utils.cpp
-)
+set(SRCS sdl_prefs.hpp sdl_prefs.cpp scoped_guard.hpp sdl_common_utils.hpp sdl_common_utils.cpp)
+if(WIN32)
+  list(APPEND SRCS sdl_win32_console.hpp sdl_win32_console.cpp)
+endif()
+
+add_library(sdl-common-prefs STATIC ${SRCS})
 target_link_libraries(sdl-common-prefs winpr freerdp)
 set_property(TARGET sdl-common-prefs PROPERTY FOLDER "Client/Common")
 

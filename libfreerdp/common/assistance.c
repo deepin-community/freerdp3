@@ -80,14 +80,14 @@ static const char* strrstr(const char* haystack, size_t len, const char* needle)
 	if (*needle == '\0')
 		return haystack;
 
-	char* result = NULL;
+	char* result = nullptr;
 	for (;;)
 	{
 		char* p = strstr(haystack, needle);
-		if (p == NULL)
+		if (p == nullptr)
 			break;
 		if (p > haystack + len)
-			return NULL;
+			return nullptr;
 
 		result = p;
 		haystack = p + 1;
@@ -100,14 +100,14 @@ static BOOL update_option(char** opt, const char* val, size_t len)
 {
 	WINPR_ASSERT(opt);
 	free(*opt);
-	*opt = NULL;
+	*opt = nullptr;
 
 	if (!val && (len != 0))
 		return FALSE;
 	else if (!val && (len == 0))
 		return TRUE;
 	*opt = strndup(val, len);
-	return *opt != NULL;
+	return *opt != nullptr;
 }
 
 static BOOL update_name(rdpAssistanceFile* file, const char* name)
@@ -122,34 +122,34 @@ static BOOL update_name(rdpAssistanceFile* file, const char* name)
 
 	free(file->filename);
 	file->filename = _strdup(name);
-	return file->filename != NULL;
+	return file->filename != nullptr;
 }
 
 static BOOL update_password(rdpAssistanceFile* file, const char* password)
 {
 	WINPR_ASSERT(file);
 	free(file->password);
-	file->password = NULL;
+	file->password = nullptr;
 	if (!password)
 		return TRUE;
 	file->password = _strdup(password);
-	return file->password != NULL;
+	return file->password != nullptr;
 }
 
 static BOOL update_connectionstring2_nocopy(rdpAssistanceFile* file, char* str)
 {
 	WINPR_ASSERT(file);
 	free(file->ConnectionString2);
-	file->ConnectionString2 = NULL;
+	file->ConnectionString2 = nullptr;
 	if (!str)
 		return TRUE;
 	file->ConnectionString2 = str;
-	return file->ConnectionString2 != NULL;
+	return file->ConnectionString2 != nullptr;
 }
 
 static BOOL update_connectionstring2(rdpAssistanceFile* file, const char* str, size_t len)
 {
-	char* strc = NULL;
+	char* strc = nullptr;
 	if (!str && (len != 0))
 		return FALSE;
 
@@ -164,14 +164,14 @@ static BOOL update_connectionstring2(rdpAssistanceFile* file, const char* str, s
 
 static BOOL update_connectionstring2_wchar(rdpAssistanceFile* file, const WCHAR* str, size_t len)
 {
-	char* strc = NULL;
+	char* strc = nullptr;
 
 	if (!str && (len != 0))
 		return FALSE;
 
 	if (str && (len > 0))
 	{
-		strc = ConvertWCharNToUtf8Alloc(str, len, NULL);
+		strc = ConvertWCharNToUtf8Alloc(str, len, nullptr);
 		if (!strc)
 			return FALSE;
 	}
@@ -218,8 +218,8 @@ static BOOL freerdp_assistance_crypt_derive_key_sha1(const BYTE* hash, size_t ha
                                                      size_t keyLength)
 {
 	BOOL rc = FALSE;
-	BYTE pad1[64] = { 0 };
-	BYTE pad2[64] = { 0 };
+	BYTE pad1[64] = WINPR_C_ARRAY_INIT;
+	BYTE pad2[64] = WINPR_C_ARRAY_INIT;
 
 	if (hashLength == 0)
 		return FALSE;
@@ -253,7 +253,7 @@ fail:
 
 static BOOL append_address_to_list(wArrayList* MachineAddresses, const char* str, size_t len)
 {
-	char* copy = NULL;
+	char* copy = nullptr;
 	if (len > 0)
 		copy = strndup(str, len);
 	if (!copy)
@@ -271,7 +271,7 @@ static BOOL append_address(rdpAssistanceFile* file, const char* host, const char
 	WINPR_ASSERT(file);
 
 	errno = 0;
-	unsigned long p = strtoul(port, NULL, 0);
+	unsigned long p = strtoul(port, nullptr, 0);
 
 	if ((errno != 0) || (p == 0) || (p > UINT16_MAX))
 	{
@@ -300,11 +300,11 @@ static BOOL freerdp_assistance_parse_address_list(rdpAssistanceFile* file, char*
 	char* s = ";";
 
 	// get the first token
-	char* saveptr = NULL;
+	char* saveptr = nullptr;
 	char* token = strtok_s(strp, s, &saveptr);
 
 	// walk through other tokens
-	while (token != NULL)
+	while (token != nullptr)
 	{
 		char* port = strchr(token, ':');
 		if (!port)
@@ -315,7 +315,7 @@ static BOOL freerdp_assistance_parse_address_list(rdpAssistanceFile* file, char*
 		if (!append_address(file, token, port))
 			goto out;
 
-		token = strtok_s(NULL, s, &saveptr);
+		token = strtok_s(nullptr, s, &saveptr);
 	}
 	rc = TRUE;
 out:
@@ -324,7 +324,7 @@ out:
 
 static BOOL freerdp_assistance_parse_connection_string1(rdpAssistanceFile* file)
 {
-	char* tokens[8] = { 0 };
+	char* tokens[8] = WINPR_C_ARRAY_INIT;
 	BOOL rc = FALSE;
 
 	WINPR_ASSERT(file);
@@ -425,12 +425,12 @@ static BOOL freerdp_assistance_parse_attr(const char** opt, size_t* plength, con
 	WINPR_ASSERT(plength);
 	WINPR_ASSERT(key);
 
-	*opt = NULL;
+	*opt = nullptr;
 	*plength = 0;
 	if (!tag)
 		return FALSE;
 
-	char bkey[128] = { 0 };
+	char bkey[128] = WINPR_C_ARRAY_INIT;
 	const int rc = _snprintf(bkey, sizeof(bkey), "%s=\"", key);
 	WINPR_ASSERT(rc > 0);
 	WINPR_ASSERT((size_t)rc < sizeof(bkey));
@@ -468,7 +468,7 @@ static BOOL freerdp_assistance_parse_attr(const char** opt, size_t* plength, con
 
 static BOOL freerdp_assistance_parse_attr_str(char** opt, const char* key, const char* tag)
 {
-	const char* copt = NULL;
+	const char* copt = nullptr;
 	size_t size = 0;
 	if (!freerdp_assistance_parse_attr(&copt, &size, key, tag))
 		return FALSE;
@@ -477,7 +477,7 @@ static BOOL freerdp_assistance_parse_attr_str(char** opt, const char* key, const
 
 static BOOL freerdp_assistance_parse_attr_bool(BOOL* opt, const char* key, const char* tag)
 {
-	const char* copt = NULL;
+	const char* copt = nullptr;
 	size_t size = 0;
 
 	WINPR_ASSERT(opt);
@@ -494,7 +494,7 @@ static BOOL freerdp_assistance_parse_attr_bool(BOOL* opt, const char* key, const
 
 static BOOL freerdp_assistance_parse_attr_uint32(UINT32* opt, const char* key, const char* tag)
 {
-	const char* copt = NULL;
+	const char* copt = nullptr;
 	size_t size = 0;
 
 	WINPR_ASSERT(opt);
@@ -503,7 +503,7 @@ static BOOL freerdp_assistance_parse_attr_uint32(UINT32* opt, const char* key, c
 	if (!freerdp_assistance_parse_attr(&copt, &size, key, tag))
 		return FALSE;
 
-	char buffer[64] = { 0 };
+	char buffer[64] = WINPR_C_ARRAY_INIT;
 	if ((!copt && (size > 0)) || (size >= sizeof(buffer)))
 	{
 		WLog_WARN(TAG, "Invalid UINT32 string '%s' [%" PRIuz "]", copt, size);
@@ -514,7 +514,7 @@ static BOOL freerdp_assistance_parse_attr_uint32(UINT32* opt, const char* key, c
 		strncpy(buffer, copt, size);
 
 	errno = 0;
-	unsigned long val = strtoul(buffer, NULL, 0);
+	unsigned long val = strtoul(buffer, nullptr, 0);
 
 	if ((errno != 0) || (val > UINT32_MAX))
 	{
@@ -534,16 +534,16 @@ static char* freerdp_assistance_contains_element(char* input, size_t ilen, const
 	WINPR_ASSERT(key);
 	WINPR_ASSERT(plen);
 
-	char bkey[128] = { 0 };
+	char bkey[128] = WINPR_C_ARRAY_INIT;
 	const int rc = _snprintf(bkey, sizeof(bkey), "<%s", key);
 	WINPR_ASSERT(rc > 0);
 	WINPR_ASSERT((size_t)rc < sizeof(bkey));
 	if ((rc < 0) || ((size_t)rc >= sizeof(bkey)))
-		return NULL;
+		return nullptr;
 
 	char* tag = strstr(input, bkey);
 	if (!tag || (tag > input + ilen))
-		return NULL;
+		return nullptr;
 
 	char* data = tag + strnlen(bkey, sizeof(bkey));
 
@@ -560,7 +560,7 @@ static char* freerdp_assistance_contains_element(char* input, size_t ilen, const
 			         "Failed to parse ASSISTANCE file: ConnectionString2 missing delimiter after "
 			         "field %s",
 			         bkey);
-			return NULL;
+			return nullptr;
 	}
 
 	char* start = strstr(tag, ">");
@@ -568,19 +568,19 @@ static char* freerdp_assistance_contains_element(char* input, size_t ilen, const
 	if (!start || (start > input + ilen))
 	{
 		WLog_ERR(TAG, "Failed to parse ASSISTANCE file: ConnectionString2 missing field %s", bkey);
-		return NULL;
+		return nullptr;
 	}
 
 	const char* end = start;
 	const char* dend = start - 1;
 	if (*dend != '/')
 	{
-		char ekey[128] = { 0 };
+		char ekey[128] = WINPR_C_ARRAY_INIT;
 		const int erc = _snprintf(ekey, sizeof(ekey), "</%s>", key);
 		WINPR_ASSERT(erc > 0);
 		WINPR_ASSERT((size_t)erc < sizeof(ekey));
 		if ((erc <= 0) || ((size_t)erc >= sizeof(ekey)))
-			return NULL;
+			return nullptr;
 		const size_t offset = WINPR_ASSERTING_INT_CAST(size_t, start - tag);
 		dend = end = strrstr(start, ilen - offset, ekey);
 		if (end)
@@ -592,7 +592,7 @@ static char* freerdp_assistance_contains_element(char* input, size_t ilen, const
 		WLog_ERR(TAG,
 		         "Failed to parse ASSISTANCE file: ConnectionString2 missing end tag for field %s",
 		         key);
-		return NULL;
+		return nullptr;
 	}
 	if (plen)
 		*plen = WINPR_ASSERTING_INT_CAST(size_t, end - tag);
@@ -619,7 +619,7 @@ static BOOL freerdp_assistance_consume_input_and_get_element(char* input, const 
 
 	size_t len = 0;
 	size_t dlen = 0;
-	char* data = NULL;
+	char* data = nullptr;
 	char* tag = freerdp_assistance_contains_element(input, strlen(input), key, &len, &data, &dlen);
 	if (!tag)
 		return FALSE;
@@ -642,7 +642,7 @@ static BOOL freerdp_assistance_get_element(char* input, size_t ilen, const char*
 
 	size_t len = 0;
 	size_t dlen = 0;
-	char* data = NULL;
+	char* data = nullptr;
 	char* tag = freerdp_assistance_contains_element(input, ilen, key, &len, &data, &dlen);
 	if (!tag)
 		return FALSE;
@@ -661,7 +661,7 @@ static BOOL freerdp_assistance_parse_all_elements_of(rdpAssistanceFile* file, ch
                                                      BOOL (*fkt)(rdpAssistanceFile* file,
                                                                  char* data, size_t len))
 {
-	char* val = NULL;
+	char* val = nullptr;
 	size_t vlen = 0;
 
 	while (freerdp_assistance_get_element(data, len, key, &val, &vlen))
@@ -684,8 +684,8 @@ static BOOL freerdp_assistance_parse_all_elements_of_l(rdpAssistanceFile* file, 
                                                        WINPR_ATTR_UNUSED size_t len)
 {
 	UINT32 p = 0;
-	const char* n = NULL;
-	const char* u = NULL;
+	const char* n = nullptr;
+	const char* u = nullptr;
 	size_t nlen = 0;
 	size_t ulen = 0;
 	if (!freerdp_assistance_parse_attr_uint32(&p, "P", data))
@@ -754,7 +754,7 @@ static BOOL freerdp_assistance_parse_connection_string2(rdpAssistanceFile* file)
 		goto out_fail;
 
 	{
-		char* e = NULL;
+		char* e = nullptr;
 		size_t elen = 0;
 		if (!freerdp_assistance_consume_input_and_get_element(str, "E", &e, &elen))
 			goto out_fail;
@@ -762,7 +762,7 @@ static BOOL freerdp_assistance_parse_connection_string2(rdpAssistanceFile* file)
 		if (!e || (elen == 0))
 			goto out_fail;
 		{
-			char* a = NULL;
+			char* a = nullptr;
 			size_t alen = 0;
 			if (!freerdp_assistance_get_element(e, elen, "A", &a, &alen))
 				goto out_fail;
@@ -797,7 +797,7 @@ out_fail:
 char* freerdp_assistance_construct_expert_blob(const char* name, const char* pass)
 {
 	if (!name || !pass)
-		return NULL;
+		return nullptr;
 
 	const size_t nameLength = strlen(name) + strlen("NAME=");
 	const size_t passLength = strlen(pass) + strlen("PASS=");
@@ -805,7 +805,7 @@ char* freerdp_assistance_construct_expert_blob(const char* name, const char* pas
 	char* ExpertBlob = (char*)calloc(1, size);
 
 	if (!ExpertBlob)
-		return NULL;
+		return nullptr;
 
 	(void)sprintf_s(ExpertBlob, size, "%" PRIuz ";NAME=%s%" PRIuz ";PASS=%s", nameLength, name,
 	                passLength, pass);
@@ -814,7 +814,7 @@ char* freerdp_assistance_construct_expert_blob(const char* name, const char* pas
 
 char* freerdp_assistance_generate_pass_stub(WINPR_ATTR_UNUSED DWORD flags)
 {
-	UINT32 nums[14] = { 0 };
+	UINT32 nums[14] = WINPR_C_ARRAY_INIT;
 	const char set1[64] = { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
 		                    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
 		                    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
@@ -829,7 +829,7 @@ char* freerdp_assistance_generate_pass_stub(WINPR_ATTR_UNUSED DWORD flags)
 	char* passStub = calloc(15, sizeof(char));
 
 	if (!passStub)
-		return NULL;
+		return nullptr;
 
 	/**
 	 * PassStub generation:
@@ -842,7 +842,12 @@ char* freerdp_assistance_generate_pass_stub(WINPR_ATTR_UNUSED DWORD flags)
 	 *
 	 * Example: WB^6HsrIaFmEpi
 	 */
-	winpr_RAND(nums, sizeof(nums));
+	if (winpr_RAND(nums, sizeof(nums)) < 0)
+	{
+		free(passStub);
+		return nullptr;
+	}
+
 	passStub[0] = set1[nums[0] % sizeof(set1)];   /* character 0 */
 	passStub[1] = set2[nums[1] % sizeof(set2)];   /* character 1 */
 	passStub[2] = set3[nums[2] % sizeof(set3)];   /* character 2 */
@@ -860,16 +865,16 @@ BYTE* freerdp_assistance_encrypt_pass_stub(const char* password, const char* pas
 	BOOL rc = 0;
 	size_t cbPasswordW = 0;
 	size_t cbPassStubW = 0;
-	BYTE PasswordHash[WINPR_MD5_DIGEST_LENGTH] = { 0 };
-	WINPR_RC4_CTX* rc4Ctx = NULL;
-	BYTE* pbIn = NULL;
-	BYTE* pbOut = NULL;
-	BYTE* res = NULL;
+	BYTE PasswordHash[WINPR_MD5_DIGEST_LENGTH] = WINPR_C_ARRAY_INIT;
+	WINPR_RC4_CTX* rc4Ctx = nullptr;
+	BYTE* pbIn = nullptr;
+	BYTE* pbOut = nullptr;
+	BYTE* res = nullptr;
 	WCHAR* PasswordW = ConvertUtf8ToWCharAlloc(password, &cbPasswordW);
 	WCHAR* PassStubW = ConvertUtf8ToWCharAlloc(passStub, &cbPassStubW);
 
-	cbPasswordW = (cbPasswordW) * sizeof(WCHAR);
-	cbPassStubW = (cbPassStubW) * sizeof(WCHAR);
+	cbPasswordW = cbPasswordW * sizeof(WCHAR);
+	cbPassStubW = cbPassStubW * sizeof(WCHAR);
 	const size_t EncryptedSize = cbPassStubW + 4;
 
 	if (!PasswordW || !PassStubW)
@@ -922,16 +927,16 @@ static BOOL freerdp_assistance_decrypt2(rdpAssistanceFile* file)
 	int status = 0;
 	size_t cbPasswordW = 0;
 	size_t cchOutW = 0;
-	WINPR_CIPHER_CTX* aesDec = NULL;
-	WCHAR* PasswordW = NULL;
-	BYTE* pbIn = NULL;
-	BYTE* pbOut = NULL;
+	WINPR_CIPHER_CTX* aesDec = nullptr;
+	WCHAR* PasswordW = nullptr;
+	BYTE* pbIn = nullptr;
+	BYTE* pbOut = nullptr;
 	size_t cbOut = 0;
 	size_t cbIn = 0;
 	size_t cbFinal = 0;
-	BYTE DerivedKey[WINPR_AES_BLOCK_SIZE] = { 0 };
-	BYTE InitializationVector[WINPR_AES_BLOCK_SIZE] = { 0 };
-	BYTE PasswordHash[WINPR_SHA1_DIGEST_LENGTH] = { 0 };
+	BYTE DerivedKey[WINPR_AES_BLOCK_SIZE] = WINPR_C_ARRAY_INIT;
+	BYTE InitializationVector[WINPR_AES_BLOCK_SIZE] = WINPR_C_ARRAY_INIT;
+	BYTE PasswordHash[WINPR_SHA1_DIGEST_LENGTH] = WINPR_C_ARRAY_INIT;
 
 	WINPR_ASSERT(file);
 
@@ -945,7 +950,7 @@ static BOOL freerdp_assistance_decrypt2(rdpAssistanceFile* file)
 		return FALSE;
 	}
 
-	cbPasswordW = (cbPasswordW) * sizeof(WCHAR);
+	cbPasswordW = cbPasswordW * sizeof(WCHAR);
 
 	if (!winpr_Digest(WINPR_MD_SHA1, (BYTE*)PasswordW, cbPasswordW, PasswordHash,
 	                  sizeof(PasswordHash)))
@@ -1009,29 +1014,29 @@ fail:
 	return rc;
 }
 
-BYTE* freerdp_assistance_hex_string_to_bin(const void* raw, size_t* size)
+BYTE* freerdp_assistance_hex_string_to_bin(const void* str, size_t* size)
 {
-	BYTE* buffer = NULL;
-	if (!raw || !size)
-		return NULL;
+	BYTE* buffer = nullptr;
+	if (!str || !size)
+		return nullptr;
 	*size = 0;
-	const size_t length = strlen(raw);
+	const size_t length = strlen(str);
 	buffer = calloc(length, sizeof(BYTE));
 	if (!buffer)
-		return NULL;
-	const size_t rc = winpr_HexStringToBinBuffer(raw, length, buffer, length);
+		return nullptr;
+	const size_t rc = winpr_HexStringToBinBuffer(str, length, buffer, length);
 	if (rc == 0)
 	{
 		free(buffer);
-		return NULL;
+		return nullptr;
 	}
 	*size = rc;
 	return buffer;
 }
 
-char* freerdp_assistance_bin_to_hex_string(const void* raw, size_t size)
+char* freerdp_assistance_bin_to_hex_string(const void* data, size_t size)
 {
-	return winpr_BinToHexString(raw, size, FALSE);
+	return winpr_BinToHexString(data, size, FALSE);
 }
 
 static int freerdp_assistance_parse_uploadinfo(rdpAssistanceFile* file, char* uploadinfo,
@@ -1039,7 +1044,7 @@ static int freerdp_assistance_parse_uploadinfo(rdpAssistanceFile* file, char* up
 {
 	const char escalated[9] = { 'E', 's', 'c', 'a', 'l', 'a', 't', 'e', 'd' };
 	const size_t esclen = sizeof(escalated);
-	const char* typestr = NULL;
+	const char* typestr = nullptr;
 	size_t typelen = 0;
 
 	if (!uploadinfo || (uploadinfosize == 0))
@@ -1063,7 +1068,7 @@ static int freerdp_assistance_parse_uploadinfo(rdpAssistanceFile* file, char* up
 		return -1;
 	}
 
-	char* uploaddata = NULL;
+	char* uploaddata = nullptr;
 	size_t uploaddatasize = 0;
 	if (!freerdp_assistance_consume_input_and_get_element(uploadinfo, "UPLOADDATA", &uploaddata,
 	                                                      &uploaddatasize))
@@ -1166,14 +1171,15 @@ static int freerdp_assistance_parse_file_buffer_int(rdpAssistanceFile* file, cha
 	if (!update_password(file, password))
 		return -1;
 
-	char* uploadinfo = NULL;
+	char* uploadinfo = nullptr;
 	size_t uploadinfosize = 0;
 	if (freerdp_assistance_consume_input_and_get_element(buffer, "UPLOADINFO", &uploadinfo,
 	                                                     &uploadinfosize))
 		return freerdp_assistance_parse_uploadinfo(file, uploadinfo, uploadinfosize);
 
 	size_t elen = 0;
-	const char* estr = freerdp_assistance_contains_element(buffer, size, "E", &elen, NULL, NULL);
+	const char* estr =
+	    freerdp_assistance_contains_element(buffer, size, "E", &elen, nullptr, nullptr);
 	if (!estr || (elen == 0))
 	{
 		WLog_ERR(TAG, "Failed to parse ASSISTANCE file: Neither UPLOADINFO nor <E> found");
@@ -1219,9 +1225,8 @@ int freerdp_assistance_parse_file_buffer(rdpAssistanceFile* file, const char* cb
 
 int freerdp_assistance_parse_file(rdpAssistanceFile* file, const char* name, const char* password)
 {
-	int status = 0;
-	BYTE* buffer = NULL;
-	FILE* fp = NULL;
+	int status = -1;
+	BYTE* buffer = nullptr;
 	size_t readSize = 0;
 	union
 	{
@@ -1232,7 +1237,7 @@ int freerdp_assistance_parse_file(rdpAssistanceFile* file, const char* name, con
 	if (!update_name(file, name))
 		return -1;
 
-	fp = winpr_fopen(name, "r");
+	FILE* fp = winpr_fopen(name, "r");
 
 	if (!fp)
 	{
@@ -1240,24 +1245,22 @@ int freerdp_assistance_parse_file(rdpAssistanceFile* file, const char* name, con
 		return -1;
 	}
 
-	(void)_fseeki64(fp, 0, SEEK_END);
+	if (_fseeki64(fp, 0, SEEK_END) < 0)
+		goto fail;
 	fileSize.i64 = _ftelli64(fp);
-	(void)_fseeki64(fp, 0, SEEK_SET);
+	if (_fseeki64(fp, 0, SEEK_SET) < 0)
+		goto fail;
 
 	if (fileSize.i64 < 1)
 	{
 		WLog_ERR(TAG, "Failed to read ASSISTANCE file %s ", name);
-		(void)fclose(fp);
-		return -1;
+		goto fail;
 	}
 
 	buffer = (BYTE*)malloc(fileSize.s + 2);
 
 	if (!buffer)
-	{
-		(void)fclose(fp);
-		return -1;
-	}
+		goto fail;
 
 	readSize = fread(buffer, fileSize.s, 1, fp);
 
@@ -1267,19 +1270,18 @@ int freerdp_assistance_parse_file(rdpAssistanceFile* file, const char* name, con
 			readSize = fileSize.s;
 	}
 
-	(void)fclose(fp);
-
 	if (readSize < 1)
 	{
 		WLog_ERR(TAG, "Failed to read ASSISTANCE file %s ", name);
-		free(buffer);
-		buffer = NULL;
-		return -1;
+		goto fail;
 	}
 
 	buffer[fileSize.s] = '\0';
 	buffer[fileSize.s + 1] = '\0';
 	status = freerdp_assistance_parse_file_buffer(file, (char*)buffer, fileSize.s, password);
+
+fail:
+	(void)fclose(fp);
 	free(buffer);
 	return status;
 }
@@ -1391,10 +1393,12 @@ static BOOL setup_string(wArrayList* list)
 
 rdpAssistanceFile* freerdp_assistance_file_new(void)
 {
-	winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT);
+	if (!winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT))
+		return nullptr;
+
 	rdpAssistanceFile* file = calloc(1, sizeof(rdpAssistanceFile));
 	if (!file)
-		return NULL;
+		return nullptr;
 
 	file->MachineAddresses = ArrayList_New(FALSE);
 	file->MachinePorts = ArrayList_New(FALSE);
@@ -1413,7 +1417,7 @@ fail:
 	WINPR_PRAGMA_DIAG_IGNORED_MISMATCHED_DEALLOC
 	freerdp_assistance_file_free(file);
 	WINPR_PRAGMA_DIAG_POP
-	return NULL;
+	return nullptr;
 }
 
 void freerdp_assistance_file_free(rdpAssistanceFile* file)
@@ -1421,8 +1425,8 @@ void freerdp_assistance_file_free(rdpAssistanceFile* file)
 	if (!file)
 		return;
 
-	update_password(file, NULL);
-	update_connectionstring2(file, NULL, 0);
+	update_password(file, nullptr);
+	update_connectionstring2(file, nullptr, 0);
 	free(file->filename);
 	free(file->Username);
 	free(file->LHTicket);
@@ -1460,7 +1464,7 @@ void freerdp_assistance_print_file(rdpAssistanceFile* file, wLog* log, DWORD lev
 	for (size_t x = 0; x < ArrayList_Count(file->MachineAddresses); x++)
 	{
 		UINT32 port = 0;
-		const char* uri = NULL;
+		const char* uri = nullptr;
 		const char* addr = ArrayList_GetItem(file->MachineAddresses, x);
 		if (x < ArrayList_Count(file->MachinePorts))
 		{

@@ -51,7 +51,9 @@ struct rdp_shadow_encoder
 	BITMAP_INTERLEAVED_CONTEXT* interleaved;
 	H264_CONTEXT* h264;
 	PROGRESSIVE_CONTEXT* progressive;
-
+#if defined(WITH_GFX_AV1)
+	FREERDP_AV1_CONTEXT* av1;
+#endif
 	UINT32 fps;
 	UINT32 maxFps;
 	BOOL frameAck;
@@ -65,9 +67,9 @@ extern "C"
 {
 #endif
 
-	int shadow_encoder_reset(rdpShadowEncoder* encoder);
-	int shadow_encoder_prepare(rdpShadowEncoder* encoder, UINT32 codecs);
-	UINT32 shadow_encoder_create_frame_id(rdpShadowEncoder* encoder);
+	WINPR_ATTR_NODISCARD int shadow_encoder_reset(rdpShadowEncoder* encoder);
+	WINPR_ATTR_NODISCARD int shadow_encoder_prepare(rdpShadowEncoder* encoder, UINT32 codecs);
+	WINPR_ATTR_NODISCARD UINT32 shadow_encoder_create_frame_id(rdpShadowEncoder* encoder);
 
 	void shadow_encoder_free(rdpShadowEncoder* encoder);
 

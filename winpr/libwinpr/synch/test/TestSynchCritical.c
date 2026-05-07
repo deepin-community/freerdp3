@@ -46,7 +46,8 @@ static UINT32 prand(UINT32 max)
 	UINT32 tmp = 0;
 	if (max <= 1)
 		return 1;
-	winpr_RAND(&tmp, sizeof(tmp));
+	if (winpr_RAND(&tmp, sizeof(tmp)) < 0)
+		return 0;
 	return tmp % (max - 1) + 1;
 }
 
@@ -111,9 +112,9 @@ static DWORD WINAPI TestSynchCritical_Main(LPVOID arg)
 	DWORD dwPreviousSpinCount = 0;
 	DWORD dwSpinCount = 0;
 	DWORD dwSpinCountExpected = 0;
-	HANDLE hMainThread = NULL;
-	HANDLE* hThreads = NULL;
-	HANDLE hThread = NULL;
+	HANDLE hMainThread = nullptr;
+	HANDLE* hThreads = nullptr;
+	HANDLE hThread = nullptr;
 	DWORD dwThreadCount = 0;
 	DWORD dwThreadExitCode = 0;
 	BOOL bTest1Running = 0;
@@ -151,9 +152,15 @@ static DWORD WINAPI TestSynchCritical_Main(LPVOID arg)
 		DeleteCriticalSection(&critical);
 
 		if (dwSpinCount % 2 == 0)
-			InitializeCriticalSectionAndSpinCount(&critical, dwSpinCount);
+		{
+			if (!InitializeCriticalSectionAndSpinCount(&critical, dwSpinCount))
+				goto fail;
+		}
 		else
-			InitializeCriticalSectionEx(&critical, dwSpinCount, 0);
+		{
+			if (!InitializeCriticalSectionEx(&critical, dwSpinCount, 0))
+				goto fail;
+		}
 	}
 	DeleteCriticalSection(&critical);
 
@@ -203,7 +210,7 @@ static DWORD WINAPI TestSynchCritical_Main(LPVOID arg)
 			       critical.RecursionCount, i);
 			goto fail;
 		}
-		if (critical.OwningThread != (i ? hMainThread : NULL))
+		if (critical.OwningThread != (i ? hMainThread : nullptr))
 		{
 			printf("CriticalSection failure: Could not verify section ownership (loop index=%d).\n",
 			       i);
@@ -228,7 +235,8 @@ static DWORD WINAPI TestSynchCritical_Main(LPVOID arg)
 	for (int j = 0; j < TEST_SYNC_CRITICAL_TEST1_RUNS; j++)
 	{
 		dwSpinCount = j * 100;
-		InitializeCriticalSectionAndSpinCount(&critical, dwSpinCount);
+		if (!InitializeCriticalSectionAndSpinCount(&critical, dwSpinCount))
+			goto fail;
 
 		gTestValueVulnerable = 0;
 		gTestValueSerialized = 0;
@@ -237,8 +245,8 @@ static DWORD WINAPI TestSynchCritical_Main(LPVOID arg)
 		bTest1Running = TRUE;
 		for (int i = 0; i < (int)dwThreadCount; i++)
 		{
-			if (!(hThreads[i] =
-			          CreateThread(NULL, 0, TestSynchCritical_Test1, &bTest1Running, 0, NULL)))
+			if (!(hThreads[i] = CreateThread(nullptr, 0, TestSynchCritical_Test1, &bTest1Running, 0,
+			                                 nullptr)))
 			{
 				printf("CriticalSection failure: Failed to create test_1 thread #%d\n", i);
 				goto fail;
@@ -291,7 +299,7 @@ static DWORD WINAPI TestSynchCritical_Main(LPVOID arg)
 		goto fail;
 	}
 	/* This thread tries to call TryEnterCriticalSection which must fail */
-	if (!(hThread = CreateThread(NULL, 0, TestSynchCritical_Test2, NULL, 0, NULL)))
+	if (!(hThread = CreateThread(nullptr, 0, TestSynchCritical_Test2, nullptr, 0, nullptr)))
 	{
 		printf("CriticalSection failure: Failed to create test_2 thread\n");
 		goto fail;
@@ -321,7 +329,7 @@ fail:
 int TestSynchCritical(int argc, char* argv[])
 {
 	BOOL bThreadTerminated = FALSE;
-	HANDLE hThread = NULL;
+	HANDLE hThread = nullptr;
 	DWORD dwThreadExitCode = 0;
 	DWORD dwDeadLockDetectionTimeMs = 0;
 
@@ -333,7 +341,8 @@ int TestSynchCritical(int argc, char* argv[])
 
 	printf("Deadlock will be assumed after %" PRIu32 " ms.\n", dwDeadLockDetectionTimeMs);
 
-	if (!(hThread = CreateThread(NULL, 0, TestSynchCritical_Main, &bThreadTerminated, 0, NULL)))
+	if (!(hThread =
+	          CreateThread(nullptr, 0, TestSynchCritical_Main, &bThreadTerminated, 0, nullptr)))
 	{
 		printf("CriticalSection failure: Failed to create main thread\n");
 		return -1;

@@ -29,11 +29,11 @@
 
 static char* get_path(const char* codec, const char* type, const char* name)
 {
-	char path[500] = { 0 };
+	char path[500] = WINPR_C_ARRAY_INIT;
 	(void)snprintf(path, sizeof(path), "%s-%s-%s.bin", codec, type, name);
 	char* s1 = GetCombinedPath(CMAKE_CURRENT_SOURCE_DIR, codec);
 	if (!s1)
-		return NULL;
+		return nullptr;
 
 	char* s2 = GetCombinedPath(s1, path);
 	free(s1);
@@ -50,13 +50,13 @@ static FILE* open_path(const char* codec, const char* type, const char* name, co
 	if (!path)
 	{
 		(void)printf("%s: get_path %s %s failed\n", __func__, type, name);
-		return NULL;
+		return nullptr;
 	}
 
 	FILE* fp = winpr_fopen(path, mode);
 	if (!fp)
 	{
-		char buffer[128] = { 0 };
+		char buffer[128] = WINPR_C_ARRAY_INIT;
 		(void)printf("%s: %s %s: fopen(%s, %s) failed: %s\n", __func__, type, name, path, mode,
 		             winpr_strerror(errno, buffer, sizeof(buffer)));
 	}
@@ -71,8 +71,8 @@ void* test_codec_helper_read_data(const char* codec, const char* type, const cha
 	WINPR_ASSERT(name);
 	WINPR_ASSERT(plength);
 
-	void* rc = NULL;
-	void* cmp = NULL;
+	void* rc = nullptr;
+	void* cmp = nullptr;
 
 	*plength = 0;
 	FILE* fp = open_path(codec, type, name, "rb");
@@ -96,7 +96,7 @@ void* test_codec_helper_read_data(const char* codec, const char* type, const cha
 
 	*plength = pos;
 	rc = cmp;
-	cmp = NULL;
+	cmp = nullptr;
 
 fail:
 	(void)printf("%s: [%s] %s %s -> %p\n", __func__, codec, type, name, rc);

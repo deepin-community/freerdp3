@@ -37,6 +37,7 @@
 #include <freerdp/freerdp.h>
 #include <freerdp/codec/audio.h>
 #include <freerdp/client/audin.h>
+#include <freerdp/utils/helpers.h>
 
 #include "audin_main.h"
 
@@ -138,7 +139,7 @@ static UINT audin_pulse_connect(IAudinDevice* device)
 	if (!pulse->context)
 		return ERROR_INVALID_PARAMETER;
 
-	if (pa_context_connect(pulse->context, NULL, 0, NULL))
+	if (pa_context_connect(pulse->context, nullptr, PA_CONTEXT_NOFLAGS, nullptr))
 	{
 		WLog_Print(pulse->log, WLOG_ERROR, "pa_context_connect failed (%d)",
 		           pa_context_errno(pulse->context));
@@ -199,13 +200,13 @@ static UINT audin_pulse_free(IAudinDevice* device)
 	{
 		pa_context_disconnect(pulse->context);
 		pa_context_unref(pulse->context);
-		pulse->context = NULL;
+		pulse->context = nullptr;
 	}
 
 	if (pulse->mainloop)
 	{
 		pa_threaded_mainloop_free(pulse->mainloop);
-		pulse->mainloop = NULL;
+		pulse->mainloop = nullptr;
 	}
 
 	free(pulse->device_name);
@@ -252,7 +253,6 @@ static BOOL audin_pulse_format_supported(IAudinDevice* device, const AUDIO_FORMA
 static UINT audin_pulse_set_format(IAudinDevice* device, const AUDIO_FORMAT* format,
                                    UINT32 FramesPerPacket)
 {
-	pa_sample_spec sample_spec = { 0 };
 	AudinPulseDevice* pulse = (AudinPulseDevice*)device;
 
 	if (!pulse || !format)
@@ -264,21 +264,18 @@ static UINT audin_pulse_set_format(IAudinDevice* device, const AUDIO_FORMAT* for
 	if (FramesPerPacket > 0)
 		pulse->frames_per_packet = FramesPerPacket;
 
-	sample_spec.rate = format->nSamplesPerSec;
-
-	sample_spec.channels = WINPR_ASSERTING_INT_CAST(uint8_t, format->nChannels);
-
+	pa_sample_format_t sformat = PA_SAMPLE_INVALID;
 	switch (format->wFormatTag)
 	{
 		case WAVE_FORMAT_PCM: /* PCM */
 			switch (format->wBitsPerSample)
 			{
 				case 8:
-					sample_spec.format = PA_SAMPLE_U8;
+					sformat = PA_SAMPLE_U8;
 					break;
 
 				case 16:
-					sample_spec.format = PA_SAMPLE_S16LE;
+					sformat = PA_SAMPLE_S16LE;
 					break;
 
 				default:
@@ -290,6 +287,12 @@ static UINT audin_pulse_set_format(IAudinDevice* device, const AUDIO_FORMAT* for
 		default:
 			return ERROR_INTERNAL_ERROR;
 	}
+
+	const pa_sample_spec sample_spec = {
+		.format = sformat,
+		.rate = format->nSamplesPerSec,
+		.channels = WINPR_ASSERTING_INT_CAST(uint8_t, format->nChannels),
+	};
 
 	pulse->sample_spec = sample_spec;
 	pulse->format = *format;
@@ -321,7 +324,7 @@ static void audin_pulse_stream_state_callback(pa_stream* stream, void* userdata)
 
 static void audin_pulse_stream_request_callback(pa_stream* stream, size_t length, void* userdata)
 {
-	const void* data = NULL;
+	const void* data = nullptr;
 	AudinPulseDevice* pulse = (AudinPulseDevice*)userdata;
 	UINT error = CHANNEL_RC_OK;
 	pa_stream_peek(stream, &data, &length);
@@ -350,12 +353,12 @@ static UINT audin_pulse_close(IAudinDevice* device)
 		pa_threaded_mainloop_lock(pulse->mainloop);
 		pa_stream_disconnect(pulse->stream);
 		pa_stream_unref(pulse->stream);
-		pulse->stream = NULL;
+		pulse->stream = nullptr;
 		pa_threaded_mainloop_unlock(pulse->mainloop);
 	}
 
-	pulse->receive = NULL;
-	pulse->user_data = NULL;
+	pulse->receive = nullptr;
+	pulse->user_data = nullptr;
 	return CHANNEL_RC_OK;
 }
 
@@ -367,7 +370,7 @@ static UINT audin_pulse_close(IAudinDevice* device)
 static UINT audin_pulse_open(IAudinDevice* device, AudinReceive receive, void* user_data)
 {
 	pa_stream_state_t state = PA_STREAM_FAILED;
-	pa_buffer_attr buffer_attr = { 0 };
+	pa_buffer_attr buffer_attr = WINPR_C_ARRAY_INIT;
 	AudinPulseDevice* pulse = (AudinPulseDevice*)device;
 
 	if (!pulse || !receive || !user_data)
@@ -382,7 +385,7 @@ static UINT audin_pulse_open(IAudinDevice* device, AudinReceive receive, void* u
 	pulse->receive = receive;
 	pulse->user_data = user_data;
 	pa_threaded_mainloop_lock(pulse->mainloop);
-	pulse->stream = pa_stream_new(pulse->context, pulse->stream_name, &pulse->sample_spec, NULL);
+	pulse->stream = pa_stream_new(pulse->context, pulse->stream_name, &pulse->sample_spec, nullptr);
 
 	if (!pulse->stream)
 	{
@@ -453,27 +456,27 @@ static UINT audin_pulse_open(IAudinDevice* device, AudinReceive receive, void* u
 static UINT audin_pulse_parse_addin_args(AudinPulseDevice* pulse, const ADDIN_ARGV* args)
 {
 	COMMAND_LINE_ARGUMENT_A audin_pulse_args[] = {
-		{ "dev", COMMAND_LINE_VALUE_REQUIRED, "<device>", NULL, NULL, -1, NULL,
+		{ "dev", COMMAND_LINE_VALUE_REQUIRED, "<device>", nullptr, nullptr, -1, nullptr,
 		  "audio device name" },
-		{ "client_name", COMMAND_LINE_VALUE_REQUIRED, "<client_name>", NULL, NULL, -1, NULL,
-		  "name of pulse client" },
-		{ "stream_name", COMMAND_LINE_VALUE_REQUIRED, "<stream_name>", NULL, NULL, -1, NULL,
-		  "name of pulse stream" },
-		{ NULL, 0, NULL, NULL, NULL, -1, NULL, NULL }
+		{ "client_name", COMMAND_LINE_VALUE_REQUIRED, "<client_name>", nullptr, nullptr, -1,
+		  nullptr, "name of pulse client" },
+		{ "stream_name", COMMAND_LINE_VALUE_REQUIRED, "<stream_name>", nullptr, nullptr, -1,
+		  nullptr, "name of pulse stream" },
+		{ nullptr, 0, nullptr, nullptr, nullptr, -1, nullptr, nullptr }
 	};
 
 	const DWORD flags =
 	    COMMAND_LINE_SIGIL_NONE | COMMAND_LINE_SEPARATOR_COLON | COMMAND_LINE_IGN_UNKNOWN_KEYWORD;
 	const int status = CommandLineParseArgumentsA(args->argc, args->argv, audin_pulse_args, flags,
-	                                              pulse, NULL, NULL);
+	                                              pulse, nullptr, nullptr);
 
 	if (status < 0)
 		return ERROR_INVALID_PARAMETER;
 
 	const COMMAND_LINE_ARGUMENT_A* arg = audin_pulse_args;
 
-	const char* client_name = NULL;
-	const char* stream_name = NULL;
+	const char* client_name = nullptr;
+	const char* stream_name = nullptr;
 	do
 	{
 		if (!(arg->Flags & COMMAND_LINE_VALUE_PRESENT))
@@ -490,12 +493,12 @@ static UINT audin_pulse_parse_addin_args(AudinPulseDevice* pulse, const ADDIN_AR
 			}
 		}
 		CommandLineSwitchEnd(arg)
-	} while ((arg = CommandLineFindNextArgumentA(arg)) != NULL);
+	} while ((arg = CommandLineFindNextArgumentA(arg)) != nullptr);
 
 	if (!client_name)
-		client_name = "freerdp";
+		client_name = freerdp_getApplicationDetailsString();
 	if (!stream_name)
-		stream_name = "freerdp_audin";
+		stream_name = freerdp_getApplicationDetailsString();
 
 	pulse->client_name = _strdup(client_name);
 	pulse->stream_name = _strdup(stream_name);
@@ -513,8 +516,8 @@ static UINT audin_pulse_parse_addin_args(AudinPulseDevice* pulse, const ADDIN_AR
 FREERDP_ENTRY_POINT(UINT VCAPITYPE pulse_freerdp_audin_client_subsystem_entry(
     PFREERDP_AUDIN_DEVICE_ENTRY_POINTS pEntryPoints))
 {
-	const ADDIN_ARGV* args = NULL;
-	AudinPulseDevice* pulse = NULL;
+	const ADDIN_ARGV* args = nullptr;
+	AudinPulseDevice* pulse = nullptr;
 	UINT error = 0;
 	pulse = (AudinPulseDevice*)calloc(1, sizeof(AudinPulseDevice));
 

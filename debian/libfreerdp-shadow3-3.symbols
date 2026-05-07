@@ -1,14 +1,14 @@
 libfreerdp-shadow3.so.3 libfreerdp-shadow3-3 #MINVER#
-* Build-Depends-Package: freerdp3-dev
- rdtk_button_draw@Base 3.1.0
- rdtk_engine_free@Base 3.1.0
- rdtk_engine_new@Base 3.1.0
- rdtk_font_draw_text@Base 3.1.0
- rdtk_label_draw@Base 3.1.0
- rdtk_surface_fill@Base 3.1.0
- rdtk_surface_free@Base 3.1.0
- rdtk_surface_new@Base 3.1.0
- rdtk_text_field_draw@Base 3.1.0
+* Build-Depends-Package: freerdp-dev
+# rdtk_button_draw@Base 3.1.0 #removed in 3.23.0
+# rdtk_engine_free@Base 3.1.0 #removed in 3.23.0
+# rdtk_engine_new@Base 3.1.0 #removed in 3.23.0
+# rdtk_font_draw_text@Base 3.1.0 #removed in 3.23.0
+# rdtk_label_draw@Base 3.1.0 #removed in 3.23.0
+# rdtk_surface_fill@Base 3.1.0 #removed in 3.23.0
+# rdtk_surface_free@Base 3.1.0 #removed in 3.23.0
+# rdtk_surface_new@Base 3.1.0 #removed in 3.23.0
+# rdtk_text_field_draw@Base 3.1.0 #removed in 3.23.0
  shadow_capture_align_clip_rect@Base 3.0.0
  shadow_capture_compare@Base 3.0.0
  shadow_capture_compare_with_format@Base 3.4.0

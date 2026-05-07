@@ -6,7 +6,7 @@
 
 static void BitStrGen(void)
 {
-	char str[64] = { 0 };
+	char str[64] = WINPR_C_ARRAY_INIT;
 
 	for (DWORD i = 0; i < 256;)
 	{
@@ -17,27 +17,27 @@ static void BitStrGen(void)
 			if (0)
 			{
 				/* Least Significant Bit First */
-				str[0] = (i & (1 << 7)) ? '1' : '0';
-				str[1] = (i & (1 << 6)) ? '1' : '0';
-				str[2] = (i & (1 << 5)) ? '1' : '0';
-				str[3] = (i & (1 << 4)) ? '1' : '0';
-				str[4] = (i & (1 << 3)) ? '1' : '0';
-				str[5] = (i & (1 << 2)) ? '1' : '0';
-				str[6] = (i & (1 << 1)) ? '1' : '0';
-				str[7] = (i & (1 << 0)) ? '1' : '0';
+				str[0] = (i & (1u << 7)) ? '1' : '0';
+				str[1] = (i & (1u << 6)) ? '1' : '0';
+				str[2] = (i & (1u << 5)) ? '1' : '0';
+				str[3] = (i & (1u << 4)) ? '1' : '0';
+				str[4] = (i & (1u << 3)) ? '1' : '0';
+				str[5] = (i & (1u << 2)) ? '1' : '0';
+				str[6] = (i & (1u << 1)) ? '1' : '0';
+				str[7] = (i & (1u << 0)) ? '1' : '0';
 				str[8] = '\0';
 			}
 			else
 			{
 				/* Most Significant Bit First */
-				str[7] = (i & (1 << 7)) ? '1' : '0';
-				str[6] = (i & (1 << 6)) ? '1' : '0';
-				str[5] = (i & (1 << 5)) ? '1' : '0';
-				str[4] = (i & (1 << 4)) ? '1' : '0';
-				str[3] = (i & (1 << 3)) ? '1' : '0';
-				str[2] = (i & (1 << 2)) ? '1' : '0';
-				str[1] = (i & (1 << 1)) ? '1' : '0';
-				str[0] = (i & (1 << 0)) ? '1' : '0';
+				str[7] = (i & (1u << 7)) ? '1' : '0';
+				str[6] = (i & (1u << 6)) ? '1' : '0';
+				str[5] = (i & (1u << 5)) ? '1' : '0';
+				str[4] = (i & (1u << 4)) ? '1' : '0';
+				str[3] = (i & (1u << 3)) ? '1' : '0';
+				str[2] = (i & (1u << 2)) ? '1' : '0';
+				str[1] = (i & (1u << 1)) ? '1' : '0';
+				str[0] = (i & (1u << 0)) ? '1' : '0';
 				str[8] = '\0';
 			}
 
@@ -51,8 +51,8 @@ static void BitStrGen(void)
 
 int TestBitStream(int argc, char* argv[])
 {
-	wBitStream* bs = NULL;
-	BYTE buffer[1024] = { 0 };
+	wBitStream* bs = nullptr;
+	BYTE buffer[1024] = WINPR_C_ARRAY_INIT;
 
 	WINPR_UNUSED(argc);
 	WINPR_UNUSED(argv);

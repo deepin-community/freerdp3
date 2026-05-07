@@ -12,7 +12,11 @@ static UINT32 prand(UINT32 max)
 	UINT32 tmp = 0;
 	if (max <= 1)
 		return 1;
-	winpr_RAND(&tmp, sizeof(tmp));
+	if (winpr_RAND(&tmp, sizeof(tmp)) < 0)
+	{
+		// NOLINTNEXTLINE(concurrency-mt-unsafe)
+		exit(-1);
+	}
 	return tmp % (max - 1) + 1;
 }
 
@@ -20,9 +24,9 @@ int TestPathMakePath(int argc, char* argv[])
 {
 	size_t baseLen = 0;
 	BOOL success = 0;
-	char tmp[64] = { 0 };
-	char* path = NULL;
-	char* cur = NULL;
+	char tmp[64] = WINPR_C_ARRAY_INIT;
+	char* path = nullptr;
+	char* cur = nullptr;
 	char delim = PathGetSeparatorA(0);
 	char* base = GetKnownPath(KNOWN_PATH_TEMP);
 
@@ -53,7 +57,7 @@ int TestPathMakePath(int argc, char* argv[])
 	}
 
 	printf("Creating path %s\n", path);
-	success = winpr_PathMakePath(path, NULL);
+	success = winpr_PathMakePath(path, nullptr);
 
 	if (!success)
 	{

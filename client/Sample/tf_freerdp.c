@@ -51,7 +51,7 @@
  * It can be used to reset invalidated areas. */
 static BOOL tf_begin_paint(rdpContext* context)
 {
-	rdpGdi* gdi = NULL;
+	rdpGdi* gdi = nullptr;
 
 	WINPR_ASSERT(context);
 
@@ -71,7 +71,7 @@ static BOOL tf_begin_paint(rdpContext* context)
  */
 static BOOL tf_end_paint(rdpContext* context)
 {
-	rdpGdi* gdi = NULL;
+	rdpGdi* gdi = nullptr;
 
 	WINPR_ASSERT(context);
 
@@ -95,8 +95,8 @@ static BOOL tf_end_paint(rdpContext* context)
 
 static BOOL tf_desktop_resize(rdpContext* context)
 {
-	rdpGdi* gdi = NULL;
-	rdpSettings* settings = NULL;
+	rdpGdi* gdi = nullptr;
+	rdpSettings* settings = nullptr;
 
 	WINPR_ASSERT(context);
 
@@ -144,7 +144,7 @@ static BOOL tf_keyboard_set_ime_status(rdpContext* context, UINT16 imeId, UINT32
  * Set all configuration options to support and load channels here. */
 static BOOL tf_pre_connect(freerdp* instance)
 {
-	rdpSettings* settings = NULL;
+	rdpSettings* settings = nullptr;
 
 	WINPR_ASSERT(instance);
 	WINPR_ASSERT(instance->context);
@@ -167,9 +167,12 @@ static BOOL tf_pre_connect(freerdp* instance)
 	 * callbacks or deactivate certain features. */
 	/* Register the channel listeners.
 	 * They are required to set up / tear down channels if they are loaded. */
-	PubSub_SubscribeChannelConnected(instance->context->pubSub, tf_OnChannelConnectedEventHandler);
-	PubSub_SubscribeChannelDisconnected(instance->context->pubSub,
-	                                    tf_OnChannelDisconnectedEventHandler);
+	if (PubSub_SubscribeChannelConnected(instance->context->pubSub,
+	                                     tf_OnChannelConnectedEventHandler) < 0)
+		return FALSE;
+	if (PubSub_SubscribeChannelDisconnected(instance->context->pubSub,
+	                                        tf_OnChannelDisconnectedEventHandler) < 0)
+		return FALSE;
 
 	/* TODO: Any code your client requires */
 	return TRUE;
@@ -185,7 +188,7 @@ static BOOL tf_pre_connect(freerdp* instance)
  */
 static BOOL tf_post_connect(freerdp* instance)
 {
-	rdpContext* context = NULL;
+	rdpContext* context = nullptr;
 
 	if (!gdi_init(instance, PIXEL_FORMAT_XRGB32))
 		return FALSE;
@@ -215,7 +218,7 @@ static BOOL tf_post_connect(freerdp* instance)
  */
 static void tf_post_disconnect(freerdp* instance)
 {
-	tfContext* context = NULL;
+	tfContext* context = nullptr;
 
 	if (!instance)
 		return;
@@ -242,7 +245,7 @@ static DWORD WINAPI tf_client_thread_proc(LPVOID arg)
 	DWORD nCount = 0;
 	DWORD status = 0;
 	DWORD result = 0;
-	HANDLE handles[MAXIMUM_WAIT_OBJECTS] = { 0 };
+	HANDLE handles[MAXIMUM_WAIT_OBJECTS] = WINPR_C_ARRAY_INIT;
 	BOOL rc = freerdp_connect(instance);
 
 	WINPR_ASSERT(instance->context);
@@ -299,10 +302,7 @@ disconnect:
  * if available. */
 static BOOL tf_client_global_init(void)
 {
-	if (freerdp_handle_signals() != 0)
-		return FALSE;
-
-	return TRUE;
+	return freerdp_handle_signals() == 0;
 }
 
 /* Optional global tear down */
@@ -312,7 +312,7 @@ static void tf_client_global_uninit(void)
 
 static int tf_logon_error_info(freerdp* instance, UINT32 data, UINT32 type)
 {
-	tfContext* tf = NULL;
+	tfContext* tf = nullptr;
 	const char* str_data = freerdp_get_logon_error_info_data(data);
 	const char* str_type = freerdp_get_logon_error_info_type(type);
 
@@ -387,7 +387,7 @@ static int RdpClientEntry(RDP_CLIENT_ENTRY_POINTS* pEntryPoints)
 int main(int argc, char* argv[])
 {
 	int rc = -1;
-	RDP_CLIENT_ENTRY_POINTS clientEntryPoints = { 0 };
+	RDP_CLIENT_ENTRY_POINTS clientEntryPoints = WINPR_C_ARRAY_INIT;
 
 	RdpClientEntry(&clientEntryPoints);
 	rdpContext* context = freerdp_client_context_new(&clientEntryPoints);

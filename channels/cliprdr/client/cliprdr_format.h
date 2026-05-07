@@ -23,15 +23,37 @@
 #ifndef FREERDP_CHANNEL_CLIPRDR_CLIENT_FORMAT_H
 #define FREERDP_CHANNEL_CLIPRDR_CLIENT_FORMAT_H
 
+#include <winpr/wtypes.h>
+#include <winpr/stream.h>
+
+#include <freerdp/api.h>
+#include <freerdp/channels/cliprdr.h>
+
+#include "cliprdr_main.h"
+
+WINPR_ATTR_NODISCARD
+FREERDP_LOCAL
 UINT cliprdr_process_format_list(cliprdrPlugin* cliprdr, wStream* s, UINT32 dataLen,
                                  UINT16 msgFlags);
+
+WINPR_ATTR_NODISCARD
+FREERDP_LOCAL
 UINT cliprdr_process_format_list_response(cliprdrPlugin* cliprdr, wStream* s, UINT32 dataLen,
                                           UINT16 msgFlags);
+
+WINPR_ATTR_NODISCARD
+FREERDP_LOCAL
 UINT cliprdr_process_format_data_request(cliprdrPlugin* cliprdr, wStream* s, UINT32 dataLen,
                                          UINT16 msgFlags);
+
+WINPR_ATTR_NODISCARD
+FREERDP_LOCAL
 UINT cliprdr_process_format_data_response(cliprdrPlugin* cliprdr, wStream* s, UINT32 dataLen,
                                           UINT16 msgFlags);
-CLIPRDR_FORMAT_LIST cliprdr_filter_format_list(const CLIPRDR_FORMAT_LIST* list, const UINT32 mask,
-                                               const UINT32 checkMask);
+
+WINPR_ATTR_NODISCARD
+FREERDP_LOCAL
+CLIPRDR_FORMAT_LIST cliprdr_filter_format_list(const CLIPRDR_FORMAT_LIST* list, UINT32 mask,
+                                               UINT32 checkMask);
 
 #endif /* FREERDP_CHANNEL_CLIPRDR_CLIENT_FORMAT_H */

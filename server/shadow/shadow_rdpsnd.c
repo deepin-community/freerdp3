@@ -34,13 +34,16 @@
 
 static void rdpsnd_activated(RdpsndServerContext* context)
 {
+	WINPR_ASSERT(context);
 	for (size_t i = 0; i < context->num_client_formats; i++)
 	{
 		for (size_t j = 0; j < context->num_server_formats; j++)
 		{
 			if (audio_format_compatible(&context->server_formats[j], &context->client_formats[i]))
 			{
-				context->SelectFormat(context, WINPR_ASSERTING_INT_CAST(UINT16, i));
+				const UINT rc = context->SelectFormat(context, WINPR_ASSERTING_INT_CAST(UINT16, i));
+				if (rc != CHANNEL_RC_OK)
+					WLog_WARN(TAG, "SelectFormat failed with %" PRIu32, rc);
 				return;
 			}
 		}
@@ -51,8 +54,8 @@ static void rdpsnd_activated(RdpsndServerContext* context)
 
 int shadow_client_rdpsnd_init(rdpShadowClient* client)
 {
-	RdpsndServerContext* rdpsnd = NULL;
-	rdpsnd = client->rdpsnd = rdpsnd_server_context_new(client->vcm);
+	WINPR_ASSERT(client);
+	RdpsndServerContext* rdpsnd = client->rdpsnd = rdpsnd_server_context_new(client->vcm);
 
 	if (!rdpsnd)
 	{
@@ -75,16 +78,20 @@ int shadow_client_rdpsnd_init(rdpShadowClient* client)
 		rdpsnd->src_format = &rdpsnd->server_formats[0];
 
 	rdpsnd->Activated = rdpsnd_activated;
-	rdpsnd->Initialize(rdpsnd, TRUE);
+
+	const UINT error = rdpsnd->Initialize(rdpsnd, TRUE);
+	if (error != CHANNEL_RC_OK)
+		return -1;
 	return 1;
 }
 
 void shadow_client_rdpsnd_uninit(rdpShadowClient* client)
 {
+	WINPR_ASSERT(client);
 	if (client->rdpsnd)
 	{
 		client->rdpsnd->Stop(client->rdpsnd);
 		rdpsnd_server_context_free(client->rdpsnd);
-		client->rdpsnd = NULL;
+		client->rdpsnd = nullptr;
 	}
 }

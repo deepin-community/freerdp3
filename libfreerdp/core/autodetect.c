@@ -64,7 +64,7 @@ typedef struct
 
 static const char* autodetect_header_type_string(UINT8 headerType, char* buffer, size_t size)
 {
-	const char* str = NULL;
+	const char* str = nullptr;
 	switch (headerType)
 	{
 		case TYPE_ID_AUTODETECT_REQUEST:
@@ -135,7 +135,7 @@ static BOOL autodetect_send_rtt_measure_request(rdpAutoDetect* autodetect,
 {
 	UINT16 requestType = 0;
 	UINT16 sec_flags = 0;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	WINPR_ASSERT(autodetect);
 	WINPR_ASSERT(autodetect->context);
@@ -162,7 +162,7 @@ static BOOL autodetect_send_rtt_measure_request(rdpAutoDetect* autodetect,
 static BOOL autodetect_send_rtt_measure_response(rdpAutoDetect* autodetect, UINT16 sequenceNumber)
 {
 	UINT16 sec_flags = 0;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	WINPR_ASSERT(autodetect);
 	WINPR_ASSERT(autodetect->context);
@@ -189,7 +189,7 @@ static BOOL autodetect_send_bandwidth_measure_start(rdpAutoDetect* autodetect,
 {
 	UINT16 requestType = 0;
 	UINT16 sec_flags = 0;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	WINPR_ASSERT(autodetect);
 	WINPR_ASSERT(autodetect->context);
@@ -219,7 +219,7 @@ autodetect_send_bandwidth_measure_payload(rdpAutoDetect* autodetect,
                                           UINT16 sequenceNumber, UINT16 payloadLength)
 {
 	UINT16 sec_flags = 0;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	WINPR_ASSERT(autodetect);
 	WINPR_ASSERT(autodetect->context);
@@ -249,7 +249,11 @@ autodetect_send_bandwidth_measure_payload(rdpAutoDetect* autodetect,
 	Stream_Write_UINT16(s, RDP_BW_PAYLOAD_REQUEST_TYPE); /* requestType (2 bytes) */
 	Stream_Write_UINT16(s, payloadLength);               /* payloadLength (2 bytes) */
 	/* Random data (better measurement in case the line is compressed) */
-	winpr_RAND(Stream_Pointer(s), payloadLength);
+	if (winpr_RAND(Stream_Pointer(s), payloadLength) < 0)
+	{
+		Stream_Release(s);
+		return FALSE;
+	}
 	Stream_Seek(s, payloadLength);
 	return rdp_send_message_channel_pdu(autodetect->context->rdp, s,
 	                                    sec_flags | SEC_AUTODETECT_REQ);
@@ -261,7 +265,7 @@ static BOOL autodetect_send_bandwidth_measure_stop(rdpAutoDetect* autodetect,
 {
 	UINT16 requestType = 0;
 	UINT16 sec_flags = 0;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	WINPR_ASSERT(autodetect);
 	WINPR_ASSERT(autodetect->context);
@@ -304,7 +308,11 @@ static BOOL autodetect_send_bandwidth_measure_stop(rdpAutoDetect* autodetect,
 			}
 
 			/* Random data (better measurement in case the line is compressed) */
-			winpr_RAND(Stream_Pointer(s), payloadLength);
+			if (winpr_RAND(Stream_Pointer(s), payloadLength) < 0)
+			{
+				Stream_Release(s);
+				return FALSE;
+			}
 			Stream_Seek(s, payloadLength);
 		}
 	}
@@ -374,7 +382,7 @@ static BOOL autodetect_send_netchar_result(rdpAutoDetect* autodetect,
                                            const rdpNetworkCharacteristicsResult* result)
 {
 	UINT16 sec_flags = 0;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	WINPR_ASSERT(autodetect);
 	WINPR_ASSERT(autodetect->context);
@@ -796,8 +804,8 @@ static BOOL autodetect_recv_netchar_request(rdpAutoDetect* autodetect, RDP_TRANS
 state_run_t autodetect_recv_request_packet(rdpAutoDetect* autodetect, RDP_TRANSPORT_TYPE transport,
                                            wStream* s)
 {
-	AUTODETECT_REQ_PDU autodetectReqPdu = { 0 };
-	const rdpSettings* settings = NULL;
+	AUTODETECT_REQ_PDU autodetectReqPdu = WINPR_C_ARRAY_INIT;
+	const rdpSettings* settings = nullptr;
 	BOOL success = FALSE;
 
 	WINPR_ASSERT(autodetect);
@@ -816,11 +824,11 @@ state_run_t autodetect_recv_request_packet(rdpAutoDetect* autodetect, RDP_TRANSP
 
 	if (WLog_IsLevelActive(autodetect->log, WLOG_TRACE))
 	{
-		char rbuffer[128] = { 0 };
+		char rbuffer[128] = WINPR_C_ARRAY_INIT;
 		const char* requestTypeStr = autodetect_request_type_to_string_buffer(
 		    autodetectReqPdu.requestType, rbuffer, sizeof(rbuffer));
 
-		char hbuffer[128] = { 0 };
+		char hbuffer[128] = WINPR_C_ARRAY_INIT;
 		const char* headerStr =
 		    autodetect_header_type_string(autodetectReqPdu.headerTypeId, hbuffer, sizeof(hbuffer));
 
@@ -833,7 +841,7 @@ state_run_t autodetect_recv_request_packet(rdpAutoDetect* autodetect, RDP_TRANSP
 
 	if (!freerdp_settings_get_bool(settings, FreeRDP_NetworkAutoDetect))
 	{
-		char rbuffer[128] = { 0 };
+		char rbuffer[128] = WINPR_C_ARRAY_INIT;
 		const char* requestTypeStr = autodetect_request_type_to_string_buffer(
 		    autodetectReqPdu.requestType, rbuffer, sizeof(rbuffer));
 
@@ -846,10 +854,10 @@ state_run_t autodetect_recv_request_packet(rdpAutoDetect* autodetect, RDP_TRANSP
 
 	if (autodetectReqPdu.headerTypeId != TYPE_ID_AUTODETECT_REQUEST)
 	{
-		char rbuffer[128] = { 0 };
+		char rbuffer[128] = WINPR_C_ARRAY_INIT;
 		const char* requestTypeStr = autodetect_request_type_to_string_buffer(
 		    autodetectReqPdu.requestType, rbuffer, sizeof(rbuffer));
-		char hbuffer[128] = { 0 };
+		char hbuffer[128] = WINPR_C_ARRAY_INIT;
 		const char* headerStr =
 		    autodetect_header_type_string(autodetectReqPdu.headerTypeId, hbuffer, sizeof(hbuffer));
 
@@ -860,8 +868,10 @@ state_run_t autodetect_recv_request_packet(rdpAutoDetect* autodetect, RDP_TRANSP
 		goto fail;
 	}
 
-	IFCALL(autodetect->RequestReceived, autodetect, transport, autodetectReqPdu.requestType,
-	       autodetectReqPdu.sequenceNumber);
+	if (!IFCALLRESULT(TRUE, autodetect->RequestReceived, autodetect, transport,
+	                  autodetectReqPdu.requestType, autodetectReqPdu.sequenceNumber))
+		goto fail;
+
 	switch (autodetectReqPdu.requestType)
 	{
 		case RDP_RTT_REQUEST_TYPE_CONTINUOUS:
@@ -917,8 +927,8 @@ fail:
 state_run_t autodetect_recv_response_packet(rdpAutoDetect* autodetect, RDP_TRANSPORT_TYPE transport,
                                             wStream* s)
 {
-	AUTODETECT_RSP_PDU autodetectRspPdu = { 0 };
-	const rdpSettings* settings = NULL;
+	AUTODETECT_RSP_PDU autodetectRspPdu = WINPR_C_ARRAY_INIT;
+	const rdpSettings* settings = nullptr;
 	BOOL success = FALSE;
 
 	WINPR_ASSERT(autodetect);
@@ -938,10 +948,10 @@ state_run_t autodetect_recv_response_packet(rdpAutoDetect* autodetect, RDP_TRANS
 
 	if (WLog_IsLevelActive(autodetect->log, WLOG_TRACE))
 	{
-		char rbuffer[128] = { 0 };
+		char rbuffer[128] = WINPR_C_ARRAY_INIT;
 		const char* requestStr = autodetect_request_type_to_string_buffer(
 		    autodetectRspPdu.responseType, rbuffer, sizeof(rbuffer));
-		char hbuffer[128] = { 0 };
+		char hbuffer[128] = WINPR_C_ARRAY_INIT;
 		const char* headerStr =
 		    autodetect_header_type_string(autodetectRspPdu.headerTypeId, hbuffer, sizeof(hbuffer));
 
@@ -954,7 +964,7 @@ state_run_t autodetect_recv_response_packet(rdpAutoDetect* autodetect, RDP_TRANS
 
 	if (!freerdp_settings_get_bool(settings, FreeRDP_NetworkAutoDetect))
 	{
-		char rbuffer[128] = { 0 };
+		char rbuffer[128] = WINPR_C_ARRAY_INIT;
 
 		const char* requestStr = autodetect_request_type_to_string_buffer(
 		    autodetectRspPdu.responseType, rbuffer, sizeof(rbuffer));
@@ -968,10 +978,10 @@ state_run_t autodetect_recv_response_packet(rdpAutoDetect* autodetect, RDP_TRANS
 
 	if (autodetectRspPdu.headerTypeId != TYPE_ID_AUTODETECT_RESPONSE)
 	{
-		char rbuffer[128] = { 0 };
+		char rbuffer[128] = WINPR_C_ARRAY_INIT;
 		const char* requestStr = autodetect_request_type_to_string_buffer(
 		    autodetectRspPdu.responseType, rbuffer, sizeof(rbuffer));
-		char hbuffer[128] = { 0 };
+		char hbuffer[128] = WINPR_C_ARRAY_INIT;
 		const char* headerStr =
 		    autodetect_header_type_string(autodetectRspPdu.headerTypeId, hbuffer, sizeof(hbuffer));
 		WLog_Print(autodetect->log, WLOG_ERROR,
@@ -981,8 +991,10 @@ state_run_t autodetect_recv_response_packet(rdpAutoDetect* autodetect, RDP_TRANS
 		goto fail;
 	}
 
-	IFCALL(autodetect->ResponseReceived, autodetect, transport, autodetectRspPdu.responseType,
-	       autodetectRspPdu.sequenceNumber);
+	if (!IFCALLRESULT(TRUE, autodetect->ResponseReceived, autodetect, transport,
+	                  autodetectRspPdu.responseType, autodetectRspPdu.sequenceNumber))
+		goto fail;
+
 	switch (autodetectRspPdu.responseType)
 	{
 		case RDP_RTT_RESPONSE_TYPE:
@@ -1043,7 +1055,7 @@ rdpAutoDetect* autodetect_new(rdpContext* context)
 {
 	rdpAutoDetect* autoDetect = (rdpAutoDetect*)calloc(1, sizeof(rdpAutoDetect));
 	if (!autoDetect)
-		return NULL;
+		return nullptr;
 	autoDetect->context = context;
 	autoDetect->log = WLog_Get(AUTODETECT_TAG);
 

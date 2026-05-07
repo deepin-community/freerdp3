@@ -116,11 +116,11 @@ static BOOL nsc_encode_argb_to_aycocg(NSC_CONTEXT* WINPR_RESTRICT context,
                                       const BYTE* WINPR_RESTRICT data, UINT32 scanline)
 {
 	size_t y = 0;
-	const BYTE* src = NULL;
-	BYTE* yplane = NULL;
-	BYTE* coplane = NULL;
-	BYTE* cgplane = NULL;
-	BYTE* aplane = NULL;
+	const BYTE* src = nullptr;
+	BYTE* yplane = nullptr;
+	BYTE* coplane = nullptr;
+	BYTE* cgplane = nullptr;
+	BYTE* aplane = nullptr;
 	INT16 r_val = 0;
 	INT16 g_val = 0;
 	INT16 b_val = 0;
@@ -458,10 +458,13 @@ BOOL nsc_compose_message(NSC_CONTEXT* WINPR_RESTRICT context, wStream* WINPR_RES
                          UINT32 scanline)
 {
 	BOOL rc = 0;
-	NSC_MESSAGE message = { 0 };
+	NSC_MESSAGE message = WINPR_C_ARRAY_INIT;
 
 	if (!context || !s || !data)
 		return FALSE;
+
+	if (scanline == 0)
+		scanline = width * FreeRDPGetBytesPerPixel(context->format);
 
 	context->width = WINPR_ASSERTING_INT_CAST(UINT16, width);
 	context->height = WINPR_ASSERTING_INT_CAST(UINT16, height);
@@ -495,6 +498,7 @@ BOOL nsc_compose_message(NSC_CONTEXT* WINPR_RESTRICT context, wStream* WINPR_RES
 	return nsc_write_message(context, s, &message);
 }
 
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 BOOL nsc_decompose_message(NSC_CONTEXT* WINPR_RESTRICT context, wStream* WINPR_RESTRICT s,
                            BYTE* WINPR_RESTRICT bmpdata, UINT32 x, UINT32 y, UINT32 width,
                            UINT32 height, UINT32 rowstride, UINT32 format, UINT32 flip)
@@ -511,3 +515,4 @@ BOOL nsc_decompose_message(NSC_CONTEXT* WINPR_RESTRICT context, wStream* WINPR_R
 	Stream_Seek(s, size);
 	return TRUE;
 }
+#endif

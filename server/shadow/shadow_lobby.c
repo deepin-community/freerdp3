@@ -21,7 +21,9 @@
 #include <winpr/assert.h>
 #include <winpr/cast.h>
 
+#if defined(WITH_RDTK)
 #include <rdtk/rdtk.h>
+#endif
 
 #include "shadow.h"
 
@@ -30,25 +32,28 @@
 BOOL shadow_client_init_lobby(rdpShadowServer* server)
 {
 	BOOL rc = FALSE;
-	int width = 0;
-	int height = 0;
-	rdtkSurface* surface = NULL;
-	RECTANGLE_16 invalidRect;
+	RECTANGLE_16 invalidRect = WINPR_C_ARRAY_INIT;
+
+	WINPR_ASSERT(server);
 	rdpShadowSurface* lobby = server->lobby;
 
 	if (!lobby)
 		return FALSE;
 
+	EnterCriticalSection(&lobby->lock);
+
+#if defined(WITH_RDTK)
+	rdtkSurface* surface = nullptr;
 	rdtkEngine* engine = rdtk_engine_new();
 	if (!engine)
-		return FALSE;
+		goto fail;
 
-	EnterCriticalSection(&lobby->lock);
 	surface =
 	    rdtk_surface_new(engine, lobby->data, WINPR_ASSERTING_INT_CAST(uint16_t, lobby->width),
 	                     WINPR_ASSERTING_INT_CAST(uint16_t, lobby->height), lobby->scanline);
 	if (!surface)
 		goto fail;
+#endif
 
 	invalidRect.left = 0;
 	invalidRect.top = 0;
@@ -59,30 +64,40 @@ BOOL shadow_client_init_lobby(rdpShadowServer* server)
 	if (server->shareSubRect)
 	{
 		/* If we have shared sub rect setting, only fill shared rect */
-		rectangles_intersection(&invalidRect, &(server->subRect), &invalidRect);
+		if (!rectangles_intersection(&invalidRect, &(server->subRect), &invalidRect))
+			goto fail;
 	}
 
-	width = invalidRect.right - invalidRect.left;
-	height = invalidRect.bottom - invalidRect.top;
+#if defined(WITH_RDTK)
+	const int width = invalidRect.right - invalidRect.left;
+	const int height = invalidRect.bottom - invalidRect.top;
 	WINPR_ASSERT(width <= UINT16_MAX);
 	WINPR_ASSERT(width >= 0);
 	WINPR_ASSERT(height <= UINT16_MAX);
 	WINPR_ASSERT(height >= 0);
-	rdtk_surface_fill(surface, invalidRect.left, invalidRect.top, (UINT16)width, (UINT16)height,
-	                  0x3BB9FF);
 
-	rdtk_label_draw(surface, invalidRect.left, invalidRect.top, (UINT16)width, (UINT16)height, NULL,
-	                "Welcome", 0, 0);
-	// rdtk_button_draw(surface, 16, 64, 128, 32, NULL, "button");
-	// rdtk_text_field_draw(surface, 16, 128, 128, 32, NULL, "text field");
+	if (rdtk_surface_fill(surface, invalidRect.left, invalidRect.top, (UINT16)width, (UINT16)height,
+	                      0x3BB9FF) < 0)
+		goto fail;
 
-	rdtk_surface_free(surface);
+	if (rdtk_label_draw(surface, invalidRect.left, invalidRect.top, (UINT16)width, (UINT16)height,
+	                    nullptr, "Welcome", 0, 0) < 0)
+		goto fail;
+	// rdtk_button_draw(surface, 16, 64, 128, 32, nullptr, "button");
+	// rdtk_text_field_draw(surface, 16, 128, 128, 32, nullptr, "text field");
+#endif
 
-	region16_union_rect(&(lobby->invalidRegion), &(lobby->invalidRegion), &invalidRect);
+	if (!region16_union_rect(&(lobby->invalidRegion), &(lobby->invalidRegion), &invalidRect))
+		goto fail;
 
 	rc = TRUE;
 fail:
-	LeaveCriticalSection(&lobby->lock);
+
+#if defined(WITH_RDTK)
+	rdtk_surface_free(surface);
 	rdtk_engine_free(engine);
+#endif
+
+	LeaveCriticalSection(&lobby->lock);
 	return rc;
 }

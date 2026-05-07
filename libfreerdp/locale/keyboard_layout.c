@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <winpr/atexit.h>
 #include <winpr/crt.h>
 #include <winpr/path.h>
 #include <winpr/json.h>
@@ -904,7 +905,7 @@ static BOOL load_layout_file(void)
 {
 #if defined(DUMP_LAYOUTS_TO_JSON)
 	/* Dump to file in /tmp */
-	char* str = NULL;
+	char* str = nullptr;
 	WINPR_JSON* json = WINPR_JSON_CreateObject();
 	if (!json)
 		goto end;
@@ -933,13 +934,13 @@ end:
 	return TRUE;
 }
 #else
-static RDP_KEYBOARD_LAYOUT* sRDP_KEYBOARD_LAYOUT_TABLE = NULL;
+static RDP_KEYBOARD_LAYOUT* sRDP_KEYBOARD_LAYOUT_TABLE = nullptr;
 static size_t sRDP_KEYBOARD_LAYOUT_TABLE_len = 0;
 
-static RDP_KEYBOARD_LAYOUT_VARIANT* sRDP_KEYBOARD_LAYOUT_VARIANT_TABLE = NULL;
+static RDP_KEYBOARD_LAYOUT_VARIANT* sRDP_KEYBOARD_LAYOUT_VARIANT_TABLE = nullptr;
 static size_t sRDP_KEYBOARD_LAYOUT_VARIANT_TABLE_len = 0;
 
-static RDP_KEYBOARD_IME* sRDP_KEYBOARD_IME_TABLE = NULL;
+static RDP_KEYBOARD_IME* sRDP_KEYBOARD_IME_TABLE = nullptr;
 static size_t sRDP_KEYBOARD_IME_TABLE_len = 0;
 
 static void clear_keyboard_layout(RDP_KEYBOARD_LAYOUT* layout)
@@ -948,7 +949,7 @@ static void clear_keyboard_layout(RDP_KEYBOARD_LAYOUT* layout)
 		return;
 
 	free(layout->name);
-	const RDP_KEYBOARD_LAYOUT empty = { 0 };
+	const RDP_KEYBOARD_LAYOUT empty = WINPR_C_ARRAY_INIT;
 	*layout = empty;
 }
 
@@ -958,7 +959,7 @@ static void clear_keyboard_variant(RDP_KEYBOARD_LAYOUT_VARIANT* layout)
 		return;
 
 	free(layout->name);
-	const RDP_KEYBOARD_LAYOUT_VARIANT empty = { 0 };
+	const RDP_KEYBOARD_LAYOUT_VARIANT empty = WINPR_C_ARRAY_INIT;
 	*layout = empty;
 }
 
@@ -969,7 +970,7 @@ static void clear_keyboard_ime(RDP_KEYBOARD_IME* layout)
 
 	free(layout->file);
 	free(layout->name);
-	const RDP_KEYBOARD_IME empty = { 0 };
+	const RDP_KEYBOARD_IME empty = WINPR_C_ARRAY_INIT;
 	*layout = empty;
 }
 
@@ -982,7 +983,7 @@ static void clear_layout_tables(void)
 	}
 
 	free(sRDP_KEYBOARD_LAYOUT_TABLE);
-	sRDP_KEYBOARD_LAYOUT_TABLE = NULL;
+	sRDP_KEYBOARD_LAYOUT_TABLE = nullptr;
 	sRDP_KEYBOARD_LAYOUT_TABLE_len = 0;
 
 	for (size_t x = 0; x < sRDP_KEYBOARD_LAYOUT_VARIANT_TABLE_len; x++)
@@ -991,7 +992,7 @@ static void clear_layout_tables(void)
 		clear_keyboard_variant(variant);
 	}
 	free(sRDP_KEYBOARD_LAYOUT_VARIANT_TABLE);
-	sRDP_KEYBOARD_LAYOUT_VARIANT_TABLE = NULL;
+	sRDP_KEYBOARD_LAYOUT_VARIANT_TABLE = nullptr;
 	sRDP_KEYBOARD_LAYOUT_VARIANT_TABLE_len = 0;
 
 	for (size_t x = 0; x < sRDP_KEYBOARD_IME_TABLE_len; x++)
@@ -1000,7 +1001,7 @@ static void clear_layout_tables(void)
 		clear_keyboard_ime(ime);
 	}
 	free(sRDP_KEYBOARD_IME_TABLE);
-	sRDP_KEYBOARD_IME_TABLE = NULL;
+	sRDP_KEYBOARD_IME_TABLE = nullptr;
 	sRDP_KEYBOARD_IME_TABLE_len = 0;
 }
 
@@ -1019,7 +1020,7 @@ static char* get_object_str(WINPR_JSON* json, size_t pos, const char* name)
 	{
 		WLog_WARN(TAG, "Invalid JSON entry at entry %" PRIuz ", missing an Object named '%s'", pos,
 		          name);
-		return NULL;
+		return nullptr;
 	}
 	WINPR_JSON* obj = WINPR_JSON_GetObjectItemCaseSensitive(json, name);
 	WINPR_ASSERT(obj);
@@ -1028,15 +1029,15 @@ static char* get_object_str(WINPR_JSON* json, size_t pos, const char* name)
 		WLog_WARN(TAG,
 		          "Invalid JSON entry at entry %" PRIuz ", Object named '%s': Not of type string",
 		          pos, name);
-		return NULL;
+		return nullptr;
 	}
 
 	const char* str = WINPR_JSON_GetStringValue(obj);
 	if (!str)
 	{
-		WLog_WARN(TAG, "Invalid JSON entry at entry %" PRIuz ", Object named '%s': NULL string",
+		WLog_WARN(TAG, "Invalid JSON entry at entry %" PRIuz ", Object named '%s': nullptr string",
 		          pos, name);
-		return NULL;
+		return nullptr;
 	}
 
 	return _strdup(str);
@@ -1078,7 +1079,7 @@ static bool parse_json_layout_entry_id(WINPR_JSON* json, size_t pos, RDP_KEYBOAR
 	}
 	entry->code = WINPR_CXX_COMPAT_CAST(uint32_t, code);
 	entry->name = get_object_str(json, pos, "name");
-	return entry->name != NULL;
+	return entry->name != nullptr;
 }
 
 static BOOL parse_json_layout_entry(WINPR_JSON* json, size_t pos, RDP_KEYBOARD_LAYOUT* entry)
@@ -1139,7 +1140,7 @@ static BOOL parse_json_variant_entry(WINPR_JSON* json, size_t pos,
 		return FALSE;
 	}
 
-	RDP_KEYBOARD_LAYOUT val = { 0 };
+	RDP_KEYBOARD_LAYOUT val = WINPR_C_ARRAY_INIT;
 	const BOOL rc = parse_json_layout_entry_id(json, pos, &val);
 	entry->code = val.code;
 	entry->name = val.name;
@@ -1229,7 +1230,7 @@ static BOOL CALLBACK load_layouts(PINIT_ONCE once, PVOID param, PVOID* context)
 	WINPR_UNUSED(param);
 	WINPR_UNUSED(context);
 
-	WINPR_JSON* json = NULL;
+	WINPR_JSON* json = nullptr;
 	char* filename = GetCombinedPath(FREERDP_RESOURCE_ROOT, "KeyboardLayoutMap.json");
 	if (!filename)
 	{
@@ -1267,15 +1268,14 @@ static BOOL CALLBACK load_layouts(PINIT_ONCE once, PVOID param, PVOID* context)
 end:
 	free(filename);
 	WINPR_JSON_Delete(json);
-	(void)atexit(clear_layout_tables);
+	(void)winpr_atexit(clear_layout_tables);
 	return TRUE;
 }
 
 static BOOL load_layout_file(void)
 {
 	static INIT_ONCE once = INIT_ONCE_STATIC_INIT;
-	InitOnceExecuteOnce(&once, load_layouts, NULL, NULL);
-	return TRUE;
+	return InitOnceExecuteOnce(&once, load_layouts, nullptr, nullptr);
 }
 
 #endif
@@ -1340,7 +1340,7 @@ static const char* rdp_keyboard_layout_by_id(UINT32 id)
 			return layout->name;
 	}
 
-	return 0;
+	return nullptr;
 }
 
 static const char* rdp_keyboard_variant_by_id(UINT32 id)
@@ -1353,7 +1353,7 @@ static const char* rdp_keyboard_variant_by_id(UINT32 id)
 		if (variant->code == id)
 			return variant->name;
 	}
-	return 0;
+	return nullptr;
 }
 
 static const char* rdp_keyboard_ime_by_id(UINT32 id)
@@ -1366,7 +1366,7 @@ static const char* rdp_keyboard_ime_by_id(UINT32 id)
 		if (ime->code == id)
 			return ime->name;
 	}
-	return NULL;
+	return nullptr;
 }
 
 static BOOL rdp_keyboard_layout_clone_append(RDP_KEYBOARD_LAYOUT** layouts, size_t* pcount)
@@ -1465,7 +1465,7 @@ void freerdp_keyboard_layouts_free(RDP_KEYBOARD_LAYOUT* layouts, size_t count)
 RDP_KEYBOARD_LAYOUT* freerdp_keyboard_get_layouts(DWORD types, size_t* count)
 {
 	size_t num = 0;
-	RDP_KEYBOARD_LAYOUT* layouts = NULL;
+	RDP_KEYBOARD_LAYOUT* layouts = nullptr;
 
 	load_layout_file();
 
@@ -1496,7 +1496,7 @@ RDP_KEYBOARD_LAYOUT* freerdp_keyboard_get_layouts(DWORD types, size_t* count)
 	return layouts;
 fail:
 	freerdp_keyboard_layouts_free(layouts, num);
-	return NULL;
+	return nullptr;
 }
 
 const char* freerdp_keyboard_get_layout_name_from_id(DWORD keyboardLayoutID)
@@ -1550,7 +1550,7 @@ static void copy(const struct LanguageIdentifier* id, RDP_CODEPAGE* cp)
 static BOOL copyOnMatch(DWORD column, const char* filter, const struct LanguageIdentifier* cur,
                         RDP_CODEPAGE* dst)
 {
-	const char* what = NULL;
+	const char* what = nullptr;
 	switch (column)
 	{
 		case 0:
@@ -1589,7 +1589,7 @@ RDP_CODEPAGE* freerdp_keyboard_get_matching_codepages(DWORD column, const char* 
 	RDP_CODEPAGE* pages = calloc(ARRAYSIZE(language_identifiers), sizeof(RDP_CODEPAGE));
 
 	if (!pages)
-		return NULL;
+		return nullptr;
 
 	if (count)
 		*count = 0;
@@ -1613,7 +1613,7 @@ RDP_CODEPAGE* freerdp_keyboard_get_matching_codepages(DWORD column, const char* 
 	return pages;
 fail:
 	freerdp_codepages_free(pages);
-	return NULL;
+	return nullptr;
 }
 
 void freerdp_codepages_free(RDP_CODEPAGE* pages)

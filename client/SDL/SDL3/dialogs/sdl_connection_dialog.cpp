@@ -206,7 +206,7 @@ bool SDLConnectionDialog::handle(const SDL_Event& event)
 					case SDLK_KP_ENTER:
 						if (event.type == SDL_EVENT_KEY_UP)
 						{
-							freerdp_abort_event(_context);
+							freerdp_abort_connect_context(_context);
 							std::ignore = sdl_push_quit();
 						}
 						break;
@@ -245,7 +245,7 @@ bool SDLConnectionDialog::handle(const SDL_Event& event)
 				{
 					if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
 					{
-						freerdp_abort_event(_context);
+						freerdp_abort_connect_context(_context);
 						std::ignore = sdl_push_quit();
 					}
 				}
@@ -281,7 +281,7 @@ bool SDLConnectionDialog::handle(const SDL_Event& event)
 					case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
 						if (windowID == ev.windowID)
 						{
-							freerdp_abort_event(_context);
+							freerdp_abort_connect_context(_context);
 							std::ignore = sdl_push_quit();
 						}
 						break;
@@ -439,7 +439,7 @@ std::string SDLConnectionDialog::print(const char* fmt, va_list ap)
 		if (size > 0)
 			res.resize(WINPR_ASSERTING_INT_CAST(uint32_t, size));
 
-		va_list copy;
+		va_list copy = {};
 		va_copy(copy, ap);
 		WINPR_PRAGMA_DIAG_PUSH
 		WINPR_PRAGMA_DIAG_IGNORED_FORMAT_NONLITERAL

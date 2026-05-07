@@ -81,3 +81,19 @@ void sdl_OnChannelDisconnectedEventHandler(void* context, const ChannelDisconnec
 	else
 		freerdp_client_OnChannelDisconnectedEventHandler(context, e);
 }
+
+void sdl_OnUserNotificationEventHandler(void* context, const UserNotificationEventArgs* e)
+{
+	WINPR_UNUSED(context);
+	WINPR_ASSERT(e);
+	WINPR_ASSERT(e->e.Sender);
+
+	if (e->cancelPreviousNotification)
+		return;
+
+	WINPR_ASSERT(e->message);
+	auto parent = SDL_GetMouseFocus();
+	if (!parent)
+		parent = SDL_GetKeyboardFocus();
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, e->e.Sender, e->message, parent);
+}

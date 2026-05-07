@@ -113,18 +113,21 @@ UINT rail_read_pdu_header(wStream* s, UINT16* orderType, UINT16* orderLength)
 	return CHANNEL_RC_OK;
 }
 
-void rail_write_pdu_header(wStream* s, UINT16 orderType, UINT16 orderLength)
+BOOL rail_write_pdu_header(wStream* s, UINT16 orderType, UINT16 orderLength)
 {
+	if (!Stream_EnsureRemainingCapacity(s, 4))
+		return FALSE;
 	Stream_Write_UINT16(s, orderType);   /* orderType (2 bytes) */
 	Stream_Write_UINT16(s, orderLength); /* orderLength (2 bytes) */
+	return TRUE;
 }
 
 wStream* rail_pdu_init(size_t length)
 {
-	wStream* s = Stream_New(NULL, length + RAIL_PDU_HEADER_LENGTH);
+	wStream* s = Stream_New(nullptr, length + RAIL_PDU_HEADER_LENGTH);
 
 	if (!s)
-		return NULL;
+		return nullptr;
 
 	Stream_Seek(s, RAIL_PDU_HEADER_LENGTH);
 	return s;
@@ -146,6 +149,9 @@ UINT rail_read_handshake_order(wStream* s, RAIL_HANDSHAKE_ORDER* handshake)
 
 void rail_write_handshake_order(wStream* s, const RAIL_HANDSHAKE_ORDER* handshake)
 {
+	WINPR_ASSERT(s);
+	WINPR_ASSERT(handshake);
+	WINPR_ASSERT(Stream_EnsureRemainingCapacity(s, 4));
 	Stream_Write_UINT32(s, handshake->buildNumber); /* buildNumber (4 bytes) */
 }
 
@@ -166,6 +172,10 @@ UINT rail_read_handshake_ex_order(wStream* s, RAIL_HANDSHAKE_EX_ORDER* handshake
 
 void rail_write_handshake_ex_order(wStream* s, const RAIL_HANDSHAKE_EX_ORDER* handshakeEx)
 {
+	WINPR_ASSERT(s);
+	WINPR_ASSERT(handshakeEx);
+	WINPR_ASSERT(Stream_EnsureRemainingCapacity(s, 8));
+
 	Stream_Write_UINT32(s, handshakeEx->buildNumber);        /* buildNumber (4 bytes) */
 	Stream_Write_UINT32(s, handshakeEx->railHandshakeFlags); /* railHandshakeFlags (4 bytes) */
 }
@@ -468,11 +478,6 @@ UINT rail_read_sysparam_order(wStream* s, RAIL_SYSPARAM_ORDER* sysparam, BOOL ex
 	return error;
 }
 
-/**
- * Function description
- *
- * @return 0 on success, otherwise a Win32 err2or code
- */
 UINT rail_write_sysparam_order(wStream* s, const RAIL_SYSPARAM_ORDER* sysparam,
                                BOOL extendedSpiSupported)
 {
@@ -586,13 +591,13 @@ UINT rail_write_sysparam_order(wStream* s, const RAIL_SYSPARAM_ORDER* sysparam,
 
 BOOL rail_is_extended_spi_supported(UINT32 channelFlags)
 {
-	return (channelFlags & TS_RAIL_ORDER_HANDSHAKE_EX_FLAGS_EXTENDED_SPI_SUPPORTED) ? TRUE : FALSE;
+	return (channelFlags & TS_RAIL_ORDER_HANDSHAKE_EX_FLAGS_EXTENDED_SPI_SUPPORTED) != 0;
 }
 
 const char* rail_handshake_ex_flags_to_string(UINT32 flags, char* buffer, size_t len)
 {
 	if (len < 1)
-		return NULL;
+		return nullptr;
 
 	(void)_snprintf(buffer, len, "{");
 	char* fbuffer = &buffer[1];
@@ -611,7 +616,7 @@ const char* rail_handshake_ex_flags_to_string(UINT32 flags, char* buffer, size_t
 	if (flags & TS_RAIL_ORDER_HANDSHAKE_EX_FLAGS_EXTENDED_SPI_2_SUPPORTED)
 		winpr_str_append("EXTENDED_SPI_2_SUPPORTED", fbuffer, len, "|");
 
-	char number[16] = { 0 };
+	char number[16] = WINPR_C_ARRAY_INIT;
 	(void)_snprintf(number, sizeof(number), "[0x%08" PRIx32 "]", flags);
 	winpr_str_append(number, buffer, len, "}");
 	return buffer;

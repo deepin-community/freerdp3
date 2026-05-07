@@ -36,6 +36,7 @@ static const RDP_SHADOW_SUBSYSTEM g_Subsystems[] = {
 
 static const size_t g_SubsystemCount = ARRAYSIZE(g_Subsystems);
 
+WINPR_ATTR_NODISCARD
 static pfnShadowSubsystemEntry shadow_subsystem_load_static_entry(const char* name)
 {
 	if (!name)
@@ -48,7 +49,7 @@ static pfnShadowSubsystemEntry shadow_subsystem_load_static_entry(const char* na
 			return cur->entry;
 		}
 
-		return NULL;
+		return nullptr;
 	}
 
 	for (size_t index = 0; index < g_SubsystemCount; index++)
@@ -61,7 +62,7 @@ static pfnShadowSubsystemEntry shadow_subsystem_load_static_entry(const char* na
 			return cur->entry;
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 void shadow_subsystem_set_entry_builtin(const char* name)

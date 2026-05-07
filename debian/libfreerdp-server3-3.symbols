@@ -1,5 +1,5 @@
 libfreerdp-server3.so.3 libfreerdp-server3-3 #MINVER#
-* Build-Depends-Package: freerdp3-dev
+* Build-Depends-Package: freerdp-dev
  ainput_server_context_free@Base 3.0.0
  ainput_server_context_new@Base 3.0.0
  audin_server_context_free@Base 3.0.0

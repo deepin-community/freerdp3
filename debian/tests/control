@@ -1,3 +1,3 @@
 Tests: connect
-Depends: @, xauth, xrdp, xvfb
+Depends: freerdp-x11, xauth, xrdp, xvfb
 Restrictions: allow-stderr, needs-sudo

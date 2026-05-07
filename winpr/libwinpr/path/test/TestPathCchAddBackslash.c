@@ -11,7 +11,7 @@ static const TCHAR testPathNoBackslash[] = _T("C:\\Program Files");
 int TestPathCchAddBackslash(int argc, char* argv[])
 {
 	HRESULT status = 0;
-	TCHAR Path[PATHCCH_MAX_CCH] = { 0 };
+	TCHAR Path[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
 
 	WINPR_UNUSED(argc);
 	WINPR_UNUSED(argv);
@@ -58,9 +58,9 @@ int TestPathCchAddBackslash(int argc, char* argv[])
 		return -1;
 	}
 
-	/* Use NULL PSTR, expect FAILED(status) */
+	/* Use nullptr PSTR, expect FAILED(status) */
 
-	status = PathCchAddBackslash(NULL, PATHCCH_MAX_CCH);
+	status = PathCchAddBackslash(nullptr, PATHCCH_MAX_CCH);
 
 	if (SUCCEEDED(status))
 	{

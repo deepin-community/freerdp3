@@ -24,14 +24,12 @@
 #include <winpr/crt.h>
 #include <winpr/synch.h>
 
-#include <rdtk/rdtk.h>
-
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-	BOOL shadow_client_init_lobby(rdpShadowServer* server);
+	WINPR_ATTR_NODISCARD BOOL shadow_client_init_lobby(rdpShadowServer* server);
 
 #ifdef __cplusplus
 }

@@ -15,7 +15,7 @@
 static void log_start_(const char* fkt, ...)
 {
 	(void)fprintf(stderr, "TestSettings [");
-	va_list ap;
+	va_list ap = WINPR_C_ARRAY_INIT;
 	va_start(ap, fkt);
 	(void)vfprintf(stderr, fkt, ap);
 	va_end(ap);
@@ -27,7 +27,7 @@ static void log_start_(const char* fkt, ...)
 static BOOL log_result_(BOOL value, const char* fkt, ...)
 {
 	(void)fprintf(stderr, "TestSettings [");
-	va_list ap;
+	va_list ap = WINPR_C_ARRAY_INIT;
 	va_start(ap, fkt);
 	(void)vfprintf(stderr, fkt, ap);
 	va_end(ap);
@@ -72,12 +72,12 @@ static BOOL test_dyn_channels(void)
 	UINT32 u32 = 0;
 	rdpSettings* settings = freerdp_settings_new(0);
 	const char* argv1[] = { "foobar" };
-	ADDIN_ARGV* args1 = NULL;
-	const ADDIN_ARGV* cmp1 = NULL;
+	ADDIN_ARGV* args1 = nullptr;
+	const ADDIN_ARGV* cmp1 = nullptr;
 	const char* argv2[] = { "gaga", "abba", "foo" };
-	ADDIN_ARGV* args2 = NULL;
-	const ADDIN_ARGV* cmp2 = NULL;
-	const ADDIN_ARGV* got = NULL;
+	ADDIN_ARGV* args2 = nullptr;
+	const ADDIN_ARGV* cmp2 = nullptr;
+	const ADDIN_ARGV* got = nullptr;
 
 	if (!settings)
 		goto fail;
@@ -99,7 +99,7 @@ static BOOL test_dyn_channels(void)
 	test = freerdp_dynamic_channel_collection_add(settings, args1);
 	if (!test)
 		goto fail;
-	args1 = NULL; /* settings have taken ownership */
+	args1 = nullptr; /* settings have taken ownership */
 
 	u32 = freerdp_settings_get_uint32(settings, FreeRDP_DynamicChannelCount);
 	if (u32 != 1)
@@ -112,7 +112,7 @@ static BOOL test_dyn_channels(void)
 	test = freerdp_dynamic_channel_collection_add(settings, args2);
 	if (!test)
 		goto fail;
-	args2 = NULL; /* settings have taken ownership */
+	args2 = nullptr; /* settings have taken ownership */
 
 	u32 = freerdp_settings_get_uint32(settings, FreeRDP_DynamicChannelCount);
 	if (u32 != 2)
@@ -173,12 +173,12 @@ static BOOL test_static_channels(void)
 	UINT32 u32 = 0;
 	rdpSettings* settings = freerdp_settings_new(0);
 	const char* argv1[] = { "foobar" };
-	ADDIN_ARGV* args1 = NULL;
-	const ADDIN_ARGV* cmp1 = NULL;
+	ADDIN_ARGV* args1 = nullptr;
+	const ADDIN_ARGV* cmp1 = nullptr;
 	const char* argv2[] = { "gaga", "abba", "foo" };
-	ADDIN_ARGV* args2 = NULL;
-	const ADDIN_ARGV* cmp2 = NULL;
-	const ADDIN_ARGV* got = NULL;
+	ADDIN_ARGV* args2 = nullptr;
+	const ADDIN_ARGV* cmp2 = nullptr;
+	const ADDIN_ARGV* got = nullptr;
 
 	if (!settings)
 		goto fail;
@@ -200,7 +200,7 @@ static BOOL test_static_channels(void)
 	test = freerdp_static_channel_collection_add(settings, args1);
 	if (!test)
 		goto fail;
-	args1 = NULL; /* settings have taken ownership */
+	args1 = nullptr; /* settings have taken ownership */
 
 	u32 = freerdp_settings_get_uint32(settings, FreeRDP_StaticChannelCount);
 	if (u32 != 1)
@@ -213,7 +213,7 @@ static BOOL test_static_channels(void)
 	test = freerdp_static_channel_collection_add(settings, args2);
 	if (!test)
 		goto fail;
-	args2 = NULL; /* settings have taken ownership */
+	args2 = nullptr; /* settings have taken ownership */
 
 	u32 = freerdp_settings_get_uint32(settings, FreeRDP_StaticChannelCount);
 	if (u32 != 2)
@@ -478,7 +478,7 @@ static BOOL check_key_helpers(size_t key, const char* stype)
 	log_start();
 	int test_rounds = 100;
 	BOOL res = FALSE;
-	rdpSettings* settings = NULL;
+	rdpSettings* settings = nullptr;
 	SSIZE_T rc = 0;
 	SSIZE_T tkey = 0;
 	SSIZE_T type = 0;
@@ -556,9 +556,9 @@ static BOOL check_key_helpers(size_t key, const char* stype)
 	{
 		const size_t id = clear_keys[x];
 		const char* foo = freerdp_settings_get_name_for_key(WINPR_ASSERTING_INT_CAST(SSIZE_T, id));
-		if (!freerdp_settings_set_pointer_len(settings, id, NULL, 0))
+		if (!freerdp_settings_set_pointer_len(settings, id, nullptr, 0))
 		{
-			printf("[%s] freerdp_settings_set_pointer_len(%s, NULL, 0) failed\n", stype, foo);
+			printf("[%s] freerdp_settings_set_pointer_len(%s, nullptr, 0) failed\n", stype, foo);
 			goto fail;
 		}
 	}
@@ -567,7 +567,7 @@ static BOOL check_key_helpers(size_t key, const char* stype)
 		UINT16 intEntryType = 0;
 		BOOL expect = 0;
 		BOOL have = 0;
-		char value[8192] = { 0 };
+		char value[8192] = WINPR_C_ARRAY_INIT;
 		union
 		{
 			UINT64 u64;
@@ -579,8 +579,10 @@ static BOOL check_key_helpers(size_t key, const char* stype)
 			void* pv;
 		} val;
 
-		winpr_RAND(&intEntryType, sizeof(intEntryType));
-		winpr_RAND(&val.u64, sizeof(val.u64));
+		if (winpr_RAND(&intEntryType, sizeof(intEntryType)) < 0)
+			goto fail;
+		if (winpr_RAND(&val.u64, sizeof(val.u64)) < 0)
+			goto fail;
 
 		switch (key)
 		{
@@ -725,7 +727,7 @@ static BOOL check_args(const RDPDR_DEVICE* what, size_t count, const char* args[
 			}
 			if (count > 2)
 			{
-				return a->automount == (args[2] == NULL) ? TRUE : FALSE;
+				return (a->automount == (args[2] == nullptr));
 			}
 			else
 				return !a->automount;
@@ -776,37 +778,37 @@ static BOOL check_device_type(void)
 	};
 	const char* args[] = { "somename", "anothername", "3rdname", "4thname" };
 	const struct test_entry tests[] = {
-		{ 1, RDPDR_DTYP_SERIAL, 0, NULL },
+		{ 1, RDPDR_DTYP_SERIAL, 0, nullptr },
 		{ 1, RDPDR_DTYP_SERIAL, 0, args },
 		{ 1, RDPDR_DTYP_SERIAL, 1, args },
 		{ 1, RDPDR_DTYP_SERIAL, 2, args },
 		{ 1, RDPDR_DTYP_SERIAL, 3, args },
 		{ 1, RDPDR_DTYP_SERIAL, 4, args },
-		{ 1, RDPDR_DTYP_PARALLEL, 0, NULL },
+		{ 1, RDPDR_DTYP_PARALLEL, 0, nullptr },
 		{ 1, RDPDR_DTYP_PARALLEL, 0, args },
 		{ 1, RDPDR_DTYP_PARALLEL, 1, args },
 		{ 1, RDPDR_DTYP_PARALLEL, 2, args },
 		{ 1, RDPDR_DTYP_PARALLEL, 3, args },
 		{ 1, RDPDR_DTYP_PARALLEL, 4, args },
-		{ 1, RDPDR_DTYP_PRINT, 0, NULL },
+		{ 1, RDPDR_DTYP_PRINT, 0, nullptr },
 		{ 1, RDPDR_DTYP_PRINT, 0, args },
 		{ 1, RDPDR_DTYP_PRINT, 1, args },
 		{ 1, RDPDR_DTYP_PRINT, 2, args },
 		{ 1, RDPDR_DTYP_PRINT, 3, args },
 		{ 1, RDPDR_DTYP_PRINT, 4, args },
-		{ 1, RDPDR_DTYP_FILESYSTEM, 0, NULL },
+		{ 1, RDPDR_DTYP_FILESYSTEM, 0, nullptr },
 		{ 1, RDPDR_DTYP_FILESYSTEM, 0, args },
 		{ 1, RDPDR_DTYP_FILESYSTEM, 1, args },
 		{ 1, RDPDR_DTYP_FILESYSTEM, 2, args },
 		{ 1, RDPDR_DTYP_FILESYSTEM, 3, args },
 		{ 1, RDPDR_DTYP_FILESYSTEM, 4, args },
-		{ 1, RDPDR_DTYP_SMARTCARD, 0, NULL },
+		{ 1, RDPDR_DTYP_SMARTCARD, 0, nullptr },
 		{ 1, RDPDR_DTYP_SMARTCARD, 0, args },
 		{ 1, RDPDR_DTYP_SMARTCARD, 1, args },
 		{ 1, RDPDR_DTYP_SMARTCARD, 2, args },
 		{ 1, RDPDR_DTYP_SMARTCARD, 3, args },
 		{ 1, RDPDR_DTYP_SMARTCARD, 4, args },
-		{ -3, 0x123, 0, NULL },
+		{ -3, 0x123, 0, nullptr },
 		{ -3, 0x123, 0, args },
 		{ -3, 0x123, 1, args },
 		{ -3, 0x123, 2, args },
@@ -849,10 +851,11 @@ static BOOL test_write_offsets(rdpSettings* settings, size_t id, size_t elementS
 
 	for (size_t x = min; x < max; x++)
 	{
-		const void* ptr = NULL;
-		char buffer[8192] = { 0 };
+		const void* ptr = nullptr;
+		char buffer[8192] = WINPR_C_ARRAY_INIT;
 
-		winpr_RAND(buffer, sizeof(buffer));
+		if (winpr_RAND(buffer, sizeof(buffer)) < 0)
+			return FALSE;
 		if (!freerdp_settings_set_pointer_array(settings, id, x, buffer))
 			return FALSE;
 		ptr = freerdp_settings_get_pointer_array(settings, id, x);
@@ -915,7 +918,7 @@ static BOOL test_pointer_array(void)
 	for (size_t x = 0; x < ARRAYSIZE(tests); x++)
 	{
 		const struct pointer_test_case* cur = &tests[x];
-		if (!freerdp_settings_set_pointer_len(settings, cur->id, NULL, cur->size))
+		if (!freerdp_settings_set_pointer_len(settings, cur->id, nullptr, cur->size))
 			goto fail;
 		if (cur->sizeId >= 0)
 		{
@@ -934,7 +937,7 @@ static BOOL test_pointer_array(void)
 			if (test_write_offsets(settings, cur->id, cur->elementSize, cur->size, cur->size + 5))
 				goto fail;
 		}
-		if (!freerdp_settings_set_pointer_len(settings, cur->id, NULL, 0))
+		if (!freerdp_settings_set_pointer_len(settings, cur->id, nullptr, 0))
 			goto fail;
 		if (cur->sizeId >= 0)
 		{
@@ -949,7 +952,7 @@ static BOOL test_pointer_array(void)
 			if (test_write_offsets(settings, cur->id, cur->elementSize, 0, cur->size))
 				goto fail;
 		}
-		if (!freerdp_settings_set_pointer_len(settings, cur->id, NULL, cur->size))
+		if (!freerdp_settings_set_pointer_len(settings, cur->id, nullptr, cur->size))
 			goto fail;
 		if (cur->sizeId >= 0)
 		{
@@ -996,7 +999,7 @@ static BOOL prepare_monitor_array(rdpSettings* settings, const struct validity_t
 static BOOL check_primary_offset(const rdpSettings* settings, const rdpMonitor* monitors,
                                  size_t count)
 {
-	const rdpMonitor* cprimary = NULL;
+	const rdpMonitor* cprimary = nullptr;
 	for (size_t x = 0; x < count; x++)
 	{
 		const rdpMonitor* cur = &monitors[x];
@@ -1012,7 +1015,7 @@ static BOOL check_primary_offset(const rdpSettings* settings, const rdpMonitor* 
 				cprimary = cur;
 		}
 	}
-	const rdpMonitor* sprimary = NULL;
+	const rdpMonitor* sprimary = nullptr;
 	for (size_t x = 0; x < count; x++)
 	{
 		const rdpMonitor* cur =
@@ -1458,11 +1461,11 @@ fail:
 
 static BOOL test_string_null(rdpSettings* settings, FreeRDP_Settings_Keys_String id)
 {
-	if (!freerdp_settings_set_string(settings, id, NULL))
+	if (!freerdp_settings_set_string(settings, id, nullptr))
 		return FALSE;
 
 	const char* chk = freerdp_settings_get_string(settings, id);
-	return (chk == NULL);
+	return (chk == nullptr);
 }
 
 static BOOL test_string_check(rdpSettings* settings, FreeRDP_Settings_Keys_String id,
@@ -1497,7 +1500,7 @@ static BOOL test_string_set_readback(rdpSettings* settings, FreeRDP_Settings_Key
 	WINPR_ASSERT(len > 3);
 
 	BOOL rc = FALSE;
-	WCHAR* wstr = NULL;
+	WCHAR* wstr = nullptr;
 
 	const size_t slen = strnlen(string, len);
 	if (!freerdp_settings_set_string_len(settings, id, string, slen - 1))
@@ -1561,8 +1564,8 @@ static BOOL test_serialize_with(rdpSettings* src, const char* name)
 	log_start();
 	BOOL rc = FALSE;
 	size_t slen = 0;
-	rdpSettings* dst = NULL;
-	char* str = NULL;
+	rdpSettings* dst = nullptr;
+	char* str = nullptr;
 	if (!src)
 		goto fail;
 
@@ -1618,7 +1621,7 @@ static BOOL test_serialize_strings(DWORD flags, const char* str)
 		}
 	}
 
-	char buffer[128] = { 0 };
+	char buffer[128] = WINPR_C_ARRAY_INIT;
 	(void)_snprintf(buffer, sizeof(buffer), "%s flags 0x%08" PRIx32 " {%s}", __func__, flags, str);
 	return test_serialize_with(src, buffer);
 }
@@ -1642,7 +1645,7 @@ static BOOL add_dev_argv(rdpSettings* src, size_t argc, const char* argv[])
 {
 	FreeRDP_Settings_Keys_Pointer key = FreeRDP_DeviceArray;
 	size_t count = 6;
-	if (!freerdp_settings_set_pointer_len(src, key, NULL, count))
+	if (!freerdp_settings_set_pointer_len(src, key, nullptr, count))
 		return FALSE;
 
 	const uint32_t types[] = { RDPDR_DTYP_SERIAL, RDPDR_DTYP_PARALLEL, RDPDR_DTYP_PRINT,
@@ -1665,7 +1668,7 @@ static BOOL add_dev_argv(rdpSettings* src, size_t argc, const char* argv[])
 static BOOL fill_random(rdpSettings* src, FreeRDP_Settings_Keys_Pointer key, size_t elem,
                         size_t len)
 {
-	if (!freerdp_settings_set_pointer_len(src, key, NULL, len))
+	if (!freerdp_settings_set_pointer_len(src, key, nullptr, len))
 		return FALSE;
 	uint8_t* data = freerdp_settings_get_pointer_writable(src, key);
 	if (!data)
@@ -1699,7 +1702,7 @@ static BOOL fill_random_timezone(rdpSettings* src)
 
 static BOOL set_private_key(rdpSettings* src)
 {
-	if (!freerdp_settings_set_pointer_len(src, FreeRDP_RdpServerRsaKey, NULL, 1))
+	if (!freerdp_settings_set_pointer_len(src, FreeRDP_RdpServerRsaKey, nullptr, 1))
 		return FALSE;
 
 	rdpPrivateKey* key =
@@ -1739,15 +1742,16 @@ static BOOL set_cert(rdpSettings* src, FreeRDP_Settings_Keys_Pointer key)
 static BOOL set_string_array(rdpSettings* src, FreeRDP_Settings_Keys_Pointer key, uint32_t max)
 {
 	uint32_t count = 0;
-	winpr_RAND(&count, sizeof(count));
+	if (winpr_RAND(&count, sizeof(count)) < 0)
+		return FALSE;
 	count = count % max;
 
-	if (!freerdp_settings_set_pointer_len(src, key, NULL, count))
+	if (!freerdp_settings_set_pointer_len(src, key, nullptr, count))
 		return FALSE;
 
 	for (uint32_t x = 0; x < count; x++)
 	{
-		char buffer[32] = { 0 };
+		char buffer[32] = WINPR_C_ARRAY_INIT;
 		(void)_snprintf(buffer, sizeof(buffer), "foobar-0x%08" PRIu32, x);
 		if (!freerdp_settings_set_pointer_array(src, key, x, buffer))
 			return FALSE;
@@ -1814,8 +1818,9 @@ static BOOL test_serialize_pointer(DWORD flags)
 	if (!fill_random_timezone(src))
 		goto fail;
 
-	void* ptr = NULL;
-	winpr_RAND((void*)&ptr, sizeof(void*));
+	void* ptr = nullptr;
+	if (winpr_RAND((void*)&ptr, sizeof(void*)) < 0)
+		goto fail;
 	if (!freerdp_settings_set_pointer(src, FreeRDP_instance, ptr))
 		goto fail;
 
@@ -1829,8 +1834,8 @@ static BOOL test_serialize_pointer(DWORD flags)
 	if (!set_string_array(src, FreeRDP_ServerLicenseProductIssuers, 43))
 		goto fail;
 
-	char addresses[12][43] = { 0 };
-	char* strptr[12] = { 0 };
+	char addresses[12][43] = WINPR_C_ARRAY_INIT;
+	char* strptr[12] = WINPR_C_ARRAY_INIT;
 
 	for (size_t x = 0; x < ARRAYSIZE(addresses); x++)
 	{
@@ -1844,7 +1849,8 @@ static BOOL test_serialize_pointer(DWORD flags)
 	for (size_t x = 0; x < ARRAYSIZE(addresses); x++)
 	{
 		uint32_t port = 0;
-		winpr_RAND(&port, sizeof(port));
+		if (winpr_RAND(&port, sizeof(port)) < 0)
+			goto fail;
 		if (!freerdp_settings_set_pointer_array(src, FreeRDP_TargetNetPorts, x, &port))
 			goto fail;
 	}
@@ -1856,14 +1862,16 @@ static BOOL test_serialize_pointer(DWORD flags)
 	void* caps = freerdp_settings_get_pointer_writable(src, FreeRDP_ReceivedCapabilities);
 	if (!caps)
 		goto fail;
-	winpr_RAND(caps, count);
+	if (winpr_RAND(caps, count) < 0)
+		goto fail;
 
 	for (uint32_t x = 0; x < count; x++)
 	{
 		uint8_t* buffer = calloc(64, sizeof(uint8_t));
 		if (!buffer)
 			goto fail;
-		winpr_RAND(buffer, sizeof(buffer));
+		if (winpr_RAND(buffer, sizeof(buffer)) < 0)
+			goto fail;
 		uint32_t blen = (buffer[0] % 52) + 13;
 
 		if (!freerdp_settings_set_pointer_array(src, FreeRDP_ReceivedCapabilityData, x, buffer))
@@ -1872,7 +1880,7 @@ static BOOL test_serialize_pointer(DWORD flags)
 			goto fail;
 	}
 
-	char buffer[128] = { 0 };
+	char buffer[128] = WINPR_C_ARRAY_INIT;
 	(void)_snprintf(buffer, sizeof(buffer), "%s flags 0x%08" PRIx32, __func__, flags);
 	return test_serialize_with(src, buffer);
 fail:
@@ -1885,7 +1893,7 @@ static BOOL test_serialize(void)
 {
 	BOOL rc = FALSE;
 	log_start();
-	if (WINPR_JSON_version(NULL, 0) < 0)
+	if (WINPR_JSON_version(nullptr, 0) < 0)
 	{
 		rc = TRUE;
 	}
@@ -1894,7 +1902,7 @@ static BOOL test_serialize(void)
 		for (uint32_t flags = 0;
 		     flags <= (FREERDP_SETTINGS_SERVER_MODE | FREERDP_SETTINGS_REMOTE_MODE); flags++)
 		{
-			char buffer[32] = { 0 };
+			char buffer[32] = WINPR_C_ARRAY_INIT;
 			(void)_snprintf(buffer, sizeof(buffer), "default (flags 0x%08" PRIx32 ")", flags);
 			if (!test_serialize_with(freerdp_settings_new(flags), buffer))
 				return FALSE;
@@ -1902,7 +1910,7 @@ static BOOL test_serialize(void)
 				return FALSE;
 			if (!test_serialize_strings(flags, ""))
 				return FALSE;
-			if (!test_serialize_strings(flags, NULL))
+			if (!test_serialize_strings(flags, nullptr))
 				return FALSE;
 			if (!test_serialize_pointer(flags))
 				return FALSE;
@@ -2168,7 +2176,7 @@ static BOOL test_string_list(rdpSettings* settings, const rdpSettings* cloned)
 	{
 		const size_t key = string_list_indices[x];
 		const char val[] = "test-string";
-		const char* res = NULL;
+		const char* res = nullptr;
 		const char* name =
 		    freerdp_settings_get_name_for_key(WINPR_ASSERTING_INT_CAST(SSIZE_T, key));
 		const char* oval = freerdp_settings_get_string(settings, key);
@@ -2242,7 +2250,7 @@ static BOOL test_all(void)
 	log_start();
 
 	rdpSettings* settings = freerdp_settings_new(0);
-	rdpSettings* cloned = NULL;
+	rdpSettings* cloned = nullptr;
 
 	if (!settings)
 	{
@@ -2297,7 +2305,7 @@ static bool fillTargetBuffer(rdpSettings* settings, FreeRDP_Settings_Keys_Pointe
 	const size_t count = freerdp_settings_get_uint32(settings, getLenForKey(key));
 	for (size_t x = 0; x < count; x++)
 	{
-		char test[128] = { 0 };
+		char test[128] = WINPR_C_ARRAY_INIT;
 		(void)_snprintf(test, sizeof(test), "test_value_%" PRIuz, x);
 		if (!freerdp_settings_set_pointer_array(settings, key, x, test))
 			return false;
@@ -2310,7 +2318,7 @@ static bool checkTargetBuffer(rdpSettings* settings, FreeRDP_Settings_Keys_Point
 {
 	for (size_t x = 0; x < count; x++)
 	{
-		char test[128] = { 0 };
+		char test[128] = WINPR_C_ARRAY_INIT;
 		(void)_snprintf(test, sizeof(test), "test_value_%" PRIuz, x);
 		const char* cmp = freerdp_settings_get_pointer_array(settings, key, x);
 		if (!cmp)
@@ -2333,7 +2341,7 @@ static bool checkTargetBufferResized(rdpSettings* settings, FreeRDP_Settings_Key
 	for (size_t x = count; x < newSize; x++)
 	{
 		const char* cmp = freerdp_settings_get_pointer_array(settings, key, x);
-		if (cmp != NULL)
+		if (cmp != nullptr)
 			return false;
 	}
 	return true;

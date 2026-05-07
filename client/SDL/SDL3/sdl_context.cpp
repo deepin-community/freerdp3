@@ -16,6 +16,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#include <algorithm>
+#include <cmath>
+
 #include "sdl_context.hpp"
 #include "sdl_config.hpp"
 #include "sdl_channels.hpp"
@@ -32,9 +36,18 @@
 #include <aad/sdl_webview.hpp>
 #endif
 
+static constexpr auto sdl_allow_screensaver = "sdl-allow-screensaver";
+
+static void sdl_PointerFreeCopyAll(rdpPointer* pointer)
+{
+	sdl_Pointer_FreeCopy(pointer);
+	free(pointer);
+}
+
 SdlContext::SdlContext(rdpContext* context)
-    : _context(context), _log(WLog_Get(CLIENT_TAG("SDL"))), _rdpThreadRunning(false),
-      _primary(nullptr, SDL_DestroySurface), _disp(this), _input(this), _clip(this), _dialog(_log)
+    : _context(context), _log(WLog_Get(CLIENT_TAG("SDL"))), _cursor(nullptr, sdl_Pointer_FreeCopy),
+      _rdpThreadRunning(false), _primary(nullptr, SDL_DestroySurface), _disp(this), _input(this),
+      _clip(this), _dialog(_log)
 {
 	WINPR_ASSERT(context);
 	setMetadata();
@@ -60,6 +73,12 @@ SdlContext::SdlContext(rdpContext* context)
 	instance->GetAccessToken = client_cli_get_access_token;
 #endif
 	/* TODO: Client display set up */
+
+	_args.push_back({ sdl_allow_screensaver, COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueFalse,
+	                  nullptr, -1, nullptr, "Allow local screensaver to activate" });
+
+	/* Push a null element used as abort when iterating the array */
+	_args.push_back({ nullptr, 0, nullptr, nullptr, nullptr, -1, nullptr, nullptr });
 }
 
 void SdlContext::setHasCursor(bool val)
@@ -152,9 +171,15 @@ BOOL SdlContext::preConnect(freerdp* instance)
 	 * callbacks or deactivate certain features. */
 	/* Register the channel listeners.
 	 * They are required to set up / tear down channels if they are loaded. */
-	PubSub_SubscribeChannelConnected(instance->context->pubSub, sdl_OnChannelConnectedEventHandler);
-	PubSub_SubscribeChannelDisconnected(instance->context->pubSub,
-	                                    sdl_OnChannelDisconnectedEventHandler);
+	if (PubSub_SubscribeChannelConnected(instance->context->pubSub,
+	                                     sdl_OnChannelConnectedEventHandler) < 0)
+		return FALSE;
+	if (PubSub_SubscribeChannelDisconnected(instance->context->pubSub,
+	                                        sdl_OnChannelDisconnectedEventHandler) < 0)
+		return FALSE;
+	if (PubSub_SubscribeUserNotification(instance->context->pubSub,
+	                                     sdl_OnUserNotificationEventHandler) < 0)
+		return FALSE;
 
 	if (!freerdp_settings_get_bool(settings, FreeRDP_AuthenticationOnly))
 	{
@@ -172,6 +197,33 @@ BOOL SdlContext::preConnect(freerdp* instance)
 				return FALSE;
 			if (!freerdp_settings_set_uint32(settings, FreeRDP_DesktopHeight, maxHeight))
 				return FALSE;
+		}
+
+		/**
+		 * If /f is specified in combination with /smart-sizing:widthxheight then
+		 * we run the session in the /smart-sizing dimensions scaled to full screen
+		 */
+
+		const uint32_t sw = freerdp_settings_get_uint32(settings, FreeRDP_SmartSizingWidth);
+		const uint32_t sh = freerdp_settings_get_uint32(settings, FreeRDP_SmartSizingHeight);
+		const BOOL sm = freerdp_settings_get_bool(settings, FreeRDP_SmartSizing);
+		if (sm && (sw > 0) && (sh > 0))
+		{
+			const BOOL mm = freerdp_settings_get_bool(settings, FreeRDP_UseMultimon);
+			if (mm)
+				WLog_Print(sdl->getWLog(), WLOG_WARN,
+				           "/smart-sizing and /multimon are currently not supported, ignoring "
+				           "/smart-sizing!");
+			else
+			{
+				sdl->_windowWidth = freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
+				sdl->_windowHeigth = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
+
+				if (!freerdp_settings_set_uint32(settings, FreeRDP_DesktopWidth, sw))
+					return FALSE;
+				if (!freerdp_settings_set_uint32(settings, FreeRDP_DesktopHeight, sh))
+					return FALSE;
+			}
 		}
 	}
 	else
@@ -213,45 +265,6 @@ BOOL SdlContext::postConnect(freerdp* instance)
 	WINPR_ASSERT(context);
 
 	auto sdl = get_context(context);
-
-	if (freerdp_settings_get_bool(context->settings, FreeRDP_UseMultimon))
-	{
-		const auto driver = SDL_GetCurrentVideoDriver();
-		bool buggy = false;
-		if (driver)
-		{
-			if (strcmp(driver, "wayland") == 0)
-				buggy = true;
-			else if (strcmp(driver, "x11") == 0)
-			{
-				auto env = SDL_GetEnvironment();
-				auto xdg = SDL_GetEnvironmentVariable(env, "XDG_SESSION_TYPE");
-				auto qpa = SDL_GetEnvironmentVariable(env, "QT_QPA_PLATFORM");
-				if (xdg && (strcmp(xdg, "wayland") == 0))
-					buggy = true;
-				else if (qpa && (strcmp(qpa, "wayland") == 0))
-					buggy = true;
-			}
-		}
-
-		if (buggy)
-		{
-			const auto name = SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING);
-
-			WLog_Print(sdl->getWLog(), WLOG_WARN,
-			           "%s is affected by wayland bug "
-			           "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/issues/179",
-			           name);
-			WLog_Print(
-			    sdl->getWLog(), WLOG_WARN,
-			    "you will not be able to properly use all monitors for FreeRDP unless this is "
-			    "resolved and the SDL library you are using supports this.");
-			WLog_Print(sdl->getWLog(), WLOG_WARN,
-			           "For the time being run %s from an X11 session or only use single monitor "
-			           "fullscreen /f",
-			           name);
-		}
-	}
 
 	// Retry was successful, discard dialog
 	sdl->getDialog().show(false);
@@ -295,7 +308,8 @@ BOOL SdlContext::postConnect(freerdp* instance)
 	if (!sdl->setResizeable(false))
 		return FALSE;
 	if (!sdl->setFullscreen(freerdp_settings_get_bool(context->settings, FreeRDP_Fullscreen) ||
-	                        freerdp_settings_get_bool(context->settings, FreeRDP_UseMultimon)))
+	                            freerdp_settings_get_bool(context->settings, FreeRDP_UseMultimon),
+	                        true))
 		return FALSE;
 	sdl->setConnected(true);
 	return TRUE;
@@ -330,6 +344,8 @@ void SdlContext::postFinalDisconnect(freerdp* instance)
 	                                   sdl_OnChannelConnectedEventHandler);
 	PubSub_UnsubscribeChannelDisconnected(instance->context->pubSub,
 	                                      sdl_OnChannelDisconnectedEventHandler);
+	PubSub_UnsubscribeUserNotification(instance->context->pubSub,
+	                                   sdl_OnUserNotificationEventHandler);
 }
 
 /* Create a SDL surface from the GDI buffer */
@@ -386,13 +402,20 @@ bool SdlContext::createWindows()
 		auto monitor = static_cast<rdpMonitor*>(
 		    freerdp_settings_get_pointer_array_writable(settings, FreeRDP_MonitorDefArray, x));
 
-		auto w = WINPR_ASSERTING_INT_CAST(Uint32, monitor->width);
-		auto h = WINPR_ASSERTING_INT_CAST(Uint32, monitor->height);
+		Uint32 w = WINPR_ASSERTING_INT_CAST(Uint32, monitor->width);
+		Uint32 h = WINPR_ASSERTING_INT_CAST(Uint32, monitor->height);
 		if (!(freerdp_settings_get_bool(settings, FreeRDP_UseMultimon) ||
 		      freerdp_settings_get_bool(settings, FreeRDP_Fullscreen)))
 		{
-			w = freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
-			h = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
+			if (_windowWidth > 0)
+				w = _windowWidth;
+			else
+				w = freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
+
+			if (_windowHeigth > 0)
+				h = _windowHeigth;
+			else
+				h = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
 		}
 
 		Uint32 flags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
@@ -410,9 +433,6 @@ bool SdlContext::createWindows()
 
 		if (!freerdp_settings_get_bool(settings, FreeRDP_Decorations))
 			flags |= SDL_WINDOW_BORDERLESS;
-
-		std::stringstream ss;
-		ss << title << ":" << x;
 
 		auto did = WINPR_ASSERTING_INT_CAST(SDL_DisplayID, id);
 		auto window = SdlWindow::create(did, title, flags, w, h);
@@ -436,8 +456,32 @@ bool SdlContext::updateWindowList()
 	for (const auto& win : _windows)
 		list.push_back(win.second.monitor(_windows.size() == 1));
 
+	// /monitors: subset may exclude the SDL primary. The library requires
+	// the array to mark one monitor as primary, so promote the first when
+	// none of the kept windows cover the original primary.
+	if (!list.empty() &&
+	    std::none_of(list.cbegin(), list.cend(), [](const rdpMonitor& m) { return m.is_primary; }))
+		list.at(0).is_primary = true;
+
 	return freerdp_settings_set_monitor_def_array_sorted(context()->settings, list.data(),
 	                                                     list.size());
+}
+
+bool SdlContext::updateWindow(SDL_WindowID id)
+{
+	if (freerdp_settings_get_bool(_context->settings, FreeRDP_Fullscreen) ||
+	    freerdp_settings_get_bool(_context->settings, FreeRDP_UseMultimon))
+		return true;
+
+	auto& w = _windows.at(id);
+	auto m = w.monitor(true);
+	auto r = w.rect();
+	m.width = r.w;
+	m.height = r.h;
+	m.attributes.physicalWidth = static_cast<UINT32>(r.w);
+	m.attributes.physicalHeight = static_cast<UINT32>(r.h);
+	w.setMonitor(m);
+	return true;
 }
 
 std::string SdlContext::windowTitle() const
@@ -667,7 +711,10 @@ int SdlContext::sdl_client_thread_run(std::string& error_msg)
 		const DWORD status = WaitForMultipleObjects(nCount, handles, FALSE, INFINITE);
 
 		if (status == WAIT_FAILED)
+		{
+			WLog_Print(getWLog(), WLOG_ERROR, "WaitForMultipleObjects WAIT_FAILED");
 			break;
+		}
 
 		if (!freerdp_check_event_handles(context()))
 		{
@@ -763,6 +810,88 @@ int SdlContext::error_info_to_error(DWORD* pcode, char** msg, size_t* len) const
 	return exit_code;
 }
 
+void SdlContext::applyMonitorOffset(SDL_WindowID window, float& x, float& y) const
+{
+	if (!freerdp_settings_get_bool(context()->settings, FreeRDP_UseMultimon))
+		return;
+
+	auto w = getWindowForId(window);
+	x -= static_cast<float>(w->offsetX());
+	y -= static_cast<float>(w->offsetY());
+}
+
+static bool alignX(const SDL_Rect& a, const SDL_Rect& b)
+{
+	if (a.x + a.w == b.x)
+		return true;
+	if (b.x + b.w == a.x)
+		return true;
+	return false;
+}
+
+static bool alignY(const SDL_Rect& a, const SDL_Rect& b)
+{
+	if (a.y + a.h == b.y)
+		return true;
+	if (b.y + b.h == a.y)
+		return true;
+	return false;
+}
+
+std::vector<SDL_DisplayID>
+SdlContext::updateDisplayOffsetsForNeighbours(SDL_DisplayID id,
+                                              const std::vector<SDL_DisplayID>& ignore)
+{
+	auto first = _offsets.at(id);
+	std::vector<SDL_DisplayID> neighbours;
+
+	for (auto& entry : _offsets)
+	{
+		if (entry.first == id)
+			continue;
+		if (std::find(ignore.begin(), ignore.end(), entry.first) != ignore.end())
+			continue;
+
+		bool neighbor = false;
+		if (alignX(entry.second.first, first.first))
+		{
+			if (entry.second.first.x < first.first.x)
+				entry.second.second.x = first.second.x - entry.second.second.w;
+			else
+				entry.second.second.x = first.second.x + first.second.w;
+			neighbor = true;
+		}
+		if (alignY(entry.second.first, first.first))
+		{
+			if (entry.second.first.y < first.first.y)
+				entry.second.second.y = first.second.y - entry.second.second.h;
+			else
+				entry.second.second.y = first.second.y + first.second.h;
+			neighbor = true;
+		}
+
+		if (neighbor)
+			neighbours.push_back(entry.first);
+	}
+	return neighbours;
+}
+
+void SdlContext::updateMonitorDataFromOffsets()
+{
+	for (auto& entry : _displays)
+	{
+		auto offsets = _offsets.at(entry.first);
+		entry.second.x = offsets.second.x;
+		entry.second.y = offsets.second.y;
+	}
+
+	for (auto& entry : _windows)
+	{
+		const auto& monitor = _displays.at(entry.first);
+		entry.second.setMonitor(monitor);
+	}
+}
+
 bool SdlContext::drawToWindow(SdlWindow& window, const std::vector<SDL_Rect>& rects)
 {
 	if (!isConnected())
@@ -775,7 +904,8 @@ bool SdlContext::drawToWindow(SdlWindow& window, const std::vector<SDL_Rect>& re
 
 	std::unique_lock lock(_critical);
 	auto surface = _primary.get();
-	if (freerdp_settings_get_bool(context()->settings, FreeRDP_SmartSizing))
+
+	if (useLocalScale())
 	{
 		window.setOffsetX(0);
 		window.setOffsetY(0);
@@ -795,7 +925,10 @@ bool SdlContext::drawToWindow(SdlWindow& window, const std::vector<SDL_Rect>& re
 	}
 	else
 	{
-		if (!window.drawRects(surface, { window.offsetX(), window.offsetY() }, rects))
+		SDL_Point offset{ 0, 0 };
+		if (freerdp_settings_get_bool(context()->settings, FreeRDP_UseMultimon))
+			offset = { window.offsetX(), window.offsetY() };
+		if (!window.drawRects(surface, offset, rects))
 			return false;
 	}
 
@@ -830,7 +963,7 @@ bool SdlContext::addDisplayWindow(SDL_DisplayID id)
 	return true;
 }
 
-bool SdlContext::removeDisplay(SDL_DisplayID id)
+bool SdlContext::removeDisplayWindow(SDL_DisplayID id)
 {
 	for (auto& w : _windows)
 	{
@@ -838,6 +971,45 @@ bool SdlContext::removeDisplay(SDL_DisplayID id)
 			_windows.erase(w.first);
 	}
 	return true;
+}
+
+bool SdlContext::detectDisplays()
+{
+	int count = 0;
+	auto display = SDL_GetDisplays(&count);
+	if (!display)
+		return false;
+	for (int x = 0; x < count; x++)
+	{
+		const auto id = display[x];
+		addOrUpdateDisplay(id);
+	}
+	SDL_free(display);
+	return true;
+}
+
+rdpMonitor SdlContext::getDisplay(SDL_DisplayID id) const
+{
+	return _displays.at(id);
+}
+
+std::vector<SDL_DisplayID> SdlContext::getDisplayIds() const
+{
+	std::vector<SDL_DisplayID> keys;
+	keys.reserve(_displays.size());
+	for (const auto& entry : _displays)
+	{
+		keys.push_back(entry.first);
+	}
+	return keys;
+}
+
+const SdlWindow* SdlContext::getWindowForId(SDL_WindowID id) const
+{
+	auto it = _windows.find(id);
+	if (it == _windows.end())
+		return nullptr;
+	return &it->second;
 }
 
 SdlWindow* SdlContext::getWindowForId(SDL_WindowID id)
@@ -894,22 +1066,27 @@ bool SdlContext::moveMouseTo(const SDL_FPoint& pos)
 
 bool SdlContext::handleEvent(const SDL_MouseMotionEvent& ev)
 {
+	if (!getWindowForId(ev.windowID))
+		return true; /* Event for an untracked window (e.g. closed dialog) */
 	SDL_Event copy{};
 	copy.motion = ev;
 	if (!eventToPixelCoordinates(ev.windowID, copy))
-		return false;
+		return true;
 	removeLocalScaling(copy.motion.x, copy.motion.y);
 	removeLocalScaling(copy.motion.xrel, copy.motion.yrel);
+	applyMonitorOffset(copy.motion.windowID, copy.motion.x, copy.motion.y);
 
 	return SdlTouch::handleEvent(this, copy.motion);
 }
 
 bool SdlContext::handleEvent(const SDL_MouseWheelEvent& ev)
 {
+	if (!getWindowForId(ev.windowID))
+		return true;
 	SDL_Event copy{};
 	copy.wheel = ev;
 	if (!eventToPixelCoordinates(ev.windowID, copy))
-		return false;
+		return true;
 	removeLocalScaling(copy.wheel.mouse_x, copy.wheel.mouse_y);
 	return SdlTouch::handleEvent(this, copy.wheel);
 }
@@ -937,23 +1114,29 @@ bool SdlContext::handleEvent(const SDL_WindowEvent& ev)
 
 	switch (ev.type)
 	{
+		case SDL_EVENT_WINDOW_MOUSE_ENTER:
+			return restoreCursor();
 		case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+			if (!resizeToScale(window))
+				return false;
 			if (isConnected())
 			{
 				if (!window->fill())
 					return false;
 				if (!drawToWindow(*window))
 					return false;
-				if (!sdl_Pointer_Set_Process(this))
+				if (!restoreCursor())
 					return false;
 			}
 			break;
 		case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+			if (!resizeToScale(window))
+				return false;
 			if (!window->fill())
 				return false;
 			if (!drawToWindow(*window))
 				return false;
-			if (!sdl_Pointer_Set_Process(this))
+			if (!restoreCursor())
 				return false;
 			break;
 		case SDL_EVENT_WINDOW_MOVED:
@@ -1011,23 +1194,82 @@ bool SdlContext::handleEvent(const SDL_DisplayEvent& ev)
 
 bool SdlContext::handleEvent(const SDL_MouseButtonEvent& ev)
 {
+	if (!getWindowForId(ev.windowID))
+		return true;
 	SDL_Event copy = {};
 	copy.button = ev;
 	if (!eventToPixelCoordinates(ev.windowID, copy))
-		return false;
+		return true;
 	removeLocalScaling(copy.button.x, copy.button.y);
+	applyMonitorOffset(copy.button.windowID, copy.button.x, copy.button.y);
 	return SdlTouch::handleEvent(this, copy.button);
 }
 
 bool SdlContext::handleEvent(const SDL_TouchFingerEvent& ev)
 {
+	if (!getWindowForId(ev.windowID))
+		return true;
 	SDL_Event copy{};
 	copy.tfinger = ev;
 	if (!eventToPixelCoordinates(ev.windowID, copy))
-		return false;
+		return true;
 	removeLocalScaling(copy.tfinger.dx, copy.tfinger.dy);
 	removeLocalScaling(copy.tfinger.x, copy.tfinger.y);
+	applyMonitorOffset(copy.tfinger.windowID, copy.tfinger.x, copy.tfinger.y);
 	return SdlTouch::handleEvent(this, copy.tfinger);
+}
+
+void SdlContext::addOrUpdateDisplay(SDL_DisplayID id)
+{
+	auto monitor = SdlWindow::query(id, false);
+	_displays.emplace(id, monitor);
+
+	/* Update actual display rectangles:
+	 *
+	 * 1. Get logical display bounds
+	 * 2. Use already known pixel width and height
+	 * 3. Iterate over each display and update the x and y offsets by adding all monitor
+	 * widths/heights from the primary
+	 */
+	_offsets.clear();
+	for (auto& entry : _displays)
+	{
+		SDL_Rect bounds{};
+		std::ignore = SDL_GetDisplayBounds(entry.first, &bounds);
+
+		SDL_Rect pixel{};
+		pixel.w = entry.second.width;
+		pixel.h = entry.second.height;
+		_offsets.emplace(entry.first, std::pair{ bounds, pixel });
+	}
+
+	/* 1. Find primary and update all neighbors
+	 * 2. For each neighbor update all neighbors
+	 * 3. repeat until all displays updated.
+	 */
+	const auto primary = SDL_GetPrimaryDisplay();
+	std::vector<SDL_DisplayID> handled;
+	handled.push_back(primary);
+
+	auto neighbors = updateDisplayOffsetsForNeighbours(primary);
+	while (!neighbors.empty())
+	{
+		auto neighbor = neighbors.front();
+		neighbors.erase(neighbors.begin());
+
+		if (std::find(handled.begin(), handled.end(), neighbor) != handled.end())
+			continue;
+		handled.push_back(neighbor);
+
+		auto next = updateDisplayOffsetsForNeighbours(neighbor, handled);
+		neighbors.insert(neighbors.end(), next.begin(), next.end());
+	}
+	updateMonitorDataFromOffsets();
+}
+
+void SdlContext::deleteDisplay(SDL_DisplayID id)
+{
+	_displays.erase(id);
 }
 
 bool SdlContext::eventToPixelCoordinates(SDL_WindowID id, SDL_Event& ev)
@@ -1035,15 +1277,17 @@ bool SdlContext::eventToPixelCoordinates(SDL_WindowID id, SDL_Event& ev)
 	auto w = getWindowForId(id);
 	if (!w)
 		return false;
-	auto renderer = SDL_GetRenderer(w->window());
+
+	/* Ignore errors here, sometimes SDL has no renderer */
+	auto renderer = w->renderer();
 	if (!renderer)
-		return false;
+		return true;
 	return SDL_ConvertEventToRenderCoordinates(renderer, &ev);
 }
 
 SDL_FPoint SdlContext::applyLocalScaling(const SDL_FPoint& val) const
 {
-	if (!freerdp_settings_get_bool(context()->settings, FreeRDP_SmartSizing))
+	if (!useLocalScale())
 		return val;
 
 	auto rval = val;
@@ -1054,7 +1298,7 @@ SDL_FPoint SdlContext::applyLocalScaling(const SDL_FPoint& val) const
 
 void SdlContext::removeLocalScaling(float& x, float& y) const
 {
-	if (!freerdp_settings_get_bool(context()->settings, FreeRDP_SmartSizing))
+	if (!useLocalScale())
 		return;
 	x /= _localScale.x;
 	y /= _localScale.y;
@@ -1065,9 +1309,11 @@ SDL_FPoint SdlContext::screenToPixel(SDL_WindowID id, const SDL_FPoint& pos)
 	auto w = getWindowForId(id);
 	if (!w)
 		return {};
-	auto renderer = SDL_GetRenderer(w->window());
+
+	/* Ignore errors here, sometimes SDL has no renderer */
+	auto renderer = w->renderer();
 	if (!renderer)
-		return {};
+		return pos;
 
 	SDL_FPoint rpos{};
 	if (!SDL_RenderCoordinatesFromWindow(renderer, pos.x, pos.y, &rpos.x, &rpos.y))
@@ -1081,9 +1327,11 @@ SDL_FPoint SdlContext::pixelToScreen(SDL_WindowID id, const SDL_FPoint& pos)
 	auto w = getWindowForId(id);
 	if (!w)
 		return {};
-	auto renderer = SDL_GetRenderer(w->window());
+
+	/* Ignore errors here, sometimes SDL has no renderer */
+	auto renderer = w->renderer();
 	if (!renderer)
-		return {};
+		return pos;
 
 	SDL_FPoint rpos{};
 	if (!SDL_RenderCoordinatesToWindow(renderer, pos.x, pos.y, &rpos.x, &rpos.y))
@@ -1091,11 +1339,19 @@ SDL_FPoint SdlContext::pixelToScreen(SDL_WindowID id, const SDL_FPoint& pos)
 	return applyLocalScaling(rpos);
 }
 
-SDL_FRect SdlContext::pixelToScreen(SDL_WindowID id, const SDL_FRect& pos)
+SDL_FRect SdlContext::pixelToScreen(SDL_WindowID id, const SDL_FRect& pos, bool round)
 {
 	const auto fpos = pixelToScreen(id, SDL_FPoint{ pos.x, pos.y });
 	const auto size = pixelToScreen(id, SDL_FPoint{ pos.w, pos.h });
-	return { fpos.x, fpos.y, size.x, size.y };
+	SDL_FRect r{ fpos.x, fpos.y, size.x, size.y };
+	if (round)
+	{
+		r.w = std::ceil(r.w);
+		r.h = std::ceil(r.h);
+		r.x = std::floor(r.x);
+		r.y = std::floor(r.y);
+	}
+	return r;
 }
 
 bool SdlContext::handleEvent(const SDL_Event& ev)
@@ -1112,6 +1368,19 @@ bool SdlContext::handleEvent(const SDL_Event& ev)
 	}
 	switch (ev.type)
 	{
+		case SDL_EVENT_RENDER_TARGETS_RESET:
+		case SDL_EVENT_RENDER_DEVICE_RESET:
+		case SDL_EVENT_WILL_ENTER_FOREGROUND:
+			return redraw();
+		default:
+			break;
+	}
+
+	if (!isConnected())
+		return true;
+
+	switch (ev.type)
+	{
 		case SDL_EVENT_FINGER_DOWN:
 		case SDL_EVENT_FINGER_UP:
 		case SDL_EVENT_FINGER_MOTION:
@@ -1120,6 +1389,7 @@ bool SdlContext::handleEvent(const SDL_Event& ev)
 			return handleEvent(cev);
 		}
 		case SDL_EVENT_MOUSE_MOTION:
+
 		{
 			const auto& cev = ev.motion;
 			return handleEvent(cev);
@@ -1146,13 +1416,89 @@ bool SdlContext::handleEvent(const SDL_Event& ev)
 			const auto& cev = ev.key;
 			return getInputChannelContext().handleEvent(cev);
 		}
-		case SDL_EVENT_RENDER_TARGETS_RESET:
-		case SDL_EVENT_RENDER_DEVICE_RESET:
-		case SDL_EVENT_WILL_ENTER_FOREGROUND:
-			return redraw();
 		default:
 			return true;
 	}
+}
+
+COMMAND_LINE_ARGUMENT_A* SdlContext::args()
+{
+	return _args.data();
+}
+
+size_t SdlContext::argsCount() const
+{
+	if (_args.size() <= 1)
+		return 0;
+	return _args.size() - 1;
+}
+
+int SdlContext::argumentHandler(const COMMAND_LINE_ARGUMENT_A* arg, void* custom)
+{
+	auto sdl = static_cast<SdlContext*>(custom);
+	if (!sdl)
+		return -1;
+
+	if (arg->Name)
+	{
+		if (strcmp(arg->Name, sdl_allow_screensaver) == 0)
+		{
+			if (arg->Value != nullptr)
+			{
+				if (!SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1"))
+				{
+					SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+					             "SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER) failed with %s",
+					             SDL_GetError());
+					return -2;
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+CriticalSection& SdlContext::lock()
+{
+	return _critical;
+}
+
+std::vector<rdpPointer*>& SdlContext::pointers()
+{
+	return _valid_pointers;
+}
+
+bool SdlContext::contains(const rdpPointer* ptr) const
+{
+	for (const auto& cur : _valid_pointers)
+	{
+		if (cur == ptr)
+			return true;
+	}
+	return false;
+}
+
+bool SdlContext::resizeToScale(SdlWindow* window)
+{
+	if (freerdp_settings_get_bool(context()->settings, FreeRDP_SmartSizing))
+		return true;
+	if (!useLocalScale())
+		return true;
+	if (!window)
+		return false;
+	return window->resizeToScale();
+}
+
+bool SdlContext::useLocalScale() const
+{
+	const auto ssize = freerdp_settings_get_bool(context()->settings, FreeRDP_SmartSizing);
+	if (ssize)
+		return true;
+	const auto dynResize =
+	    freerdp_settings_get_bool(context()->settings, FreeRDP_DynamicResolutionUpdate);
+	const auto fs = freerdp_settings_get_bool(context()->settings, FreeRDP_Fullscreen);
+	const auto multimon = freerdp_settings_get_bool(context()->settings, FreeRDP_UseMultimon);
+	return !dynResize && !fs && !multimon;
 }
 
 bool SdlContext::drawToWindows(const std::vector<SDL_Rect>& rects)
@@ -1247,14 +1593,67 @@ rdpClientContext* SdlContext::common() const
 	return reinterpret_cast<rdpClientContext*>(context());
 }
 
-void SdlContext::setCursor(rdpPointer* cursor)
+bool SdlContext::setCursor(CursorType type)
 {
-	_cursor = cursor;
+	_cursorType = type;
+	return restoreCursor();
+}
+
+bool SdlContext::setCursor(const rdpPointer* cursor)
+{
+	std::unique_lock lock(_critical);
+	if (!contains(cursor))
+		return true;
+
+	_cursor = { sdl_Pointer_Copy(cursor), sdl_PointerFreeCopyAll };
+	return setCursor(CURSOR_IMAGE);
 }
 
 rdpPointer* SdlContext::cursor() const
 {
-	return _cursor;
+	return _cursor.get();
+}
+
+bool SdlContext::restoreCursor()
+{
+	WLog_Print(getWLog(), WLOG_DEBUG, "restore cursor: %d", _cursorType);
+	switch (_cursorType)
+	{
+		case CURSOR_NULL:
+			if (!SDL_HideCursor())
+			{
+				WLog_Print(getWLog(), WLOG_ERROR, "SDL_HideCursor failed");
+				return false;
+			}
+
+			setHasCursor(false);
+			return true;
+
+		case CURSOR_DEFAULT:
+		{
+			auto def = SDL_GetDefaultCursor();
+			if (!SDL_SetCursor(def))
+			{
+				WLog_Print(getWLog(), WLOG_ERROR, "SDL_SetCursor(default=%p) failed",
+				           static_cast<void*>(def));
+				return false;
+			}
+			if (!SDL_ShowCursor())
+			{
+				WLog_Print(getWLog(), WLOG_ERROR, "SDL_ShowCursor failed");
+				return false;
+			}
+			setHasCursor(true);
+			return true;
+		}
+		case CURSOR_IMAGE:
+			setHasCursor(true);
+			return sdl_Pointer_Set_Process(this);
+		default:
+			WLog_Print(getWLog(), WLOG_ERROR, "Unknown cursorType %s",
+			           sdl::utils::toString(_cursorType).c_str());
+			return false;
+	}
 }
 
 void SdlContext::setMonitorIds(const std::vector<SDL_DisplayID>& ids)
@@ -1277,7 +1676,7 @@ int64_t SdlContext::monitorId(uint32_t index) const
 	{
 		return -1;
 	}
-	return _monitorIds[index];
+	return _monitorIds.at(index);
 }
 
 void SdlContext::push(std::vector<SDL_Rect>&& rects)
@@ -1298,11 +1697,12 @@ std::vector<SDL_Rect> SdlContext::pop()
 	return val;
 }
 
-bool SdlContext::setFullscreen(bool enter)
+bool SdlContext::setFullscreen(bool enter, bool forceOriginalDisplay)
 {
 	for (const auto& window : _windows)
 	{
-		if (!sdl_push_user_event(SDL_EVENT_USER_WINDOW_FULLSCREEN, &window.second, enter))
+		if (!sdl_push_user_event(SDL_EVENT_USER_WINDOW_FULLSCREEN, &window.second, enter,
+		                         forceOriginalDisplay))
 			return false;
 	}
 	_fullscreen = enter;

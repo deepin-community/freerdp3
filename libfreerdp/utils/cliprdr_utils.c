@@ -64,7 +64,7 @@ UINT cliprdr_parse_file_list(const BYTE* format_data, UINT32 format_data_length,
 	UINT result = NO_ERROR;
 	UINT32 count = 0;
 	wStream sbuffer;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	if (!format_data || !file_descriptor_array || !file_descriptor_count)
 		return ERROR_BAD_ARGUMENTS;
@@ -111,63 +111,62 @@ out:
 	return result;
 }
 
-BOOL cliprdr_read_filedescriptor(wStream* s, FILEDESCRIPTORW* file)
+BOOL cliprdr_read_filedescriptor(wStream* s, FILEDESCRIPTORW* descriptor)
 {
 	UINT64 tmp = 0;
-	WINPR_ASSERT(file);
+	WINPR_ASSERT(descriptor);
 
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, sizeof(FILEDESCRIPTORW)))
 		return FALSE;
 
-	Stream_Read_UINT32(s, file->dwFlags); /* flags (4 bytes) */
-	Stream_Read_UINT32(s, file->clsid.Data1);
-	Stream_Read_UINT16(s, file->clsid.Data2);
-	Stream_Read_UINT16(s, file->clsid.Data3);
-	Stream_Read(s, &file->clsid.Data4, sizeof(file->clsid.Data4));
-	Stream_Read_INT32(s, file->sizel.cx);
-	Stream_Read_INT32(s, file->sizel.cy);
-	Stream_Read_INT32(s, file->pointl.x);
-	Stream_Read_INT32(s, file->pointl.y);
-	Stream_Read_UINT32(s, file->dwFileAttributes); /* fileAttributes (4 bytes) */
+	Stream_Read_UINT32(s, descriptor->dwFlags); /* flags (4 bytes) */
+	Stream_Read_UINT32(s, descriptor->clsid.Data1);
+	Stream_Read_UINT16(s, descriptor->clsid.Data2);
+	Stream_Read_UINT16(s, descriptor->clsid.Data3);
+	Stream_Read(s, &descriptor->clsid.Data4, sizeof(descriptor->clsid.Data4));
+	Stream_Read_INT32(s, descriptor->sizel.cx);
+	Stream_Read_INT32(s, descriptor->sizel.cy);
+	Stream_Read_INT32(s, descriptor->pointl.x);
+	Stream_Read_INT32(s, descriptor->pointl.y);
+	Stream_Read_UINT32(s, descriptor->dwFileAttributes); /* fileAttributes (4 bytes) */
 	Stream_Read_UINT64(s, tmp);                    /* ftCreationTime (8 bytes) */
-	file->ftCreationTime = uint64_to_filetime(tmp);
+	descriptor->ftCreationTime = uint64_to_filetime(tmp);
 	Stream_Read_UINT64(s, tmp); /* ftLastAccessTime (8 bytes) */
-	file->ftLastAccessTime = uint64_to_filetime(tmp);
+	descriptor->ftLastAccessTime = uint64_to_filetime(tmp);
 	Stream_Read_UINT64(s, tmp); /* lastWriteTime (8 bytes) */
-	file->ftLastWriteTime = uint64_to_filetime(tmp);
-	Stream_Read_UINT32(s, file->nFileSizeHigh); /* fileSizeHigh (4 bytes) */
-	Stream_Read_UINT32(s, file->nFileSizeLow);  /* fileSizeLow (4 bytes) */
-	Stream_Read_UTF16_String(s, file->cFileName,
-	                         ARRAYSIZE(file->cFileName)); /* cFileName (520 bytes) */
-	return TRUE;
+	descriptor->ftLastWriteTime = uint64_to_filetime(tmp);
+	Stream_Read_UINT32(s, descriptor->nFileSizeHigh); /* fileSizeHigh (4 bytes) */
+	Stream_Read_UINT32(s, descriptor->nFileSizeLow);  /* fileSizeLow (4 bytes) */
+	return Stream_Read_UTF16_String(s, descriptor->cFileName,
+	                                ARRAYSIZE(descriptor->cFileName)); /* cFileName (520 bytes) */
 }
 
-BOOL cliprdr_write_filedescriptor(wStream* s, const FILEDESCRIPTORW* file)
+BOOL cliprdr_write_filedescriptor(wStream* s, const FILEDESCRIPTORW* descriptor)
 {
-	WINPR_ASSERT(file);
+	WINPR_ASSERT(descriptor);
 
 	if (!Stream_EnsureRemainingCapacity(s, sizeof(FILEDESCRIPTORW)))
 		return FALSE;
 
-	Stream_Write_UINT32(s, file->dwFlags); /* flags (4 bytes) */
+	Stream_Write_UINT32(s, descriptor->dwFlags); /* flags (4 bytes) */
 
-	Stream_Write_UINT32(s, file->clsid.Data1);
-	Stream_Write_UINT16(s, file->clsid.Data2);
-	Stream_Write_UINT16(s, file->clsid.Data3);
-	Stream_Write(s, &file->clsid.Data4, sizeof(file->clsid.Data4));
-	Stream_Write_INT32(s, file->sizel.cx);
-	Stream_Write_INT32(s, file->sizel.cy);
-	Stream_Write_INT32(s, file->pointl.x);
-	Stream_Write_INT32(s, file->pointl.y);
-	Stream_Write_UINT32(s, file->dwFileAttributes); /* fileAttributes (4 bytes) */
-	Stream_Write_UINT64(s, filetime_to_uint64(file->ftCreationTime));
-	Stream_Write_UINT64(s, filetime_to_uint64(file->ftLastAccessTime));
-	Stream_Write_UINT64(s, filetime_to_uint64(file->ftLastWriteTime)); /* lastWriteTime (8 bytes) */
-	Stream_Write_UINT32(s, file->nFileSizeHigh);                       /* fileSizeHigh (4 bytes) */
-	Stream_Write_UINT32(s, file->nFileSizeLow);                        /* fileSizeLow (4 bytes) */
-	Stream_Write_UTF16_String(s, file->cFileName,
-	                          ARRAYSIZE(file->cFileName)); /* cFileName (520 bytes) */
-	return TRUE;
+	Stream_Write_UINT32(s, descriptor->clsid.Data1);
+	Stream_Write_UINT16(s, descriptor->clsid.Data2);
+	Stream_Write_UINT16(s, descriptor->clsid.Data3);
+	Stream_Write(s, &descriptor->clsid.Data4, sizeof(descriptor->clsid.Data4));
+	Stream_Write_INT32(s, descriptor->sizel.cx);
+	Stream_Write_INT32(s, descriptor->sizel.cy);
+	Stream_Write_INT32(s, descriptor->pointl.x);
+	Stream_Write_INT32(s, descriptor->pointl.y);
+	Stream_Write_UINT32(s, descriptor->dwFileAttributes); /* fileAttributes (4 bytes) */
+	Stream_Write_UINT64(s, filetime_to_uint64(descriptor->ftCreationTime));
+	Stream_Write_UINT64(s, filetime_to_uint64(descriptor->ftLastAccessTime));
+	Stream_Write_UINT64(
+	    s, filetime_to_uint64(descriptor->ftLastWriteTime)); /* lastWriteTime (8 bytes) */
+	Stream_Write_UINT32(s, descriptor->nFileSizeHigh);       /* fileSizeHigh (4 bytes) */
+	Stream_Write_UINT32(s, descriptor->nFileSizeLow);        /* fileSizeLow (4 bytes) */
+	return Stream_Write_UTF16_String(s, descriptor->cFileName,
+	                                 ARRAYSIZE(descriptor->cFileName)); /* cFileName (520 bytes) */
 }
 
 /**
@@ -196,7 +195,7 @@ UINT cliprdr_serialize_file_list_ex(UINT32 flags, const FILEDESCRIPTORW* file_de
 {
 	UINT result = NO_ERROR;
 	size_t len = 0;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	if (!file_descriptor_array || !format_data || !format_data_length)
 		return ERROR_BAD_ARGUMENTS;
@@ -207,7 +206,7 @@ UINT cliprdr_serialize_file_list_ex(UINT32 flags, const FILEDESCRIPTORW* file_de
 		return ERROR_BAD_ARGUMENTS;
 	}
 
-	s = Stream_New(NULL, 4 + file_descriptor_count * CLIPRDR_FILEDESCRIPTOR_SIZE);
+	s = Stream_New(nullptr, 4 + file_descriptor_count * CLIPRDR_FILEDESCRIPTOR_SIZE);
 	if (!s)
 		return ERROR_NOT_ENOUGH_MEMORY;
 
@@ -240,7 +239,7 @@ UINT cliprdr_serialize_file_list_ex(UINT32 flags, const FILEDESCRIPTORW* file_de
 
 	Stream_SealLength(s);
 
-	Stream_GetBuffer(s, *format_data);
+	*format_data = Stream_Buffer(s);
 	Stream_GetLength(s, len);
 	if (len > UINT32_MAX)
 		goto error;

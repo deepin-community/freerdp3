@@ -25,6 +25,16 @@
 
 #include <freerdp/graphics.h>
 
-[[nodiscard]] BOOL sdl_register_pointer(rdpGraphics* graphics);
+[[nodiscard]] bool sdl_register_pointer(rdpGraphics* graphics);
 
-[[nodiscard]] BOOL sdl_Pointer_Set_Process(SdlContext* sdl);
+[[nodiscard]] bool sdl_Pointer_Set_Process(SdlContext* sdl);
+
+void sdl_Pointer_FreeCopy(rdpPointer* pointer);
+
+/** @brief creates a copy when the \ref rdpPointer was already created in \ref PointerNew.
+ *
+ *  The copy only contains the relevant data (coordinates, bitmap data) required for the SDL client
+ * to display the cursor. Callbacks and xor/and mask data are not copied.
+ */
+WINPR_ATTR_MALLOC(sdl_Pointer_FreeCopy, 1)
+rdpPointer* sdl_Pointer_Copy(const rdpPointer* pointer);

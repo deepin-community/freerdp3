@@ -31,8 +31,8 @@
 
 static BOOL test_generic(HANDLE hComm)
 {
-	COMMTIMEOUTS timeouts = { 0 };
-	COMMTIMEOUTS timeouts2 = { 0 };
+	COMMTIMEOUTS timeouts = WINPR_C_ARRAY_INIT;
+	COMMTIMEOUTS timeouts2 = WINPR_C_ARRAY_INIT;
 
 	timeouts.ReadIntervalTimeout = 1;
 	timeouts.ReadTotalTimeoutMultiplier = 2;
@@ -88,7 +88,7 @@ int TestTimeouts(int argc, char* argv[])
 {
 	struct stat statbuf;
 	BOOL result = 0;
-	HANDLE hComm = NULL;
+	HANDLE hComm = nullptr;
 
 	if (stat("/dev/ttyS0", &statbuf) < 0)
 	{
@@ -103,7 +103,7 @@ int TestTimeouts(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	hComm = CreateFile("COM1", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+	hComm = CreateFile("COM1", GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
 	if (hComm == INVALID_HANDLE_VALUE)
 	{
 		(void)fprintf(stderr, "CreateFileA failure: 0x%x\n", GetLastError());

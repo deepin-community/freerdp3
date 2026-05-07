@@ -26,6 +26,7 @@
 #include <string.h>
 #include <stdint.h>
 
+#include <winpr/atexit.h>
 #include <winpr/wtypes.h>
 #include <winpr/crt.h>
 #include <winpr/synch.h>
@@ -66,7 +67,8 @@ typedef struct
 static const DWORD g_err_oom = WINPR_CXX_COMPAT_CAST(DWORD, E_OUTOFMEMORY);
 
 static DWORD g_SessionId = 1;
-static wHashTable* g_ServerHandles = NULL;
+static wHashTable* g_ServerHandles = nullptr;
+static INIT_ONCE g_HandleInitializer = INIT_ONCE_STATIC_INIT;
 
 static rdpPeerChannel* wts_get_dvc_channel_by_id(WTSVirtualChannelManager* vcm, UINT32 ChannelId)
 {
@@ -76,8 +78,8 @@ static rdpPeerChannel* wts_get_dvc_channel_by_id(WTSVirtualChannelManager* vcm, 
 
 static BOOL wts_queue_receive_data(rdpPeerChannel* channel, const BYTE* Buffer, UINT32 Length)
 {
-	BYTE* buffer = NULL;
-	wtsChannelMessage* messageCtx = NULL;
+	BYTE* buffer = nullptr;
+	wtsChannelMessage* messageCtx = nullptr;
 
 	WINPR_ASSERT(channel);
 	messageCtx = (wtsChannelMessage*)malloc(sizeof(wtsChannelMessage) + Length);
@@ -91,12 +93,12 @@ static BOOL wts_queue_receive_data(rdpPeerChannel* channel, const BYTE* Buffer, 
 	messageCtx->offset = 0;
 	buffer = (BYTE*)(messageCtx + 1);
 	CopyMemory(buffer, Buffer, Length);
-	return MessageQueue_Post(channel->queue, messageCtx, 0, NULL, NULL);
+	return MessageQueue_Post(channel->queue, messageCtx, 0, nullptr, nullptr);
 }
 
 static BOOL wts_queue_send_item(rdpPeerChannel* channel, BYTE* Buffer, UINT32 Length)
 {
-	BYTE* buffer = NULL;
+	BYTE* buffer = nullptr;
 	UINT32 length = 0;
 
 	WINPR_ASSERT(channel);
@@ -221,7 +223,7 @@ static BOOL wts_read_drdynvc_data_first(rdpPeerChannel* channel, wStream* s, int
 	if (length > channel->dvc_total_length)
 		return FALSE;
 
-	Stream_SetPosition(channel->receiveData, 0);
+	Stream_ResetPosition(channel->receiveData);
 
 	if (!Stream_EnsureRemainingCapacity(channel->receiveData, channel->dvc_total_length))
 		return FALSE;
@@ -278,7 +280,7 @@ static BOOL wts_read_drdynvc_pdu(rdpPeerChannel* channel)
 	UINT8 Sp = 0;
 	UINT8 cbChId = 0;
 	UINT32 ChannelId = 0;
-	rdpPeerChannel* dvc = NULL;
+	rdpPeerChannel* dvc = nullptr;
 
 	WINPR_ASSERT(channel);
 	WINPR_ASSERT(channel->vcm);
@@ -288,7 +290,7 @@ static BOOL wts_read_drdynvc_pdu(rdpPeerChannel* channel)
 	if ((length < 1) || (length > UINT32_MAX))
 		return FALSE;
 
-	Stream_SetPosition(channel->receiveData, 0);
+	Stream_ResetPosition(channel->receiveData);
 	const UINT8 value = Stream_Get_UINT8(channel->receiveData);
 	length--;
 	Cmd = (value & 0xf0) >> 4;
@@ -416,14 +418,11 @@ static int wts_write_variable_uint(wStream* s, UINT32 val)
 
 static void wts_write_drdynvc_header(wStream* s, BYTE Cmd, UINT32 ChannelId)
 {
-	BYTE* bm = NULL;
-	int cbChId = 0;
-
 	WINPR_ASSERT(s);
 
-	Stream_GetPointer(s, bm);
+	BYTE* bm = Stream_PointerAs(s, BYTE);
 	Stream_Seek_UINT8(s);
-	cbChId = wts_write_variable_uint(s, ChannelId);
+	const int cbChId = wts_write_variable_uint(s, ChannelId);
 	*bm = (((Cmd & 0x0F) << 4) | cbChId) & 0xFF;
 }
 
@@ -457,7 +456,7 @@ static BOOL WTSProcessChannelData(rdpPeerChannel* channel, UINT16 channelId, con
 
 	if (flags & CHANNEL_FLAG_FIRST)
 	{
-		Stream_SetPosition(channel->receiveData, 0);
+		Stream_ResetPosition(channel->receiveData);
 	}
 
 	if (!Stream_EnsureRemainingCapacity(channel->receiveData, size))
@@ -486,7 +485,7 @@ static BOOL WTSProcessChannelData(rdpPeerChannel* channel, UINT16 channelId, con
 				                             (UINT32)pos);
 		}
 
-		Stream_SetPosition(channel->receiveData, 0);
+		Stream_ResetPosition(channel->receiveData);
 	}
 
 	return ret;
@@ -495,7 +494,7 @@ static BOOL WTSProcessChannelData(rdpPeerChannel* channel, UINT16 channelId, con
 static BOOL WTSReceiveChannelData(freerdp_peer* client, UINT16 channelId, const BYTE* data,
                                   size_t size, UINT32 flags, size_t totalSize)
 {
-	rdpMcs* mcs = NULL;
+	rdpMcs* mcs = nullptr;
 
 	WINPR_ASSERT(client);
 	WINPR_ASSERT(client->context);
@@ -524,7 +523,7 @@ static BOOL WTSReceiveChannelData(freerdp_peer* client, UINT16 channelId, const 
 #if defined(WITH_FREERDP_DEPRECATED)
 void WTSVirtualChannelManagerGetFileDescriptor(HANDLE hServer, void** fds, int* fds_count)
 {
-	void* fd = NULL;
+	void* fd = nullptr;
 	WTSVirtualChannelManager* vcm = (WTSVirtualChannelManager*)hServer;
 	WINPR_ASSERT(vcm);
 	WINPR_ASSERT(fds);
@@ -564,7 +563,7 @@ BOOL WTSVirtualChannelManagerOpen(HANDLE hServer)
 
 	if (vcm->drdynvc_state == DRDYNVC_STATE_NONE)
 	{
-		rdpPeerChannel* channel = NULL;
+		rdpPeerChannel* channel = nullptr;
 
 		/* Initialize drdynvc channel once and only once. */
 		vcm->drdynvc_state = DRDYNVC_STATE_INITIALIZED;
@@ -573,8 +572,8 @@ BOOL WTSVirtualChannelManagerOpen(HANDLE hServer)
 
 		if (channel)
 		{
-			BYTE capaBuffer[12] = { 0 };
-			wStream staticS = { 0 };
+			BYTE capaBuffer[12] = WINPR_C_ARRAY_INIT;
+			wStream staticS = WINPR_C_ARRAY_INIT;
 			wStream* s = Stream_StaticInit(&staticS, capaBuffer, sizeof(capaBuffer));
 
 			vcm->drdynvc_channel = channel;
@@ -598,9 +597,9 @@ BOOL WTSVirtualChannelManagerOpen(HANDLE hServer)
 
 BOOL WTSVirtualChannelManagerCheckFileDescriptorEx(HANDLE hServer, BOOL autoOpen)
 {
-	wMessage message = { 0 };
+	wMessage message = WINPR_C_ARRAY_INIT;
 	BOOL status = TRUE;
-	WTSVirtualChannelManager* vcm = NULL;
+	WTSVirtualChannelManager* vcm = nullptr;
 
 	if (!hServer || hServer == INVALID_HANDLE_VALUE)
 		return FALSE;
@@ -615,7 +614,7 @@ BOOL WTSVirtualChannelManagerCheckFileDescriptorEx(HANDLE hServer, BOOL autoOpen
 
 	while (MessageQueue_Peek(vcm->queue, &message, TRUE))
 	{
-		BYTE* buffer = NULL;
+		BYTE* buffer = nullptr;
 		UINT32 length = 0;
 		UINT16 channelId = 0;
 		channelId = (UINT16)(UINT_PTR)message.context;
@@ -653,7 +652,7 @@ HANDLE WTSVirtualChannelManagerGetEventHandle(HANDLE hServer)
 static rdpMcsChannel* wts_get_joined_channel_by_name(rdpMcs* mcs, const char* channel_name)
 {
 	if (!mcs || !channel_name || !strnlen(channel_name, CHANNEL_NAME_LEN + 1))
-		return NULL;
+		return nullptr;
 
 	for (UINT32 index = 0; index < mcs->channelCount; index++)
 	{
@@ -665,13 +664,13 @@ static rdpMcsChannel* wts_get_joined_channel_by_name(rdpMcs* mcs, const char* ch
 		}
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 static rdpMcsChannel* wts_get_joined_channel_by_id(rdpMcs* mcs, const UINT16 channel_id)
 {
 	if (!mcs || !channel_id)
-		return NULL;
+		return nullptr;
 
 	WINPR_ASSERT(mcs->channels);
 	for (UINT32 index = 0; index < mcs->channelCount; index++)
@@ -684,7 +683,7 @@ static rdpMcsChannel* wts_get_joined_channel_by_id(rdpMcs* mcs, const UINT16 cha
 		}
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 BOOL WTSIsChannelJoinedByName(freerdp_peer* client, const char* channel_name)
@@ -692,8 +691,7 @@ BOOL WTSIsChannelJoinedByName(freerdp_peer* client, const char* channel_name)
 	if (!client || !client->context || !client->context->rdp)
 		return FALSE;
 
-	return wts_get_joined_channel_by_name(client->context->rdp->mcs, channel_name) == NULL ? FALSE
-	                                                                                       : TRUE;
+	return (wts_get_joined_channel_by_name(client->context->rdp->mcs, channel_name) != nullptr);
 }
 
 BOOL WTSIsChannelJoinedById(freerdp_peer* client, UINT16 channel_id)
@@ -701,8 +699,7 @@ BOOL WTSIsChannelJoinedById(freerdp_peer* client, UINT16 channel_id)
 	if (!client || !client->context || !client->context->rdp)
 		return FALSE;
 
-	return wts_get_joined_channel_by_id(client->context->rdp->mcs, channel_id) == NULL ? FALSE
-	                                                                                   : TRUE;
+	return (wts_get_joined_channel_by_id(client->context->rdp->mcs, channel_id) != nullptr);
 }
 
 BOOL WTSVirtualChannelManagerIsChannelJoined(HANDLE hServer, const char* name)
@@ -712,7 +709,7 @@ BOOL WTSVirtualChannelManagerIsChannelJoined(HANDLE hServer, const char* name)
 	if (!vcm || !vcm->rdp)
 		return FALSE;
 
-	return wts_get_joined_channel_by_name(vcm->rdp->mcs, name) == NULL ? FALSE : TRUE;
+	return (wts_get_joined_channel_by_name(vcm->rdp->mcs, name) != nullptr);
 }
 
 BYTE WTSVirtualChannelManagerGetDrdynvcState(HANDLE hServer)
@@ -735,7 +732,7 @@ void WTSVirtualChannelManagerSetDVCCreationCallback(HANDLE hServer, psDVCCreatio
 
 UINT16 WTSChannelGetId(freerdp_peer* client, const char* channel_name)
 {
-	rdpMcsChannel* channel = NULL;
+	rdpMcsChannel* channel = nullptr;
 
 	WINPR_ASSERT(channel_name);
 	if (!client || !client->context || !client->context->rdp)
@@ -760,7 +757,7 @@ UINT32 WTSChannelGetIdByHandle(HANDLE hChannelHandle)
 
 BOOL WTSChannelSetHandleByName(freerdp_peer* client, const char* channel_name, void* handle)
 {
-	rdpMcsChannel* channel = NULL;
+	rdpMcsChannel* channel = nullptr;
 
 	WINPR_ASSERT(channel_name);
 	if (!client || !client->context || !client->context->rdp)
@@ -777,7 +774,7 @@ BOOL WTSChannelSetHandleByName(freerdp_peer* client, const char* channel_name, v
 
 BOOL WTSChannelSetHandleById(freerdp_peer* client, UINT16 channel_id, void* handle)
 {
-	rdpMcsChannel* channel = NULL;
+	rdpMcsChannel* channel = nullptr;
 
 	if (!client || !client->context || !client->context->rdp)
 		return FALSE;
@@ -793,57 +790,57 @@ BOOL WTSChannelSetHandleById(freerdp_peer* client, UINT16 channel_id, void* hand
 
 void* WTSChannelGetHandleByName(freerdp_peer* client, const char* channel_name)
 {
-	rdpMcsChannel* channel = NULL;
+	rdpMcsChannel* channel = nullptr;
 
 	WINPR_ASSERT(channel_name);
 	if (!client || !client->context || !client->context->rdp)
-		return NULL;
+		return nullptr;
 
 	channel = wts_get_joined_channel_by_name(client->context->rdp->mcs, channel_name);
 
 	if (!channel)
-		return NULL;
+		return nullptr;
 
 	return channel->handle;
 }
 
 void* WTSChannelGetHandleById(freerdp_peer* client, UINT16 channel_id)
 {
-	rdpMcsChannel* channel = NULL;
+	rdpMcsChannel* channel = nullptr;
 
 	if (!client || !client->context || !client->context->rdp)
-		return NULL;
+		return nullptr;
 
 	channel = wts_get_joined_channel_by_id(client->context->rdp->mcs, channel_id);
 
 	if (!channel)
-		return NULL;
+		return nullptr;
 
 	return channel->handle;
 }
 
 const char* WTSChannelGetName(freerdp_peer* client, UINT16 channel_id)
 {
-	rdpMcsChannel* channel = NULL;
+	rdpMcsChannel* channel = nullptr;
 
 	if (!client || !client->context || !client->context->rdp)
-		return NULL;
+		return nullptr;
 
 	channel = wts_get_joined_channel_by_id(client->context->rdp->mcs, channel_id);
 
 	if (!channel)
-		return NULL;
+		return nullptr;
 
 	return (const char*)channel->Name;
 }
 
 char** WTSGetAcceptedChannelNames(freerdp_peer* client, size_t* count)
 {
-	rdpMcs* mcs = NULL;
-	char** names = NULL;
+	rdpMcs* mcs = nullptr;
+	char** names = nullptr;
 
 	if (!client || !client->context || !count)
-		return NULL;
+		return nullptr;
 
 	WINPR_ASSERT(client->context->rdp);
 	mcs = client->context->rdp->mcs;
@@ -852,7 +849,7 @@ char** WTSGetAcceptedChannelNames(freerdp_peer* client, size_t* count)
 
 	names = (char**)calloc(mcs->channelCount, sizeof(char*));
 	if (!names)
-		return NULL;
+		return nullptr;
 
 	for (UINT32 index = 0; index < mcs->channelCount; index++)
 	{
@@ -865,7 +862,7 @@ char** WTSGetAcceptedChannelNames(freerdp_peer* client, size_t* count)
 
 INT64 WTSChannelGetOptions(freerdp_peer* client, UINT16 channel_id)
 {
-	rdpMcsChannel* channel = NULL;
+	rdpMcsChannel* channel = nullptr;
 
 	if (!client || !client->context || !client->context->rdp)
 		return -1;
@@ -1003,20 +1000,69 @@ static UINT32 channelId_Hash(const void* key)
 	return *v;
 }
 
+static void clearHandles(void)
+{
+	HashTable_Free(g_ServerHandles);
+	g_ServerHandles = nullptr;
+}
+
+static BOOL CALLBACK initializeHandles(WINPR_ATTR_UNUSED PINIT_ONCE once,
+                                       WINPR_ATTR_UNUSED PVOID param,
+                                       WINPR_ATTR_UNUSED PVOID* context)
+{
+	WINPR_ASSERT(g_ServerHandles == nullptr);
+	g_ServerHandles = HashTable_New(TRUE);
+	(void)winpr_atexit(clearHandles);
+	return g_ServerHandles != nullptr;
+}
+
+static bool setup(void)
+{
+	return InitOnceExecuteOnce(&g_HandleInitializer, initializeHandles, nullptr, nullptr);
+}
+
+static void wtsCloseVCM(WTSVirtualChannelManager* vcm, bool closeDrdynvc)
+{
+	WINPR_ASSERT(vcm);
+
+	HashTable_Lock(g_ServerHandles);
+
+/* clang analyzer does not like the check for INVALID_HANDLE_VALUE and considers the path not taken,
+ * leading to false positives on memory leaks. */
+#ifdef __clang_analyzer__
+	const BOOL valid = vcm != nullptr;
+#else
+	const BOOL valid = (vcm != nullptr) && (vcm != INVALID_HANDLE_VALUE);
+#endif
+	if (valid)
+	{
+		HashTable_Remove(g_ServerHandles, (void*)(UINT_PTR)vcm->SessionId);
+
+		HashTable_Free(vcm->dynamicVirtualChannels);
+
+		if (vcm->drdynvc_channel)
+		{
+			if (closeDrdynvc)
+				(void)WTSVirtualChannelClose(vcm->drdynvc_channel);
+			vcm->drdynvc_channel = nullptr;
+		}
+
+		MessageQueue_Free(vcm->queue);
+		free(vcm);
+	}
+	HashTable_Unlock(g_ServerHandles);
+}
+
 HANDLE WINAPI FreeRDP_WTSOpenServerA(LPSTR pServerName)
 {
-	rdpContext* context = NULL;
-	freerdp_peer* client = NULL;
-	WTSVirtualChannelManager* vcm = NULL;
-	HANDLE hServer = INVALID_HANDLE_VALUE;
-	wObject queueCallbacks = { 0 };
+	wObject queueCallbacks = WINPR_C_ARRAY_INIT;
 
-	context = (rdpContext*)pServerName;
+	rdpContext* context = (rdpContext*)pServerName;
 
-	if (!context)
+	if (!setup() || !context)
 		return INVALID_HANDLE_VALUE;
 
-	client = context->peer;
+	freerdp_peer* client = context->peer;
 
 	if (!client)
 	{
@@ -1024,40 +1070,28 @@ HANDLE WINAPI FreeRDP_WTSOpenServerA(LPSTR pServerName)
 		return INVALID_HANDLE_VALUE;
 	}
 
-	vcm = (WTSVirtualChannelManager*)calloc(1, sizeof(WTSVirtualChannelManager));
+	WTSVirtualChannelManager* vcm = calloc(1, sizeof(WTSVirtualChannelManager));
 
 	if (!vcm)
-		goto error_vcm_alloc;
+		goto fail;
 
 	vcm->client = client;
 	vcm->rdp = context->rdp;
-	vcm->SessionId = g_SessionId++;
-
-	if (!g_ServerHandles)
-	{
-		g_ServerHandles = HashTable_New(TRUE);
-
-		if (!g_ServerHandles)
-			goto error_free;
-	}
-
-	if (!HashTable_Insert(g_ServerHandles, (void*)(UINT_PTR)vcm->SessionId, (void*)vcm))
-		goto error_free;
 
 	queueCallbacks.fnObjectFree = wts_virtual_channel_manager_free_message;
 	vcm->queue = MessageQueue_New(&queueCallbacks);
 
 	if (!vcm->queue)
-		goto error_queue;
+		goto fail;
 
 	vcm->dvc_channel_id_seq = 0;
 	vcm->dynamicVirtualChannels = HashTable_New(TRUE);
 
 	if (!vcm->dynamicVirtualChannels)
-		goto error_dynamicVirtualChannels;
+		goto fail;
 
 	if (!HashTable_SetHashFunction(vcm->dynamicVirtualChannels, channelId_Hash))
-		goto error_hashFunction;
+		goto fail;
 
 	{
 		wObject* obj = HashTable_ValueObject(vcm->dynamicVirtualChannels);
@@ -1068,18 +1102,21 @@ HANDLE WINAPI FreeRDP_WTSOpenServerA(LPSTR pServerName)
 		obj->fnObjectEquals = dynChannelMatch;
 	}
 	client->ReceiveChannelData = WTSReceiveChannelData;
-	hServer = (HANDLE)vcm;
+	{
+		HashTable_Lock(g_ServerHandles);
+		vcm->SessionId = g_SessionId++;
+		const BOOL rc =
+		    HashTable_Insert(g_ServerHandles, (void*)(UINT_PTR)vcm->SessionId, (void*)vcm);
+		HashTable_Unlock(g_ServerHandles);
+		if (!rc)
+			goto fail;
+	}
+
+	HANDLE hServer = (HANDLE)vcm;
 	return hServer;
 
-error_hashFunction:
-	HashTable_Free(vcm->dynamicVirtualChannels);
-error_dynamicVirtualChannels:
-	MessageQueue_Free(vcm->queue);
-error_queue:
-	HashTable_Remove(g_ServerHandles, (void*)(UINT_PTR)vcm->SessionId);
-error_free:
-	free(vcm);
-error_vcm_alloc:
+fail:
+	wtsCloseVCM(vcm, false);
 	SetLastError(ERROR_NOT_ENOUGH_MEMORY);
 	return INVALID_HANDLE_VALUE;
 }
@@ -1097,24 +1134,8 @@ HANDLE WINAPI FreeRDP_WTSOpenServerExA(LPSTR pServerName)
 
 VOID WINAPI FreeRDP_WTSCloseServer(HANDLE hServer)
 {
-	WTSVirtualChannelManager* vcm = NULL;
-	vcm = (WTSVirtualChannelManager*)hServer;
-
-	if (vcm && (vcm != INVALID_HANDLE_VALUE))
-	{
-		HashTable_Remove(g_ServerHandles, (void*)(UINT_PTR)vcm->SessionId);
-
-		HashTable_Free(vcm->dynamicVirtualChannels);
-
-		if (vcm->drdynvc_channel)
-		{
-			(void)WTSVirtualChannelClose(vcm->drdynvc_channel);
-			vcm->drdynvc_channel = NULL;
-		}
-
-		MessageQueue_Free(vcm->queue);
-		free(vcm);
-	}
+	WTSVirtualChannelManager* vcm = (WTSVirtualChannelManager*)hServer;
+	wtsCloseVCM(vcm, true);
 }
 
 BOOL WINAPI FreeRDP_WTSEnumerateSessionsW(WINPR_ATTR_UNUSED HANDLE hServer,
@@ -1200,7 +1221,7 @@ BOOL WINAPI FreeRDP_WTSQuerySessionInformationA(HANDLE hServer, WINPR_ATTR_UNUSE
                                                 DWORD* pBytesReturned)
 {
 	DWORD BytesReturned = 0;
-	WTSVirtualChannelManager* vcm = NULL;
+	WTSVirtualChannelManager* vcm = nullptr;
 	vcm = (WTSVirtualChannelManager*)hServer;
 
 	if (!vcm)
@@ -1208,7 +1229,7 @@ BOOL WINAPI FreeRDP_WTSQuerySessionInformationA(HANDLE hServer, WINPR_ATTR_UNUSE
 
 	if (WTSInfoClass == WTSSessionId)
 	{
-		ULONG* pBuffer = NULL;
+		ULONG* pBuffer = nullptr;
 		BytesReturned = sizeof(ULONG);
 		pBuffer = (ULONG*)malloc(sizeof(BytesReturned));
 
@@ -1327,14 +1348,14 @@ static void peer_channel_queue_free_message(void* obj)
 		return;
 
 	free(msg->context);
-	msg->context = NULL;
+	msg->context = nullptr;
 }
 
 static rdpPeerChannel* channel_new(WTSVirtualChannelManager* vcm, freerdp_peer* client,
                                    UINT32 ChannelId, UINT16 index, UINT16 type, size_t chunkSize,
                                    const char* name)
 {
-	wObject queueCallbacks = { 0 };
+	wObject queueCallbacks = WINPR_C_ARRAY_INIT;
 	queueCallbacks.fnObjectFree = peer_channel_queue_free_message;
 
 	rdpPeerChannel* channel =
@@ -1354,26 +1375,26 @@ static rdpPeerChannel* channel_new(WTSVirtualChannelManager* vcm, freerdp_peer* 
 	return channel;
 fail:
 	channel_free(channel);
-	return NULL;
+	return nullptr;
 }
 
 HANDLE WINAPI FreeRDP_WTSVirtualChannelOpen(HANDLE hServer, WINPR_ATTR_UNUSED DWORD SessionId,
                                             LPSTR pVirtualName)
 {
 	size_t length = 0;
-	rdpMcs* mcs = NULL;
-	rdpMcsChannel* joined_channel = NULL;
-	freerdp_peer* client = NULL;
-	rdpPeerChannel* channel = NULL;
-	WTSVirtualChannelManager* vcm = NULL;
-	HANDLE hChannelHandle = NULL;
-	rdpContext* context = NULL;
+	rdpMcs* mcs = nullptr;
+	rdpMcsChannel* joined_channel = nullptr;
+	freerdp_peer* client = nullptr;
+	rdpPeerChannel* channel = nullptr;
+	WTSVirtualChannelManager* vcm = nullptr;
+	HANDLE hChannelHandle = nullptr;
+	rdpContext* context = nullptr;
 	vcm = (WTSVirtualChannelManager*)hServer;
 
 	if (!vcm)
 	{
 		SetLastError(ERROR_INVALID_DATA);
-		return NULL;
+		return nullptr;
 	}
 
 	client = vcm->client;
@@ -1392,7 +1413,7 @@ HANDLE WINAPI FreeRDP_WTSVirtualChannelOpen(HANDLE hServer, WINPR_ATTR_UNUSED DW
 	if (length > CHANNEL_NAME_LEN)
 	{
 		SetLastError(ERROR_NOT_FOUND);
-		return NULL;
+		return nullptr;
 	}
 
 	UINT32 index = 0;
@@ -1409,7 +1430,7 @@ HANDLE WINAPI FreeRDP_WTSVirtualChannelOpen(HANDLE hServer, WINPR_ATTR_UNUSED DW
 	if (!joined_channel)
 	{
 		SetLastError(ERROR_NOT_FOUND);
-		return NULL;
+		return nullptr;
 	}
 
 	channel = (rdpPeerChannel*)joined_channel->handle;
@@ -1434,35 +1455,42 @@ HANDLE WINAPI FreeRDP_WTSVirtualChannelOpen(HANDLE hServer, WINPR_ATTR_UNUSED DW
 fail:
 	channel_free(channel);
 	SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-	return NULL;
+	return nullptr;
 }
 
 HANDLE WINAPI FreeRDP_WTSVirtualChannelOpenEx(DWORD SessionId, LPSTR pVirtualName, DWORD flags)
 {
-	wStream* s = NULL;
-	rdpMcs* mcs = NULL;
+	wStream* s = nullptr;
+	rdpPeerChannel* channel = nullptr;
 	BOOL joined = FALSE;
-	freerdp_peer* client = NULL;
-	rdpPeerChannel* channel = NULL;
 	ULONG written = 0;
-	WTSVirtualChannelManager* vcm = NULL;
+
+	if (!setup())
+		return nullptr;
 
 	if (SessionId == WTS_CURRENT_SESSION)
-		return NULL;
+		return nullptr;
 
-	vcm = (WTSVirtualChannelManager*)HashTable_GetItemValue(g_ServerHandles,
-	                                                        (void*)(UINT_PTR)SessionId);
+	HashTable_Lock(g_ServerHandles);
+	WTSVirtualChannelManager* vcm = (WTSVirtualChannelManager*)HashTable_GetItemValue(
+	    g_ServerHandles, (void*)(UINT_PTR)SessionId);
 
 	if (!vcm)
-		return NULL;
+		goto end;
 
 	if (!(flags & WTS_CHANNEL_OPTION_DYNAMIC))
 	{
+		HashTable_Unlock(g_ServerHandles);
 		return FreeRDP_WTSVirtualChannelOpen((HANDLE)vcm, SessionId, pVirtualName);
 	}
 
-	client = vcm->client;
-	mcs = client->context->rdp->mcs;
+	freerdp_peer* client = vcm->client;
+	WINPR_ASSERT(client);
+	WINPR_ASSERT(client->context);
+	WINPR_ASSERT(client->context->rdp);
+
+	rdpMcs* mcs = client->context->rdp->mcs;
+	WINPR_ASSERT(mcs);
 
 	for (UINT32 index = 0; index < mcs->channelCount; index++)
 	{
@@ -1478,13 +1506,13 @@ HANDLE WINAPI FreeRDP_WTSVirtualChannelOpenEx(DWORD SessionId, LPSTR pVirtualNam
 	if (!joined)
 	{
 		SetLastError(ERROR_NOT_FOUND);
-		return NULL;
+		goto end;
 	}
 
 	if (!vcm->drdynvc_channel || (vcm->drdynvc_state != DRDYNVC_STATE_READY))
 	{
 		SetLastError(ERROR_NOT_READY);
-		return NULL;
+		goto end;
 	}
 
 	WINPR_ASSERT(client);
@@ -1498,7 +1526,7 @@ HANDLE WINAPI FreeRDP_WTSVirtualChannelOpenEx(DWORD SessionId, LPSTR pVirtualNam
 	if (!channel)
 	{
 		SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-		return NULL;
+		goto end;
 	}
 
 	const LONG hdl = InterlockedIncrement(&vcm->dvc_channel_id_seq);
@@ -1507,10 +1535,10 @@ HANDLE WINAPI FreeRDP_WTSVirtualChannelOpenEx(DWORD SessionId, LPSTR pVirtualNam
 	if (!HashTable_Insert(vcm->dynamicVirtualChannels, &channel->channelId, channel))
 	{
 		channel_free(channel);
-		channel = NULL;
+		channel = nullptr;
 		goto fail;
 	}
-	s = Stream_New(NULL, 64);
+	s = Stream_New(nullptr, 64);
 
 	if (!s)
 		goto fail;
@@ -1526,21 +1554,25 @@ HANDLE WINAPI FreeRDP_WTSVirtualChannelOpenEx(DWORD SessionId, LPSTR pVirtualNam
 			goto fail;
 	}
 
+end:
 	Stream_Free(s, TRUE);
+	HashTable_Unlock(g_ServerHandles);
 	return channel;
+
 fail:
 	Stream_Free(s, TRUE);
 	if (channel)
 		HashTable_Remove(vcm->dynamicVirtualChannels, &channel->channelId);
+	HashTable_Unlock(g_ServerHandles);
 
 	SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-	return NULL;
+	return nullptr;
 }
 
 BOOL WINAPI FreeRDP_WTSVirtualChannelClose(HANDLE hChannelHandle)
 {
-	wStream* s = NULL;
-	rdpMcs* mcs = NULL;
+	wStream* s = nullptr;
+	rdpMcs* mcs = nullptr;
 
 	rdpPeerChannel* channel = (rdpPeerChannel*)hChannelHandle;
 	BOOL ret = TRUE;
@@ -1562,7 +1594,7 @@ BOOL WINAPI FreeRDP_WTSVirtualChannelClose(HANDLE hChannelHandle)
 				rdpMcsChannel* cur = &mcs->channels[channel->index];
 				rdpPeerChannel* peerChannel = (rdpPeerChannel*)cur->handle;
 				channel_free(peerChannel);
-				cur->handle = NULL;
+				cur->handle = nullptr;
 			}
 		}
 		else
@@ -1570,7 +1602,7 @@ BOOL WINAPI FreeRDP_WTSVirtualChannelClose(HANDLE hChannelHandle)
 			if (channel->dvc_open_state == DVC_OPEN_STATE_SUCCEEDED)
 			{
 				ULONG written = 0;
-				s = Stream_New(NULL, 8);
+				s = Stream_New(nullptr, 8);
 
 				if (!s)
 				{
@@ -1598,9 +1630,9 @@ BOOL WINAPI FreeRDP_WTSVirtualChannelClose(HANDLE hChannelHandle)
 BOOL WINAPI FreeRDP_WTSVirtualChannelRead(HANDLE hChannelHandle, WINPR_ATTR_UNUSED ULONG TimeOut,
                                           PCHAR Buffer, ULONG BufferSize, PULONG pBytesRead)
 {
-	BYTE* buffer = NULL;
-	wMessage message = { 0 };
-	wtsChannelMessage* messageCtx = NULL;
+	BYTE* buffer = nullptr;
+	wMessage message = WINPR_C_ARRAY_INIT;
+	wtsChannelMessage* messageCtx = nullptr;
 	rdpPeerChannel* channel = (rdpPeerChannel*)hChannelHandle;
 
 	WINPR_ASSERT(channel);
@@ -1614,13 +1646,13 @@ BOOL WINAPI FreeRDP_WTSVirtualChannelRead(HANDLE hChannelHandle, WINPR_ATTR_UNUS
 
 	messageCtx = message.context;
 
-	if (messageCtx == NULL)
+	if (messageCtx == nullptr)
 		return FALSE;
 
 	buffer = (BYTE*)(messageCtx + 1);
 	*pBytesRead = messageCtx->length - messageCtx->offset;
 
-	if (Buffer == NULL || BufferSize == 0)
+	if (Buffer == nullptr || BufferSize == 0)
 	{
 		return TRUE;
 	}
@@ -1633,8 +1665,10 @@ BOOL WINAPI FreeRDP_WTSVirtualChannelRead(HANDLE hChannelHandle, WINPR_ATTR_UNUS
 
 	if (messageCtx->offset >= messageCtx->length)
 	{
-		(void)MessageQueue_Peek(channel->queue, &message, TRUE);
+		const int rc = MessageQueue_Peek(channel->queue, &message, TRUE);
 		peer_channel_queue_free_message(&message);
+		if (rc < 0)
+			return FALSE;
 	}
 
 	return TRUE;
@@ -1643,11 +1677,11 @@ BOOL WINAPI FreeRDP_WTSVirtualChannelRead(HANDLE hChannelHandle, WINPR_ATTR_UNUS
 BOOL WINAPI FreeRDP_WTSVirtualChannelWrite(HANDLE hChannelHandle, PCHAR Buffer, ULONG uLength,
                                            PULONG pBytesWritten)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 	int cbLen = 0;
 	int cbChId = 0;
 	int first = 0;
-	BYTE* buffer = NULL;
+	BYTE* buffer = nullptr;
 	size_t totalWritten = 0;
 	rdpPeerChannel* channel = (rdpPeerChannel*)hChannelHandle;
 	BOOL ret = FALSE;
@@ -1684,7 +1718,7 @@ BOOL WINAPI FreeRDP_WTSVirtualChannelWrite(HANDLE hChannelHandle, PCHAR Buffer, 
 		size_t Length = uLength;
 		while (Length > 0)
 		{
-			s = Stream_New(NULL, DVC_MAX_DATA_PDU_SIZE);
+			s = Stream_New(nullptr, DVC_MAX_DATA_PDU_SIZE);
 
 			if (!s)
 			{
@@ -1750,10 +1784,10 @@ BOOL WINAPI FreeRDP_WTSVirtualChannelPurgeOutput(WINPR_ATTR_UNUSED HANDLE hChann
 BOOL WINAPI FreeRDP_WTSVirtualChannelQuery(HANDLE hChannelHandle, WTS_VIRTUAL_CLASS WtsVirtualClass,
                                            PVOID* ppBuffer, DWORD* pBytesReturned)
 {
-	void* pfd = NULL;
+	void* pfd = nullptr;
 	BOOL bval = 0;
-	void* fds[10] = { 0 };
-	HANDLE hEvent = NULL;
+	void* fds[10] = WINPR_C_ARRAY_INIT;
+	HANDLE hEvent = nullptr;
 	int fds_count = 0;
 	BOOL status = FALSE;
 	rdpPeerChannel* channel = (rdpPeerChannel*)hChannelHandle;
@@ -1826,7 +1860,7 @@ BOOL WINAPI FreeRDP_WTSVirtualChannelQuery(HANDLE hChannelHandle, WTS_VIRTUAL_CL
 						break;
 
 					default:
-						*ppBuffer = NULL;
+						*ppBuffer = nullptr;
 						*pBytesReturned = 0;
 						return FALSE;
 				}
@@ -2104,11 +2138,11 @@ rdpPeerChannel* server_channel_common_new(freerdp_peer* client, UINT16 index, UI
 {
 	rdpPeerChannel* channel = (rdpPeerChannel*)calloc(1, sizeof(rdpPeerChannel));
 	if (!channel)
-		return NULL;
+		return nullptr;
 
 	InitializeCriticalSection(&channel->writeLock);
 
-	channel->receiveData = Stream_New(NULL, chunkSize);
+	channel->receiveData = Stream_New(nullptr, chunkSize);
 	if (!channel->receiveData)
 		goto fail;
 
@@ -2126,5 +2160,5 @@ fail:
 	WINPR_PRAGMA_DIAG_IGNORED_MISMATCHED_DEALLOC
 	server_channel_common_free(channel);
 	WINPR_PRAGMA_DIAG_POP
-	return NULL;
+	return nullptr;
 }

@@ -36,7 +36,7 @@ UINT ecam_channel_send_error_response(CameraPlugin* ecam, GENERIC_CHANNEL_CALLBA
 
 	WINPR_ASSERT(ecam);
 
-	wStream* s = Stream_New(NULL, CAM_HEADER_SIZE + 4);
+	wStream* s = Stream_New(nullptr, CAM_HEADER_SIZE + 4);
 	if (!s)
 	{
 		WLog_ERR(TAG, "Stream_New failed!");
@@ -60,7 +60,7 @@ UINT ecam_channel_send_generic_msg(CameraPlugin* ecam, GENERIC_CHANNEL_CALLBACK*
 {
 	WINPR_ASSERT(ecam);
 
-	wStream* s = Stream_New(NULL, CAM_HEADER_SIZE);
+	wStream* s = Stream_New(nullptr, CAM_HEADER_SIZE);
 	if (!s)
 	{
 		WLog_ERR(TAG, "Stream_New failed!");
@@ -85,13 +85,14 @@ UINT ecam_channel_write(WINPR_ATTR_UNUSED CameraPlugin* ecam, GENERIC_CHANNEL_CA
 		return ERROR_INVALID_PARAMETER;
 
 	Stream_SealLength(out);
-	WINPR_ASSERT(Stream_Length(out) <= UINT32_MAX);
 
-	WLog_DBG(TAG, "ChannelId=%" PRIu32 ", MessageId=0x%02" PRIx8 ", Length=%" PRIuz,
-	         hchannel->channel_mgr->GetChannelId(hchannel->channel), msg, Stream_Length(out));
+	const ULONG len = WINPR_ASSERTING_INT_CAST(ULONG, Stream_Length(out));
 
-	const UINT error = hchannel->channel->Write(hchannel->channel, (ULONG)Stream_Length(out),
-	                                            Stream_Buffer(out), NULL);
+	WLog_DBG(TAG, "ChannelId=%" PRIu32 ", MessageId=0x%02" PRIx8 ", Length=%" PRIu32,
+	         hchannel->channel_mgr->GetChannelId(hchannel->channel), msg, len);
+
+	const UINT error =
+	    hchannel->channel->Write(hchannel->channel, len, Stream_Buffer(out), nullptr);
 
 	if (freeStream)
 		Stream_Free(out, TRUE);
@@ -112,7 +113,7 @@ static UINT ecam_send_device_added_notification(CameraPlugin* ecam,
 
 	WINPR_ASSERT(ecam);
 
-	wStream* s = Stream_New(NULL, 256);
+	wStream* s = Stream_New(nullptr, 256);
 	if (!s)
 	{
 		WLog_ERR(TAG, "Stream_New failed!");
@@ -169,9 +170,7 @@ static UINT ecam_ihal_device_added_callback(CameraPlugin* ecam, GENERIC_CHANNEL_
  */
 static UINT ecam_enumerate_devices(CameraPlugin* ecam, GENERIC_CHANNEL_CALLBACK* hchannel)
 {
-	ecam->ihal->Enumerate(ecam->ihal, ecam_ihal_device_added_callback, ecam, hchannel);
-
-	return CHANNEL_RC_OK;
+	return ecam->ihal->Enumerate(ecam->ihal, ecam_ihal_device_added_callback, ecam, hchannel);
 }
 
 /**
@@ -354,7 +353,12 @@ static UINT ecam_plugin_initialize(IWTSPlugin* pPlugin, IWTSVirtualChannelManage
 		return CHANNEL_RC_NO_MEMORY;
 	}
 
-	HashTable_SetupForStringData(ecam->devices, FALSE);
+	if (!HashTable_SetupForStringData(ecam->devices, FALSE))
+	{
+		HashTable_Free(ecam->devices);
+		ecam->devices = nullptr;
+		return ERROR_INTERNAL_ERROR;
+	}
 
 	wObject* obj = HashTable_ValueObject(ecam->devices);
 	WINPR_ASSERT(obj);
@@ -403,11 +407,12 @@ static UINT ecam_plugin_terminated(IWTSPlugin* pPlugin)
 
 	HashTable_Free(ecam->devices);
 
+	UINT rc = CHANNEL_RC_OK;
 	if (ecam->ihal)
-		ecam->ihal->Free(ecam->ihal);
+		rc = ecam->ihal->Free(ecam->ihal);
 
 	free(ecam);
-	return CHANNEL_RC_OK;
+	return rc;
 }
 
 /**
@@ -475,16 +480,16 @@ static UINT ecam_load_hal_plugin(CameraPlugin* ecam, const char* name, const ADD
 {
 	WINPR_ASSERT(ecam);
 
-	FREERDP_CAMERA_HAL_ENTRY_POINTS entryPoints = { 0 };
+	FREERDP_CAMERA_HAL_ENTRY_POINTS entryPoints = WINPR_C_ARRAY_INIT;
 	UINT error = ERROR_INTERNAL_ERROR;
 	union
 	{
 		PVIRTUALCHANNELENTRY pvce;
 		const PFREERDP_CAMERA_HAL_ENTRY entry;
 	} cnv;
-	cnv.pvce = freerdp_load_channel_addin_entry(RDPECAM_CHANNEL_NAME, name, NULL, 0);
+	cnv.pvce = freerdp_load_channel_addin_entry(RDPECAM_CHANNEL_NAME, name, nullptr, 0);
 
-	if (cnv.entry == NULL)
+	if (cnv.entry == nullptr)
 	{
 		WLog_ERR(TAG,
 		         "freerdp_load_channel_addin_entry did not return any function pointers for %s ",
@@ -521,7 +526,7 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE rdpecam_DVCPluginEntry(IDRDYNVC_ENTRY_POINTS*
 	WINPR_ASSERT(pEntryPoints->GetPlugin);
 	CameraPlugin* ecam = (CameraPlugin*)pEntryPoints->GetPlugin(pEntryPoints, RDPECAM_CHANNEL_NAME);
 
-	if (ecam != NULL)
+	if (ecam != nullptr)
 		return CHANNEL_RC_ALREADY_INITIALIZED;
 
 	ecam = (CameraPlugin*)calloc(1, sizeof(CameraPlugin));
@@ -534,8 +539,8 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE rdpecam_DVCPluginEntry(IDRDYNVC_ENTRY_POINTS*
 
 	ecam->attached = TRUE;
 	ecam->iface.Initialize = ecam_plugin_initialize;
-	ecam->iface.Connected = NULL; /* server connects to client */
-	ecam->iface.Disconnected = NULL;
+	ecam->iface.Connected = nullptr; /* server connects to client */
+	ecam->iface.Disconnected = nullptr;
 	ecam->iface.Terminated = ecam_plugin_terminated;
 	ecam->iface.Attached = ecam_plugin_attached;
 	ecam->iface.Detached = ecam_plugin_detached;
@@ -544,12 +549,12 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE rdpecam_DVCPluginEntry(IDRDYNVC_ENTRY_POINTS*
 #if defined(WITH_V4L)
 	ecam->subsystem = "v4l";
 #else
-	ecam->subsystem = NULL;
+	ecam->subsystem = nullptr;
 #endif
 
 	if (ecam->subsystem)
 	{
-		if ((error = ecam_load_hal_plugin(ecam, ecam->subsystem, NULL /*args*/)))
+		if ((error = ecam_load_hal_plugin(ecam, ecam->subsystem, nullptr /*args*/)))
 		{
 			WLog_ERR(TAG,
 			         "Unable to load camera redirection subsystem %s because of error %" PRIu32 "",

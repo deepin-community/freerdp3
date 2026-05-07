@@ -42,6 +42,7 @@ class SdlInputWidgetPairList : public SdlWidgetList
 	SdlInputWidgetPairList& operator=(SdlInputWidgetPairList&& other) = delete;
 
 	[[nodiscard]] int run(std::vector<std::string>& result);
+	void parent(SDL_Window* parent);
 
   protected:
 	[[nodiscard]] bool updateInternal() override;

@@ -167,12 +167,13 @@ int rfx_rlgr_decode(RLGR_MODE mode, const BYTE* WINPR_RESTRICT pSrcData, UINT32 
 	UINT32 nIdx = 0;
 	UINT32 val1 = 0;
 	UINT32 val2 = 0;
-	INT16* pOutput = NULL;
-	wBitStream* bs = NULL;
-	wBitStream s_bs = { 0 };
+	INT16* pOutput = nullptr;
+	wBitStream* bs = nullptr;
+	wBitStream s_bs = WINPR_C_ARRAY_INIT;
 	const SSIZE_T DstSize = rDstSize;
 
-	InitOnceExecuteOnce(&rfx_rlgr_init_once, rfx_rlgr_init, NULL, NULL);
+	if (!InitOnceExecuteOnce(&rfx_rlgr_init_once, rfx_rlgr_init, nullptr, nullptr))
+		return -1;
 
 	k = 1;
 	kp = k << LSGR;
@@ -239,7 +240,7 @@ int rfx_rlgr_decode(RLGR_MODE mode, const BYTE* WINPR_RESTRICT pSrcData, UINT32 
 
 			while (vk--)
 			{
-				const UINT32 add = (1 << k); /* add (1 << k) to run length */
+				const UINT32 add = (1u << k); /* add (1u << k) to run length */
 				run += add;
 
 				/* update k, kp params */
@@ -257,7 +258,7 @@ int rfx_rlgr_decode(RLGR_MODE mode, const BYTE* WINPR_RESTRICT pSrcData, UINT32 
 			if (BitStream_GetRemainingLength(bs) < k)
 				break;
 
-			bs->mask = ((1 << k) - 1);
+			bs->mask = ((1u << k) - 1);
 			run += ((bs->accumulator >> (32 - k)) & bs->mask);
 			BitStream_Shift(bs, k);
 
@@ -307,7 +308,7 @@ int rfx_rlgr_decode(RLGR_MODE mode, const BYTE* WINPR_RESTRICT pSrcData, UINT32 
 			if (BitStream_GetRemainingLength(bs) < kr)
 				break;
 
-			bs->mask = ((1 << kr) - 1);
+			bs->mask = ((1u << kr) - 1);
 			if (kr > 0)
 				code = (UINT16)((bs->accumulator >> (32 - kr)) & bs->mask);
 			else
@@ -419,7 +420,7 @@ int rfx_rlgr_decode(RLGR_MODE mode, const BYTE* WINPR_RESTRICT pSrcData, UINT32 
 			if (BitStream_GetRemainingLength(bs) < kr)
 				break;
 
-			bs->mask = ((1 << kr) - 1);
+			bs->mask = ((1u << kr) - 1);
 			if (kr > 0)
 				code = (UINT16)((bs->accumulator >> (32 - kr)) & bs->mask);
 			else
@@ -509,7 +510,7 @@ int rfx_rlgr_decode(RLGR_MODE mode, const BYTE* WINPR_RESTRICT pSrcData, UINT32 
 				if (BitStream_GetRemainingLength(bs) < nIdx)
 					break;
 
-				bs->mask = ((1 << nIdx) - 1);
+				bs->mask = ((1u << nIdx) - 1);
 				if (nIdx > 0)
 					val1 = ((bs->accumulator >> (32 - nIdx)) & bs->mask);
 				else
@@ -638,7 +639,7 @@ static void rfx_rlgr_code_gr(RFX_BITSTREAM* bs, uint32_t* krp, UINT32 val)
 	/* remainder part of GR code, if needed */
 	if (kr)
 	{
-		OutputBits(kr, val & ((1 << kr) - 1));
+		OutputBits(kr, val & ((1u << kr) - 1));
 	}
 
 	/* update krp, only if it is not equal to 1 */
@@ -655,20 +656,17 @@ static void rfx_rlgr_code_gr(RFX_BITSTREAM* bs, uint32_t* krp, UINT32 val)
 int rfx_rlgr_encode(RLGR_MODE mode, const INT16* WINPR_RESTRICT data, UINT32 data_size,
                     BYTE* WINPR_RESTRICT buffer, UINT32 buffer_size)
 {
-	uint32_t k = 0;
-	uint32_t kp = 0;
-	uint32_t krp = 0;
-	RFX_BITSTREAM* bs = NULL;
+	RFX_BITSTREAM* bs = (RFX_BITSTREAM*)winpr_aligned_calloc(1, sizeof(RFX_BITSTREAM), 32);
 
-	if (!(bs = (RFX_BITSTREAM*)winpr_aligned_calloc(1, sizeof(RFX_BITSTREAM), 32)))
+	if (!bs)
 		return 0;
 
 	rfx_bitstream_attach(bs, buffer, buffer_size);
 
 	/* initialize the parameters */
-	k = 1;
-	kp = 1 << LSGR;
-	krp = 1 << LSGR;
+	uint32_t k = 1;
+	uint32_t kp = 1u << LSGR;
+	uint32_t krp = 1u << LSGR;
 
 	/* process all the input coefficients */
 	while (data_size > 0)
@@ -693,13 +691,13 @@ int rfx_rlgr_encode(RLGR_MODE mode, const INT16* WINPR_RESTRICT data, UINT32 dat
 			}
 
 			// emit output zeros
-			runmax = 1 << k;
+			runmax = 1u << k;
 			while (numZeros >= runmax)
 			{
 				OutputBit(bs, 1, 0); /* output a zero bit */
 				numZeros -= runmax;
 				k = UpdateParam(&kp, UP_GR); /* update kp, k */
-				runmax = 1 << k;
+				runmax = 1u << k;
 			}
 
 			/* output a 1 to terminate runs */

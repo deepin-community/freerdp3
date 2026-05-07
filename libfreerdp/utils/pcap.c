@@ -95,7 +95,7 @@ static BOOL pcap_read_record(rdpPcap* pcap, pcap_record* record)
 	if (fread(record->data, record->length, 1, pcap->fp) != 1)
 	{
 		free(record->data);
-		record->data = NULL;
+		record->data = nullptr;
 		return FALSE;
 	}
 	return TRUE;
@@ -130,7 +130,7 @@ BOOL pcap_add_record(rdpPcap* pcap, const void* data, size_t length)
 	record->header.ts_sec = (UINT32)WINPR_TIME_NS_TO_S(ns);
 	record->header.ts_usec = (UINT32)WINPR_TIME_NS_REM_US(ns);
 
-	if (pcap->tail == NULL)
+	if (pcap->tail == nullptr)
 	{
 		pcap->tail = record;
 		if (!pcap->tail)
@@ -144,7 +144,7 @@ BOOL pcap_add_record(rdpPcap* pcap, const void* data, size_t length)
 		pcap->tail = record;
 	}
 
-	if (pcap->record == NULL)
+	if (pcap->record == nullptr)
 		pcap->record = record;
 
 	return TRUE;
@@ -154,10 +154,7 @@ BOOL pcap_has_next_record(const rdpPcap* pcap)
 {
 	WINPR_ASSERT(pcap);
 
-	if (pcap->file_size - (_ftelli64(pcap->fp)) <= 16)
-		return FALSE;
-
-	return TRUE;
+	return (pcap->file_size - (_ftelli64(pcap->fp)) > 16);
 }
 
 BOOL pcap_get_next_record_header(rdpPcap* pcap, pcap_record* record)
@@ -203,7 +200,7 @@ rdpPcap* pcap_open(const char* name, BOOL write)
 	pcap->record_count = 0;
 	pcap->fp = winpr_fopen(name, write ? "w+b" : "rb");
 
-	if (pcap->fp == NULL)
+	if (pcap->fp == nullptr)
 		goto fail;
 
 	if (write)
@@ -220,9 +217,11 @@ rdpPcap* pcap_open(const char* name, BOOL write)
 	}
 	else
 	{
-		(void)_fseeki64(pcap->fp, 0, SEEK_END);
+		if (_fseeki64(pcap->fp, 0, SEEK_END) != 0)
+			goto fail;
 		pcap->file_size = _ftelli64(pcap->fp);
-		(void)_fseeki64(pcap->fp, 0, SEEK_SET);
+		if (_fseeki64(pcap->fp, 0, SEEK_SET) != 0)
+			goto fail;
 		if (!pcap_read_header(pcap, &pcap->header))
 			goto fail;
 	}
@@ -231,20 +230,20 @@ rdpPcap* pcap_open(const char* name, BOOL write)
 
 fail:
 	pcap_close(pcap);
-	return NULL;
+	return nullptr;
 }
 
 void pcap_flush(rdpPcap* pcap)
 {
 	WINPR_ASSERT(pcap);
 
-	while (pcap->record != NULL)
+	while (pcap->record != nullptr)
 	{
 		(void)pcap_write_record(pcap, pcap->record);
 		pcap->record = pcap->record->next;
 	}
 
-	if (pcap->fp != NULL)
+	if (pcap->fp != nullptr)
 		(void)fflush(pcap->fp);
 }
 
@@ -255,7 +254,7 @@ void pcap_close(rdpPcap* pcap)
 
 	pcap_flush(pcap);
 
-	if (pcap->fp != NULL)
+	if (pcap->fp != nullptr)
 		(void)fclose(pcap->fp);
 
 	free(pcap->name);

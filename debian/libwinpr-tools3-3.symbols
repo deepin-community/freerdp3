@@ -1,5 +1,5 @@
 libwinpr-tools3.so.3 libwinpr-tools3-3 #MINVER#
-* Build-Depends-Package: winpr3-dev
+* Build-Depends-Package: winpr-dev
  makecert_context_free@Base 3.0.0
  makecert_context_new@Base 3.0.0
  makecert_context_output_certificate_file@Base 3.0.0

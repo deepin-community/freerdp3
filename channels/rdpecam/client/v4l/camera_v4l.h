@@ -38,8 +38,8 @@ typedef struct
 
 	/* members used to call the callback */
 	CameraDevice* dev;
-	int streamIndex;
-	ICamHalSampleCapturedCallback sampleCallback;
+	size_t streamIndex;
+	WINPR_ATTR_NODISCARD ICamHalSampleCapturedCallback sampleCallback;
 
 	BOOL streaming;
 	int fd;

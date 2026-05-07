@@ -30,7 +30,7 @@ endif()
 
 addtargetwithresourcefile(${MODULE_NAME} FALSE "${FREERDP_VERSION}" ${MODULE_PREFIX}_SRCS)
 
-target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include>)
+target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include/freerdp${FREERDP_VERSION_MAJOR}>)
 target_link_libraries(${MODULE_NAME} PRIVATE ${FREERDP_CHANNELS_SERVER_LIBS})
 target_link_libraries(${MODULE_NAME} PUBLIC winpr freerdp)
 

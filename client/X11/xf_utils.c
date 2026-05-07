@@ -47,7 +47,7 @@ WINPR_ATTR_FORMAT_ARG(6, 7)
 static void write_log(wLog* log, DWORD level, const char* fname, const char* fkt, size_t line,
                       WINPR_FORMAT_ARG const char* fmt, ...)
 {
-	va_list ap = { 0 };
+	va_list ap = WINPR_C_ARRAY_INIT;
 	va_start(ap, fmt);
 	WLog_PrintTextMessageVA(log, level, line, fname, fkt, fmt, ap);
 	va_end(ap);
@@ -73,7 +73,7 @@ static int write_result_log_va(wLog* log, DWORD level, const char* fname, const 
 	const BOOL ignore = ignore_code(rc, count, ap);
 	if (!ignore)
 	{
-		char buffer[128] = { 0 };
+		char buffer[128] = WINPR_C_ARRAY_INIT;
 
 		if (WLog_IsLevelActive(log, level))
 		{
@@ -90,9 +90,8 @@ static int write_result_log_expect_success(wLog* log, DWORD level, const char* f
 {
 	if (rc != Success)
 	{
-		va_list ap;
+		va_list ap = WINPR_C_ARRAY_INIT;
 		(void)write_result_log_va(log, level, fname, fkt, line, display, name, rc, 0, ap);
-		va_end(ap);
 	}
 	return rc;
 }
@@ -102,9 +101,8 @@ static int write_result_log_expect_one(wLog* log, DWORD level, const char* fname
 {
 	if (rc != 1)
 	{
-		va_list ap;
+		va_list ap = WINPR_C_ARRAY_INIT;
 		(void)write_result_log_va(log, level, fname, fkt, line, display, name, rc, 0, ap);
-		va_end(ap);
 	}
 	return rc;
 }
@@ -221,14 +219,14 @@ BOOL IsGnome(void)
 {
 	// NOLINTNEXTLINE(concurrency-mt-unsafe)
 	char* env = getenv("DESKTOP_SESSION");
-	return (env != NULL && strcmp(env, "gnome") == 0);
+	return (env != nullptr && strcmp(env, "gnome") == 0);
 }
 
 BOOL run_action_script(xfContext* xfc, const char* what, const char* arg, fn_action_script_run fkt,
                        void* user)
 {
 	BOOL rc = FALSE;
-	FILE* keyScript = NULL;
+	FILE* keyScript = nullptr;
 	WINPR_ASSERT(xfc);
 
 	rdpSettings* settings = xfc->common.context.settings;
@@ -245,8 +243,10 @@ BOOL run_action_script(xfContext* xfc, const char* what, const char* arg, fn_act
 	}
 
 	{
-		char command[2048] = { 0 };
+		char command[2048] = WINPR_C_ARRAY_INIT;
 		(void)sprintf_s(command, sizeof(command), "%s %s", ActionScript, what);
+
+		// NOLINTNEXTLINE(bugprone-command-processor)
 		keyScript = popen(command, "r");
 
 		if (!keyScript)
@@ -257,11 +257,12 @@ BOOL run_action_script(xfContext* xfc, const char* what, const char* arg, fn_act
 
 		{
 			BOOL read_data = FALSE;
-			char buffer[2048] = { 0 };
-			while (fgets(buffer, sizeof(buffer), keyScript) != NULL)
+			char buffer[2048] = WINPR_C_ARRAY_INIT;
+			while (fgets(buffer, sizeof(buffer), keyScript) != nullptr)
 			{
-				char* context = NULL;
-				(void)strtok_s(buffer, "\n", &context);
+				char* end = strchr(buffer, '\n');
+				if (end)
+					*end = '\0';
 
 				if (fkt)
 				{
@@ -291,7 +292,7 @@ int LogDynAndXCopyArea_ex(wLog* log, const char* file, const char* fkt, size_t l
 {
 	if (WLog_IsLevelActive(log, log_level))
 	{
-		XWindowAttributes attr = { 0 };
+		XWindowAttributes attr = WINPR_C_ARRAY_INIT;
 		const Status rc = XGetWindowAttributes(display, dest, &attr);
 
 		write_log(log, log_level, file, fkt, line,
@@ -740,10 +741,10 @@ int LogDynAndXReparentWindow_ex(wLog* log, const char* file, const char* fkt, si
 
 char* getConfigOption(BOOL system, const char* option)
 {
-	char* res = NULL;
+	char* res = nullptr;
 	WINPR_JSON* file = freerdp_GetJSONConfigFile(system, "xfreerdp.json");
 	if (!file)
-		return NULL;
+		return nullptr;
 
 	WINPR_JSON* obj = WINPR_JSON_GetObjectItemCaseSensitive(file, option);
 	if (obj)

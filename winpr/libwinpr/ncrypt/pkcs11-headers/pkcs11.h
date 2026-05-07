@@ -1,7 +1,10 @@
 /* This file is in the Public Domain */
 
+#pragma once
+/*
 #ifndef _PD_PKCS11_
 #define _PD_PKCS11_
+*/
 
 #define CRYPTOKI_VERSION_MAJOR 3
 #define CRYPTOKI_VERSION_MINOR 1
@@ -21,7 +24,11 @@ typedef CK_UTF8CHAR * CK_UTF8CHAR_PTR;
 typedef CK_ULONG * CK_ULONG_PTR;
 
 /* Basic defines */
+#if (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 202003L)) || defined(__cplusplus)
+#define NULL_PTR nullptr
+#else
 #define NULL_PTR ((void *)0)
+#endif
 typedef void * CK_VOID_PTR;
 typedef void ** CK_VOID_PTR_PTR;
 
@@ -2408,4 +2415,4 @@ struct CK_FUNCTION_LIST {
 };
 
 
-#endif
+//#endif

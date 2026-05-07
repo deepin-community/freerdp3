@@ -97,16 +97,13 @@ static BOOL udevman_has_next(IUDEVMAN* idevman)
 {
 	UDEVMAN* udevman = (UDEVMAN*)idevman;
 
-	if (!udevman || !udevman->idev)
-		return FALSE;
-	else
-		return TRUE;
+	return !(!udevman || !udevman->idev);
 }
 
 static IUDEVICE* udevman_get_next(IUDEVMAN* idevman)
 {
 	UDEVMAN* udevman = (UDEVMAN*)idevman;
-	IUDEVICE* pdev = NULL;
+	IUDEVICE* pdev = nullptr;
 	pdev = udevman->idev;
 	udevman->idev = (IUDEVICE*)((UDEVICE*)udevman->idev)->next;
 	return pdev;
@@ -114,10 +111,10 @@ static IUDEVICE* udevman_get_next(IUDEVMAN* idevman)
 
 static IUDEVICE* udevman_get_udevice_by_addr(IUDEVMAN* idevman, BYTE bus_number, BYTE dev_number)
 {
-	IUDEVICE* dev = NULL;
+	IUDEVICE* dev = nullptr;
 
 	if (!idevman)
-		return NULL;
+		return nullptr;
 
 	idevman->loading_lock(idevman);
 	idevman->rewind(idevman);
@@ -142,9 +139,9 @@ static size_t udevman_register_udevice(IUDEVMAN* idevman, BYTE bus_number, BYTE 
                                        UINT16 idVendor, UINT16 idProduct, UINT32 flag)
 {
 	UDEVMAN* udevman = (UDEVMAN*)idevman;
-	IUDEVICE* pdev = NULL;
-	IUDEVICE** devArray = NULL;
-	URBDRC_PLUGIN* urbdrc = NULL;
+	IUDEVICE* pdev = nullptr;
+	IUDEVICE** devArray = nullptr;
+	URBDRC_PLUGIN* urbdrc = nullptr;
 	size_t num = 0;
 	size_t addnum = 0;
 
@@ -154,7 +151,7 @@ static size_t udevman_register_udevice(IUDEVMAN* idevman, BYTE bus_number, BYTE 
 	urbdrc = (URBDRC_PLUGIN*)idevman->plugin;
 	pdev = udevman_get_udevice_by_addr(idevman, bus_number, dev_number);
 
-	if (pdev != NULL)
+	if (pdev != nullptr)
 		return 0;
 
 	if (flag & UDEVMAN_FLAG_ADD_BY_ADDR)
@@ -162,14 +159,14 @@ static size_t udevman_register_udevice(IUDEVMAN* idevman, BYTE bus_number, BYTE 
 		UINT32 id = 0;
 		IUDEVICE* tdev = udev_new_by_addr(urbdrc, udevman->context, bus_number, dev_number);
 
-		if (tdev == NULL)
+		if (tdev == nullptr)
 			return 0;
 
 		id = idevman->get_next_device_id(idevman);
 		tdev->set_UsbDevice(tdev, id);
 		idevman->loading_lock(idevman);
 
-		if (udevman->head == NULL)
+		if (udevman->head == nullptr)
 		{
 			/* linked list is empty */
 			udevman->head = tdev;
@@ -205,10 +202,10 @@ static size_t udevman_register_udevice(IUDEVMAN* idevman, BYTE bus_number, BYTE 
 			IUDEVICE* tdev = devArray[i];
 
 			if (udevman_get_udevice_by_addr(idevman, tdev->get_bus_number(tdev),
-			                                tdev->get_dev_number(tdev)) != NULL)
+			                                tdev->get_dev_number(tdev)) != nullptr)
 			{
 				tdev->free(tdev);
-				devArray[i] = NULL;
+				devArray[i] = nullptr;
 				continue;
 			}
 
@@ -216,7 +213,7 @@ static size_t udevman_register_udevice(IUDEVMAN* idevman, BYTE bus_number, BYTE 
 			tdev->set_UsbDevice(tdev, id);
 			idevman->loading_lock(idevman);
 
-			if (udevman->head == NULL)
+			if (udevman->head == nullptr)
 			{
 				/* linked list is empty */
 				udevman->head = tdev;
@@ -251,7 +248,7 @@ static size_t udevman_register_udevice(IUDEVMAN* idevman, BYTE bus_number, BYTE 
 static BOOL udevman_unregister_udevice(IUDEVMAN* idevman, BYTE bus_number, BYTE dev_number)
 {
 	UDEVMAN* udevman = (UDEVMAN*)idevman;
-	UDEVICE* pdev = NULL;
+	UDEVICE* pdev = nullptr;
 	UDEVICE* dev = (UDEVICE*)udevman_get_udevice_by_addr(idevman, bus_number, dev_number);
 
 	if (!dev || !idevman)
@@ -267,7 +264,7 @@ static BOOL udevman_unregister_udevice(IUDEVMAN* idevman, BYTE bus_number, BYTE 
 		if (pdev == dev) /* device exists */
 		{
 			/* set previous device to point to next device */
-			if (dev->prev != NULL)
+			if (dev->prev != nullptr)
 			{
 				/* unregistered device is not the head */
 				pdev = dev->prev;
@@ -281,7 +278,7 @@ static BOOL udevman_unregister_udevice(IUDEVMAN* idevman, BYTE bus_number, BYTE 
 
 			/* set next device to point to previous device */
 
-			if (dev->next != NULL)
+			if (dev->next != nullptr)
 			{
 				/* unregistered device is not the tail */
 				pdev = (UDEVICE*)dev->next;
@@ -331,7 +328,7 @@ static BOOL udevman_unregister_all_udevices(IUDEVMAN* idevman)
 			continue;
 
 		/* set previous device to point to next device */
-		if (dev->prev != NULL)
+		if (dev->prev != nullptr)
 		{
 			/* unregistered device is not the head */
 			UDEVICE* pdev = dev->prev;
@@ -345,7 +342,7 @@ static BOOL udevman_unregister_all_udevices(IUDEVMAN* idevman)
 
 		/* set next device to point to previous device */
 
-		if (dev->next != NULL)
+		if (dev->next != nullptr)
 		{
 			/* unregistered device is not the tail */
 			UDEVICE* pdev = (UDEVICE*)dev->next;
@@ -374,11 +371,11 @@ static int udevman_is_auto_add(IUDEVMAN* idevman)
 
 static IUDEVICE* udevman_get_udevice_by_UsbDevice(IUDEVMAN* idevman, UINT32 UsbDevice)
 {
-	UDEVICE* pdev = NULL;
-	URBDRC_PLUGIN* urbdrc = NULL;
+	UDEVICE* pdev = nullptr;
+	URBDRC_PLUGIN* urbdrc = nullptr;
 
 	if (!idevman || !idevman->plugin)
-		return NULL;
+		return nullptr;
 
 	/* Mask highest 2 bits, must be ignored */
 	UsbDevice = UsbDevice & INTERFACE_ID_MASK;
@@ -400,16 +397,16 @@ static IUDEVICE* udevman_get_udevice_by_UsbDevice(IUDEVMAN* idevman, UINT32 UsbD
 	idevman->loading_unlock(idevman);
 	WLog_Print(urbdrc->log, WLOG_WARN, "Failed to find a USB device mapped to deviceId=%08" PRIx32,
 	           UsbDevice);
-	return NULL;
+	return nullptr;
 }
 
 static IUDEVICE* udevman_get_udevice_by_ChannelID(IUDEVMAN* idevman, UINT32 channelID)
 {
-	UDEVICE* pdev = NULL;
-	URBDRC_PLUGIN* urbdrc = NULL;
+	UDEVICE* pdev = nullptr;
+	URBDRC_PLUGIN* urbdrc = nullptr;
 
 	if (!idevman || !idevman->plugin)
-		return NULL;
+		return nullptr;
 
 	/* Mask highest 2 bits, must be ignored */
 	urbdrc = (URBDRC_PLUGIN*)idevman->plugin;
@@ -430,7 +427,7 @@ static IUDEVICE* udevman_get_udevice_by_ChannelID(IUDEVMAN* idevman, UINT32 chan
 	idevman->loading_unlock(idevman);
 	WLog_Print(urbdrc->log, WLOG_WARN, "Failed to find a USB device mapped to channelID=%08" PRIx32,
 	           channelID);
-	return NULL;
+	return nullptr;
 }
 
 static void udevman_loading_lock(IUDEVMAN* idevman)
@@ -459,10 +456,8 @@ static void udevman_set_next_device_id(IUDEVMAN* idevman, UINT32 _t)
 	udevman->next_device_id = _t;
 }
 
-static void udevman_free(IUDEVMAN* idevman)
+static void udevman_free(UDEVMAN* udevman)
 {
-	UDEVMAN* udevman = (UDEVMAN*)idevman;
-
 	if (!udevman)
 		return;
 
@@ -473,7 +468,7 @@ static void udevman_free(IUDEVMAN* idevman)
 		(void)CloseHandle(udevman->thread);
 	}
 
-	udevman_unregister_all_udevices(idevman);
+	udevman_unregister_all_udevices(&udevman->iface);
 
 	if (udevman->devman_loading)
 		(void)CloseHandle(udevman->devman_loading);
@@ -482,6 +477,12 @@ static void udevman_free(IUDEVMAN* idevman)
 
 	ArrayList_Free(udevman->hotplug_vid_pids);
 	free(udevman);
+}
+
+static void idevman_free(IUDEVMAN* idevman)
+{
+	UDEVMAN* udevman = (UDEVMAN*)idevman;
+	udevman_free(udevman);
 }
 
 static BOOL filter_by_class(uint8_t bDeviceClass, uint8_t bDeviceSubClass)
@@ -509,15 +510,15 @@ static BOOL filter_by_class(uint8_t bDeviceClass, uint8_t bDeviceSubClass)
 
 static BOOL append(char* dst, size_t length, const char* src)
 {
-	return winpr_str_append(src, dst, length, NULL);
+	return winpr_str_append(src, dst, length, nullptr);
 }
 
 static BOOL device_is_filtered(struct libusb_device* dev,
                                const struct libusb_device_descriptor* desc,
                                libusb_hotplug_event event)
 {
-	char buffer[8192] = { 0 };
-	char* what = NULL;
+	char buffer[8192] = WINPR_C_ARRAY_INIT;
+	char* what = nullptr;
 	BOOL filtered = FALSE;
 	append(buffer, sizeof(buffer), usb_interface_class_to_string(desc->bDeviceClass));
 	if (filter_by_class(desc->bDeviceClass, desc->bDeviceSubClass))
@@ -527,7 +528,7 @@ static BOOL device_is_filtered(struct libusb_device* dev,
 	{
 		case LIBUSB_CLASS_PER_INTERFACE:
 		{
-			struct libusb_config_descriptor* config = NULL;
+			struct libusb_config_descriptor* config = nullptr;
 			int rc = libusb_get_active_config_descriptor(dev, &config);
 			if (rc == LIBUSB_SUCCESS)
 			{
@@ -640,8 +641,8 @@ static BOOL udevman_vid_pid_pair_equals(const void* objA, const void* objB)
 static BOOL udevman_parse_device_id_addr(const char** str, UINT16* id1, UINT16* id2, UINT16 max,
                                          char split_sign, char delimiter)
 {
-	char* mid = NULL;
-	char* end = NULL;
+	char* mid = nullptr;
+	char* end = nullptr;
 	unsigned long rc = 0;
 
 	rc = strtoul(*str, &mid, 16);
@@ -719,14 +720,15 @@ static UINT urbdrc_udevman_register_devices(UDEVMAN* udevman, const char* device
 
 static UINT urbdrc_udevman_parse_addin_args(UDEVMAN* udevman, const ADDIN_ARGV* args)
 {
-	LPCSTR devices = NULL;
+	LPCSTR devices = nullptr;
 
 	for (int x = 0; x < args->argc; x++)
 	{
 		const char* arg = args->argv[x];
 		if (strcmp(arg, "dbg") == 0)
 		{
-			WLog_SetLogLevel(WLog_Get(TAG), WLOG_TRACE);
+			if (!WLog_SetLogLevel(WLog_Get(TAG), WLOG_TRACE))
+				return ERROR_INTERNAL_ERROR;
 		}
 		else if (_strnicmp(arg, "device:", 7) == 0)
 		{
@@ -807,7 +809,7 @@ static UINT udevman_listener_created_callback(IUDEVMAN* iudevman)
 static void udevman_load_interface(UDEVMAN* udevman)
 {
 	/* standard */
-	udevman->iface.free = udevman_free;
+	udevman->iface.free = idevman_free;
 	/* manage devices */
 	udevman->iface.rewind = udevman_rewind;
 	udevman->iface.get_next = udevman_get_next;
@@ -898,11 +900,10 @@ static DWORD WINAPI poll_thread(LPVOID lpThreadParameter)
 FREERDP_ENTRY_POINT(UINT VCAPITYPE libusb_freerdp_urbdrc_client_subsystem_entry(
     PFREERDP_URBDRC_SERVICE_ENTRY_POINTS pEntryPoints))
 {
-	wObject* obj = NULL;
+	wObject* obj = nullptr;
 	UINT status = 0;
-	UDEVMAN* udevman = NULL;
 	const ADDIN_ARGV* args = pEntryPoints->args;
-	udevman = (PUDEVMAN)calloc(1, sizeof(UDEVMAN));
+	UDEVMAN* udevman = (PUDEVMAN)calloc(1, sizeof(UDEVMAN));
 
 	if (!udevman)
 		goto fail;
@@ -943,7 +944,7 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE libusb_freerdp_urbdrc_client_subsystem_entry(
 #endif
 
 	udevman->flags = UDEVMAN_FLAG_ADD_BY_VID_PID;
-	udevman->devman_loading = CreateMutexA(NULL, FALSE, "devman_loading");
+	udevman->devman_loading = CreateMutexA(nullptr, FALSE, "devman_loading");
 
 	if (!udevman->devman_loading)
 		goto fail;
@@ -956,7 +957,7 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE libusb_freerdp_urbdrc_client_subsystem_entry(
 		goto fail;
 
 	udevman->running = TRUE;
-	udevman->thread = CreateThread(NULL, 0, poll_thread, udevman, 0, NULL);
+	udevman->thread = CreateThread(nullptr, 0, poll_thread, udevman, 0, nullptr);
 
 	if (!udevman->thread)
 		goto fail;
@@ -967,6 +968,6 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE libusb_freerdp_urbdrc_client_subsystem_entry(
 	WLog_DBG(TAG, "UDEVMAN device registered.");
 	return 0;
 fail:
-	udevman_free(&udevman->iface);
+	udevman_free(udevman);
 	return ERROR_INTERNAL_ERROR;
 }

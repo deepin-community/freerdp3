@@ -39,9 +39,9 @@ extern "C"
 
 	/** @brief extracts <key>=<value> pairs from a string
 	 *
-	 * @param str The string to extract data from, must not be \b NULL
-	 * @param pkey A pointer to store the key value, must not be \b NULL
-	 * @param pvalue A pointer to store the value, must not be \b NULL
+	 * @param str The string to extract data from, must not be \b nullptr
+	 * @param pkey A pointer to store the key value, must not be \b nullptr
+	 * @param pvalue A pointer to store the value, must not be \b nullptr
 	 *
 	 * @return \b TRUE if successfully extracted, \b FALSE if no matching data was found
 	 *
@@ -55,7 +55,7 @@ extern "C"
 	 *  @param flags The value to convert
 	 *  @return A constant string representation of \ref flags or the string \b ORIENTATION_UNKNOWN
 	 * for an invalid value
-	 *  @since verstion 3.22.0
+	 *  @since version 3.22.0
 	 */
 	FREERDP_API WINPR_ATTR_NODISCARD const char*
 	freerdp_desktop_rotation_flags_to_string(UINT32 flags);
@@ -65,7 +65,7 @@ extern "C"
 	 *  @param flags The value to convert
 	 *  @return A constant string representation of \ref flag or the string \b
 	 * RDPINPUT_CONTACT_FLAG_UNKNOWN for an invalid value
-	 *  @since verstion 3.22.0
+	 *  @since version 3.22.0
 	 */
 	FREERDP_API WINPR_ATTR_NODISCARD const char* freerdp_input_touch_state_string(DWORD flags);
 
@@ -74,7 +74,7 @@ extern "C"
 	 *  @param type The value to convert
 	 *  @return A constant string representation of \ref type or the string \b
 	 * UNKNOWN for an invalid value
-	 *  @since verstion 3.22.0
+	 *  @since version 3.22.0
 	 */
 	FREERDP_API WINPR_ATTR_NODISCARD const char* freerdp_order_support_flags_string(UINT8 type);
 

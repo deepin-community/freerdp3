@@ -95,7 +95,7 @@ fail:
 	shadow_screen_free(screen);
 	WINPR_PRAGMA_DIAG_POP
 
-	return NULL;
+	return nullptr;
 }
 
 void shadow_screen_free(rdpShadowScreen* screen)
@@ -110,13 +110,13 @@ void shadow_screen_free(rdpShadowScreen* screen)
 	if (screen->primary)
 	{
 		shadow_surface_free(screen->primary);
-		screen->primary = NULL;
+		screen->primary = nullptr;
 	}
 
 	if (screen->lobby)
 	{
 		shadow_surface_free(screen->lobby);
-		screen->lobby = NULL;
+		screen->lobby = nullptr;
 	}
 
 	free(screen);
@@ -159,7 +159,7 @@ BOOL shadow_screen_resize(rdpShadowScreen* screen)
 			/* screen size is changed. Store new size and reinit lobby */
 			screen->width = (UINT32)width;
 			screen->height = (UINT32)height;
-			shadow_client_init_lobby(screen->server);
+			return shadow_client_init_lobby(screen->server);
 		}
 		return TRUE;
 	}

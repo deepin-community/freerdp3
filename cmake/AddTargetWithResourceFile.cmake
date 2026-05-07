@@ -2,6 +2,30 @@ set(add_resource_macro_internal_dir ${CMAKE_CURRENT_LIST_DIR} CACHE INTERNAL "")
 
 include(CleaningConfigureFile)
 
+get_filename_component(
+  add_resource_macro_manifest "${add_resource_macro_internal_dir}/../resources/freerdp.manifest" ABSOLUTE
+)
+set(add_resource_macro_manifest ${add_resource_macro_manifest} CACHE INTERNAL "")
+
+function(add_win_console_manifest sources)
+  if(NOT WIN32 OR NOT WITH_WIN_CONSOLE)
+    return()
+  endif()
+
+  set(local_sources ${${sources}})
+  if(MSVC)
+    list(APPEND local_sources "${add_resource_macro_manifest}")
+  else()
+    set(manifest_rc "${CMAKE_CURRENT_BINARY_DIR}/freerdp.manifest.rc")
+    # TODO: Remove when upstream issue is fixed
+    # https://gitlab.kitware.com/cmake/cmake/-/issues/23244
+    file(CONFIGURE OUTPUT "${manifest_rc}" CONTENT "1 24 \"${add_resource_macro_manifest}\"")
+    list(APPEND local_sources "${manifest_rc}")
+  endif()
+
+  set(${sources} ${local_sources} PARENT_SCOPE)
+endfunction()
+
 macro(AddTargetWithResourceFile nameAndTarget is_exe version sources)
   list(LENGTH ${nameAndTarget} target_length)
   if(target_length GREATER 1)

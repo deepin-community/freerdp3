@@ -7,13 +7,13 @@
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/client/cmdline.h>
 
-static HANDLE s_sync = NULL;
+static HANDLE s_sync = nullptr;
 
 static int runInstance(int argc, char* argv[], freerdp** inst, DWORD timeout)
 {
 	int rc = -1;
-	RDP_CLIENT_ENTRY_POINTS clientEntryPoints = { 0 };
-	rdpContext* context = NULL;
+	RDP_CLIENT_ENTRY_POINTS clientEntryPoints = WINPR_C_ARRAY_INIT;
+	rdpContext* context = nullptr;
 
 	clientEntryPoints.Size = sizeof(RDP_CLIENT_ENTRY_POINTS);
 	clientEntryPoints.Version = RDP_CLIENT_INTERFACE_VERSION;
@@ -26,12 +26,12 @@ static int runInstance(int argc, char* argv[], freerdp** inst, DWORD timeout)
 	if (inst)
 		*inst = context->instance;
 
-	context->instance->ChooseSmartcard = NULL;
-	context->instance->PresentGatewayMessage = NULL;
-	context->instance->LogonErrorInfo = NULL;
-	context->instance->AuthenticateEx = NULL;
-	context->instance->VerifyCertificateEx = NULL;
-	context->instance->VerifyChangedCertificateEx = NULL;
+	context->instance->ChooseSmartcard = nullptr;
+	context->instance->PresentGatewayMessage = nullptr;
+	context->instance->LogonErrorInfo = nullptr;
+	context->instance->AuthenticateEx = nullptr;
+	context->instance->VerifyCertificateEx = nullptr;
+	context->instance->VerifyChangedCertificateEx = nullptr;
 
 	if (!freerdp_settings_set_bool(context->settings, FreeRDP_DeactivateClientDecoding, TRUE))
 		return FALSE;
@@ -65,7 +65,7 @@ static int runInstance(int argc, char* argv[], freerdp** inst, DWORD timeout)
 finish:
 	freerdp_client_context_free(context);
 	if (inst)
-		*inst = NULL;
+		*inst = nullptr;
 	return rc;
 }
 
@@ -81,7 +81,7 @@ static int testTimeout(int port)
 	(void)_snprintf(arg1, 18, "/v:192.0.2.1:%d", port);
 	argv[1] = arg1;
 	start = GetTickCount();
-	rc = runInstance(ARRAYSIZE(argv), argv, NULL, timeout);
+	rc = runInstance(ARRAYSIZE(argv), argv, nullptr, timeout);
 	end = GetTickCount();
 
 	if (rc != 1)
@@ -128,10 +128,10 @@ static int testAbort(int port)
 	DWORD start = 0;
 	DWORD end = 0;
 	DWORD diff = 0;
-	HANDLE thread = NULL;
+	HANDLE thread = nullptr;
 	struct testThreadArgs args;
-	freerdp* instance = NULL;
-	s_sync = CreateEvent(NULL, TRUE, FALSE, NULL);
+	freerdp* instance = nullptr;
+	s_sync = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 
 	if (!s_sync)
 		return -1;
@@ -139,12 +139,12 @@ static int testAbort(int port)
 	args.port = port;
 	args.arg = &instance;
 	start = GetTickCount();
-	thread = CreateThread(NULL, 0, testThread, &args, 0, NULL);
+	thread = CreateThread(nullptr, 0, testThread, &args, 0, nullptr);
 
 	if (!thread)
 	{
 		(void)CloseHandle(s_sync);
-		s_sync = NULL;
+		s_sync = nullptr;
 		return -1;
 	}
 
@@ -158,7 +158,7 @@ static int testAbort(int port)
 		{
 			(void)CloseHandle(s_sync);
 			(void)CloseHandle(thread);
-			s_sync = NULL;
+			s_sync = nullptr;
 			return -1;
 		}
 	}
@@ -167,7 +167,7 @@ static int testAbort(int port)
 	end = GetTickCount();
 	(void)CloseHandle(s_sync);
 	(void)CloseHandle(thread);
-	s_sync = NULL;
+	s_sync = nullptr;
 	diff = end - start;
 
 	if (diff > 5000)
@@ -185,8 +185,8 @@ static int testAbort(int port)
 
 static char* concatenate(size_t count, ...)
 {
-	char* rc = NULL;
-	va_list ap = { 0 };
+	char* rc = nullptr;
+	va_list ap = WINPR_C_ARRAY_INIT;
 	va_start(ap, count);
 	rc = _strdup(va_arg(ap, char*));
 	for (size_t x = 1; x < count; x++)
@@ -203,11 +203,10 @@ static char* concatenate(size_t count, ...)
 static BOOL prepare_certificates(const char* path)
 {
 	BOOL rc = FALSE;
-	char* exe = NULL;
+	char* exe = nullptr;
 	DWORD status = 0;
-	STARTUPINFOA si = { 0 };
-	PROCESS_INFORMATION process = { 0 };
-	char commandLine[8192] = { 0 };
+	STARTUPINFOA si = WINPR_C_ARRAY_INIT;
+	PROCESS_INFORMATION process = WINPR_C_ARRAY_INIT;
 
 	if (!path)
 		return FALSE;
@@ -216,9 +215,9 @@ static BOOL prepare_certificates(const char* path)
 	                  "winpr-makecert" CMAKE_EXECUTABLE_SUFFIX);
 	if (!exe)
 		return FALSE;
-	(void)_snprintf(commandLine, sizeof(commandLine), "%s -format crt -path . -n server", exe);
 
-	rc = CreateProcessA(exe, commandLine, NULL, NULL, TRUE, 0, NULL, path, &si, &process);
+	char commandLine[] = "-format crt -path . -n server";
+	rc = CreateProcessA(exe, commandLine, nullptr, nullptr, TRUE, 0, nullptr, path, &si, &process);
 	free(exe);
 	if (!rc)
 		goto fail;
@@ -236,15 +235,15 @@ static int testSuccess(int port)
 {
 	int r = 0;
 	int rc = -2;
-	STARTUPINFOA si = { 0 };
-	PROCESS_INFORMATION process = { 0 };
+	STARTUPINFOA si = WINPR_C_ARRAY_INIT;
+	PROCESS_INFORMATION process = WINPR_C_ARRAY_INIT;
 	char arg1[] = "/v:127.0.0.1:XXXXX";
-	char* clientArgs[] = { "test", "/v:127.0.0.1:XXXXX", "/cert:ignore", "/rfx", NULL };
-	char* commandLine = NULL;
+	char* clientArgs[] = { "test", "/v:127.0.0.1:XXXXX", "/cert:ignore", "/rfx", nullptr };
+	char* commandLine = nullptr;
 	size_t commandLineLen = 0;
 	int argc = 4;
-	char* path = NULL;
-	char* wpath = NULL;
+	char* path = nullptr;
+	char* wpath = nullptr;
 	char* exe = GetCombinedPath(TESTING_OUTPUT_DIRECTORY, "server");
 	(void)_snprintf(arg1, 18, "/v:127.0.0.1:%d", port);
 	clientArgs[1] = arg1;
@@ -255,7 +254,7 @@ static int testSuccess(int port)
 	path = GetCombinedPath(exe, "Sample");
 	wpath = GetCombinedPath(exe, "Sample");
 	free(exe);
-	exe = NULL;
+	exe = nullptr;
 
 	if (!path || !wpath)
 		goto fail;
@@ -284,11 +283,12 @@ static int testSuccess(int port)
 	(void)_snprintf(commandLine, commandLineLen, "%s --port=%d", exe, port);
 	si.cb = sizeof(si);
 
-	if (!CreateProcessA(NULL, commandLine, NULL, NULL, FALSE, 0, NULL, wpath, &si, &process))
+	if (!CreateProcessA(nullptr, commandLine, nullptr, nullptr, FALSE, 0, nullptr, wpath, &si,
+	                    &process))
 		goto fail;
 
 	Sleep(5000); /* let the server start */
-	r = runInstance(argc, clientArgs, NULL, 10000);
+	r = runInstance(argc, clientArgs, nullptr, 10000);
 
 	if (!TerminateProcess(process.hProcess, 0))
 		goto fail;
@@ -316,7 +316,8 @@ int TestConnect(int argc, char* argv[])
 	int random = 0;
 	WINPR_UNUSED(argc);
 	WINPR_UNUSED(argv);
-	winpr_RAND(&random, sizeof(random));
+	if (winpr_RAND(&random, sizeof(random)) < 0)
+		return -1;
 	randomPort = 3389 + (random % 200);
 
 	/* Test connect to not existing server,

@@ -143,6 +143,7 @@ typedef struct
 	                                       __FILE__, (size_t)__LINE__)
 #define Stream_CheckAndLogRequiredLengthRx(srv, log, s, len) \
 	Stream_CheckAndLogRequiredLengthRx_(srv, log, s, len, 1, __func__, __FILE__, __LINE__)
+WINPR_ATTR_NODISCARD
 static BOOL Stream_CheckAndLogRequiredLengthRx_(BOOL srv, wLog* log, wStream* s, size_t nmemb,
                                                 size_t size, const char* fkt, const char* file,
                                                 size_t line)
@@ -154,6 +155,7 @@ static BOOL Stream_CheckAndLogRequiredLengthRx_(BOOL srv, wLog* log, wStream* s,
 	                                              line);
 }
 
+WINPR_ATTR_NODISCARD
 static const char* rdpdr_server_state_to_string(pf_channel_server_state state)
 {
 	switch (state)
@@ -173,6 +175,7 @@ static const char* rdpdr_server_state_to_string(pf_channel_server_state state)
 	}
 }
 
+WINPR_ATTR_NODISCARD
 static const char* rdpdr_client_state_to_string(pf_channel_client_state state)
 {
 	switch (state)
@@ -190,20 +193,22 @@ static const char* rdpdr_client_state_to_string(pf_channel_client_state state)
 	}
 }
 
+WINPR_ATTR_NODISCARD
 static wStream* rdpdr_get_send_buffer(pf_channel_common_context* rdpdr, UINT16 component,
                                       UINT16 PacketID, size_t capacity)
 {
 	WINPR_ASSERT(rdpdr);
 	WINPR_ASSERT(rdpdr->s);
-	if (!Stream_SetPosition(rdpdr->s, 0))
-		return NULL;
+	Stream_ResetPosition(rdpdr->s);
+
 	if (!Stream_EnsureCapacity(rdpdr->s, capacity + 4))
-		return NULL;
+		return nullptr;
 	Stream_Write_UINT16(rdpdr->s, component);
 	Stream_Write_UINT16(rdpdr->s, PacketID);
 	return rdpdr->s;
 }
 
+WINPR_ATTR_NODISCARD
 static wStream* rdpdr_client_get_send_buffer(pf_channel_client_context* rdpdr, UINT16 component,
                                              UINT16 PacketID, size_t capacity)
 {
@@ -211,6 +216,7 @@ static wStream* rdpdr_client_get_send_buffer(pf_channel_client_context* rdpdr, U
 	return rdpdr_get_send_buffer(&rdpdr->common, component, PacketID, capacity);
 }
 
+WINPR_ATTR_NODISCARD
 static wStream* rdpdr_server_get_send_buffer(pf_channel_server_context* rdpdr, UINT16 component,
                                              UINT16 PacketID, size_t capacity)
 {
@@ -218,6 +224,7 @@ static wStream* rdpdr_server_get_send_buffer(pf_channel_server_context* rdpdr, U
 	return rdpdr_get_send_buffer(&rdpdr->common, component, PacketID, capacity);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_client_send(wLog* log, pClientContext* pc, wStream* s)
 {
 	UINT16 channelId = 0;
@@ -249,6 +256,7 @@ static UINT rdpdr_client_send(wLog* log, pClientContext* pc, wStream* s)
 	return CHANNEL_RC_OK;
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_seal_send_free_request(pf_channel_server_context* context, wStream* s)
 {
 	BOOL status = 0;
@@ -263,10 +271,11 @@ static UINT rdpdr_seal_send_free_request(pf_channel_server_context* context, wSt
 	WINPR_ASSERT(len <= UINT32_MAX);
 
 	rdpdr_dump_send_packet(context->log, WLOG_TRACE, s, proxy_client_tx);
-	status = WTSVirtualChannelWrite(context->handle, Stream_BufferAs(s, char), (ULONG)len, NULL);
+	status = WTSVirtualChannelWrite(context->handle, Stream_BufferAs(s, char), (ULONG)len, nullptr);
 	return (status) ? CHANNEL_RC_OK : ERROR_INTERNAL_ERROR;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL rdpdr_process_server_header(BOOL server, wLog* log, wStream* s, UINT16 component,
                                         UINT16 PacketId, size_t expect)
 {
@@ -314,6 +323,7 @@ static BOOL rdpdr_process_server_header(BOOL server, wLog* log, wStream* s, UINT
 	return TRUE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL rdpdr_check_version(BOOL server, wLog* log, UINT16 versionMajor, UINT16 versionMinor,
                                 UINT16 component, UINT16 PacketId)
 {
@@ -343,6 +353,7 @@ static BOOL rdpdr_check_version(BOOL server, wLog* log, UINT16 versionMajor, UIN
 	return TRUE;
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_server_announce_request(pf_channel_client_context* rdpdr, wStream* s)
 {
 	const UINT16 component = RDPDR_CTYP_CORE;
@@ -373,6 +384,7 @@ static UINT rdpdr_process_server_announce_request(pf_channel_client_context* rdp
 	return CHANNEL_RC_OK;
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_server_send_announce_request(pf_channel_server_context* context)
 {
 	wStream* s =
@@ -386,6 +398,7 @@ static UINT rdpdr_server_send_announce_request(pf_channel_server_context* contex
 	return rdpdr_seal_send_free_request(context, s);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_client_announce_reply(pf_channel_server_context* rdpdr, wStream* s)
 {
 	const UINT16 component = RDPDR_CTYP_CORE;
@@ -430,6 +443,7 @@ static UINT rdpdr_process_client_announce_reply(pf_channel_server_context* rdpdr
 	return CHANNEL_RC_OK;
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_send_client_announce_reply(pClientContext* pc, pf_channel_client_context* rdpdr)
 {
 	wStream* s =
@@ -443,6 +457,7 @@ static UINT rdpdr_send_client_announce_reply(pClientContext* pc, pf_channel_clie
 	return rdpdr_client_send(rdpdr->log, pc, s);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_client_name_request(pf_channel_server_context* rdpdr, wStream* s,
                                               pClientContext* pc)
 {
@@ -458,7 +473,7 @@ static UINT rdpdr_process_client_name_request(pf_channel_server_context* rdpdr, 
 		return ERROR_INVALID_DATA;
 
 	Stream_Read_UINT32(s, unicodeFlag);
-	rdpdr->common.computerNameUnicode = ((unicodeFlag & 1) != 0) ? TRUE : FALSE;
+	rdpdr->common.computerNameUnicode = ((unicodeFlag & 1) != 0);
 
 	Stream_Read_UINT32(s, codePage);
 	WINPR_UNUSED(codePage); /* Field is ignored */
@@ -489,9 +504,10 @@ static UINT rdpdr_process_client_name_request(pf_channel_server_context* rdpdr, 
 	return CHANNEL_RC_OK;
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_send_client_name_request(pClientContext* pc, pf_channel_client_context* rdpdr)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	WINPR_ASSERT(rdpdr);
 	WINPR_ASSERT(pc);
@@ -521,6 +537,7 @@ static UINT rdpdr_send_client_name_request(pClientContext* pc, pf_channel_client
 
 #define rdpdr_ignore_capset(srv, log, s, header) \
 	rdpdr_ignore_capset_((srv), (log), (s), header, __func__)
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_ignore_capset_(WINPR_ATTR_UNUSED BOOL srv, WINPR_ATTR_UNUSED wLog* log,
                                  wStream* s, const RDPDR_CAPABILITY_HEADER* header,
                                  WINPR_ATTR_UNUSED const char* fkt)
@@ -532,6 +549,7 @@ static UINT rdpdr_ignore_capset_(WINPR_ATTR_UNUSED BOOL srv, WINPR_ATTR_UNUSED w
 	return CHANNEL_RC_OK;
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_client_process_general_capset(pf_channel_client_context* rdpdr, wStream* s,
                                                 const RDPDR_CAPABILITY_HEADER* header)
 {
@@ -539,6 +557,7 @@ static UINT rdpdr_client_process_general_capset(pf_channel_client_context* rdpdr
 	return rdpdr_ignore_capset(FALSE, rdpdr->log, s, header);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_printer_capset(pf_channel_client_context* rdpdr, wStream* s,
                                          const RDPDR_CAPABILITY_HEADER* header)
 {
@@ -546,6 +565,7 @@ static UINT rdpdr_process_printer_capset(pf_channel_client_context* rdpdr, wStre
 	return rdpdr_ignore_capset(FALSE, rdpdr->log, s, header);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_port_capset(pf_channel_client_context* rdpdr, wStream* s,
                                       const RDPDR_CAPABILITY_HEADER* header)
 {
@@ -553,6 +573,7 @@ static UINT rdpdr_process_port_capset(pf_channel_client_context* rdpdr, wStream*
 	return rdpdr_ignore_capset(FALSE, rdpdr->log, s, header);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_drive_capset(pf_channel_client_context* rdpdr, wStream* s,
                                        const RDPDR_CAPABILITY_HEADER* header)
 {
@@ -560,6 +581,7 @@ static UINT rdpdr_process_drive_capset(pf_channel_client_context* rdpdr, wStream
 	return rdpdr_ignore_capset(FALSE, rdpdr->log, s, header);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_smartcard_capset(pf_channel_client_context* rdpdr, wStream* s,
                                            const RDPDR_CAPABILITY_HEADER* header)
 {
@@ -567,6 +589,7 @@ static UINT rdpdr_process_smartcard_capset(pf_channel_client_context* rdpdr, wSt
 	return rdpdr_ignore_capset(FALSE, rdpdr->log, s, header);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_server_core_capability_request(pf_channel_client_context* rdpdr,
                                                          wStream* s)
 {
@@ -584,7 +607,7 @@ static UINT rdpdr_process_server_core_capability_request(pf_channel_client_conte
 
 	for (UINT16 i = 0; i < numCapabilities; i++)
 	{
-		RDPDR_CAPABILITY_HEADER header = { 0 };
+		RDPDR_CAPABILITY_HEADER header = WINPR_C_ARRAY_INIT;
 		UINT error = rdpdr_read_capset_header(rdpdr->log, s, &header);
 		if (error != CHANNEL_RC_OK)
 			return error;
@@ -638,6 +661,7 @@ static UINT rdpdr_process_server_core_capability_request(pf_channel_client_conte
 	return CHANNEL_RC_OK;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL rdpdr_write_general_capset(wLog* log, pf_channel_common_context* rdpdr, wStream* s)
 {
 	WINPR_ASSERT(rdpdr);
@@ -662,6 +686,7 @@ static BOOL rdpdr_write_general_capset(wLog* log, pf_channel_common_context* rdp
 	return TRUE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL rdpdr_write_printer_capset(wLog* log, pf_channel_common_context* rdpdr, wStream* s)
 {
 	WINPR_ASSERT(rdpdr);
@@ -669,11 +694,10 @@ static BOOL rdpdr_write_printer_capset(wLog* log, pf_channel_common_context* rdp
 
 	const RDPDR_CAPABILITY_HEADER header = { CAP_PRINTER_TYPE, 8,
 		                                     rdpdr->capabilityVersions[CAP_PRINTER_TYPE] };
-	if (rdpdr_write_capset_header(log, s, &header) != CHANNEL_RC_OK)
-		return FALSE;
-	return TRUE;
+	return (rdpdr_write_capset_header(log, s, &header) == CHANNEL_RC_OK);
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL rdpdr_write_port_capset(wLog* log, pf_channel_common_context* rdpdr, wStream* s)
 {
 	WINPR_ASSERT(rdpdr);
@@ -681,11 +705,10 @@ static BOOL rdpdr_write_port_capset(wLog* log, pf_channel_common_context* rdpdr,
 
 	const RDPDR_CAPABILITY_HEADER header = { CAP_PORT_TYPE, 8,
 		                                     rdpdr->capabilityVersions[CAP_PORT_TYPE] };
-	if (rdpdr_write_capset_header(log, s, &header) != CHANNEL_RC_OK)
-		return FALSE;
-	return TRUE;
+	return (rdpdr_write_capset_header(log, s, &header) == CHANNEL_RC_OK);
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL rdpdr_write_drive_capset(wLog* log, pf_channel_common_context* rdpdr, wStream* s)
 {
 	WINPR_ASSERT(rdpdr);
@@ -693,11 +716,10 @@ static BOOL rdpdr_write_drive_capset(wLog* log, pf_channel_common_context* rdpdr
 
 	const RDPDR_CAPABILITY_HEADER header = { CAP_DRIVE_TYPE, 8,
 		                                     rdpdr->capabilityVersions[CAP_DRIVE_TYPE] };
-	if (rdpdr_write_capset_header(log, s, &header) != CHANNEL_RC_OK)
-		return FALSE;
-	return TRUE;
+	return (rdpdr_write_capset_header(log, s, &header) == CHANNEL_RC_OK);
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL rdpdr_write_smartcard_capset(wLog* log, pf_channel_common_context* rdpdr, wStream* s)
 {
 	WINPR_ASSERT(rdpdr);
@@ -705,11 +727,10 @@ static BOOL rdpdr_write_smartcard_capset(wLog* log, pf_channel_common_context* r
 
 	const RDPDR_CAPABILITY_HEADER header = { CAP_SMARTCARD_TYPE, 8,
 		                                     rdpdr->capabilityVersions[CAP_SMARTCARD_TYPE] };
-	if (rdpdr_write_capset_header(log, s, &header) != CHANNEL_RC_OK)
-		return FALSE;
-	return TRUE;
+	return (rdpdr_write_capset_header(log, s, &header) == CHANNEL_RC_OK);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_send_server_capability_request(pf_channel_server_context* rdpdr)
 {
 	wStream* s =
@@ -731,6 +752,7 @@ static UINT rdpdr_send_server_capability_request(pf_channel_server_context* rdpd
 	return rdpdr_seal_send_free_request(rdpdr, s);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_client_capability_response(pf_channel_server_context* rdpdr, wStream* s)
 {
 	const UINT16 component = RDPDR_CTYP_CORE;
@@ -747,7 +769,7 @@ static UINT rdpdr_process_client_capability_response(pf_channel_server_context* 
 
 	for (UINT16 x = 0; x < numCapabilities; x++)
 	{
-		RDPDR_CAPABILITY_HEADER header = { 0 };
+		RDPDR_CAPABILITY_HEADER header = WINPR_C_ARRAY_INIT;
 		UINT error = rdpdr_read_capset_header(rdpdr->log, s, &header);
 		if (error != CHANNEL_RC_OK)
 			return error;
@@ -800,10 +822,11 @@ static UINT rdpdr_process_client_capability_response(pf_channel_server_context* 
 	return status;
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_send_client_capability_response(pClientContext* pc,
                                                   pf_channel_client_context* rdpdr)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	WINPR_ASSERT(rdpdr);
 	s = rdpdr_client_get_send_buffer(rdpdr, RDPDR_CTYP_CORE, PAKID_CORE_CLIENT_CAPABILITY, 4);
@@ -825,9 +848,10 @@ static UINT rdpdr_send_client_capability_response(pClientContext* pc,
 	return rdpdr_client_send(rdpdr->log, pc, s);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_send_server_clientid_confirm(pf_channel_server_context* rdpdr)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	s = rdpdr_server_get_send_buffer(rdpdr, RDPDR_CTYP_CORE, PAKID_CORE_CLIENTID_CONFIRM, 8);
 	if (!s)
@@ -838,6 +862,7 @@ static UINT rdpdr_send_server_clientid_confirm(pf_channel_server_context* rdpdr)
 	return rdpdr_seal_send_free_request(rdpdr, s);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_server_clientid_confirm(pf_channel_client_context* rdpdr, wStream* s)
 {
 	UINT16 versionMajor = 0;
@@ -886,6 +911,7 @@ static UINT rdpdr_process_server_clientid_confirm(pf_channel_client_context* rdp
 	return CHANNEL_RC_OK;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL
 rdpdr_process_server_capability_request_or_clientid_confirm(pf_channel_client_context* rdpdr,
                                                             wStream* s)
@@ -943,10 +969,11 @@ rdpdr_process_server_capability_request_or_clientid_confirm(pf_channel_client_co
 }
 
 #if defined(WITH_PROXY_EMULATE_SMARTCARD)
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_send_emulated_scard_device_list_announce_request(pClientContext* pc,
                                                                    pf_channel_client_context* rdpdr)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	s = rdpdr_client_get_send_buffer(rdpdr, RDPDR_CTYP_CORE, PAKID_CORE_DEVICELIST_ANNOUNCE, 24);
 	if (!s)
@@ -963,10 +990,11 @@ static UINT rdpdr_send_emulated_scard_device_list_announce_request(pClientContex
 	return rdpdr_client_send(rdpdr->log, pc, s);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_send_emulated_scard_device_remove(pClientContext* pc,
                                                     pf_channel_client_context* rdpdr)
 {
-	wStream* s = NULL;
+	wStream* s = nullptr;
 
 	s = rdpdr_client_get_send_buffer(rdpdr, RDPDR_CTYP_CORE, PAKID_CORE_DEVICELIST_REMOVE, 24);
 	if (!s)
@@ -979,6 +1007,7 @@ static UINT rdpdr_send_emulated_scard_device_remove(pClientContext* pc,
 	return rdpdr_client_send(rdpdr->log, pc, s);
 }
 
+WINPR_ATTR_NODISCARD
 static UINT rdpdr_process_server_device_announce_response(pf_channel_client_context* rdpdr,
                                                           wStream* s)
 {
@@ -1021,6 +1050,7 @@ static UINT rdpdr_process_server_device_announce_response(pf_channel_client_cont
 }
 #endif
 
+WINPR_ATTR_NODISCARD
 static BOOL pf_channel_rdpdr_rewrite_device_list_to(wStream* s, UINT32 fromVersion,
                                                     UINT32 toVersion)
 {
@@ -1029,7 +1059,7 @@ static BOOL pf_channel_rdpdr_rewrite_device_list_to(wStream* s, UINT32 fromVersi
 		return TRUE;
 
 	const size_t cap = Stream_GetRemainingLength(s);
-	wStream* clone = Stream_New(NULL, cap);
+	wStream* clone = Stream_New(nullptr, cap);
 	if (!clone)
 		goto fail;
 
@@ -1038,8 +1068,9 @@ static BOOL pf_channel_rdpdr_rewrite_device_list_to(wStream* s, UINT32 fromVersi
 		Stream_Copy(s, clone, cap);
 		Stream_SealLength(clone);
 
-		Stream_SetPosition(clone, 0);
-		Stream_SetPosition(s, pos);
+		Stream_ResetPosition(clone);
+		if (!Stream_SetPosition(s, pos))
+			goto fail;
 	}
 
 	/* Skip device count */
@@ -1054,7 +1085,7 @@ static BOOL pf_channel_rdpdr_rewrite_device_list_to(wStream* s, UINT32 fromVersi
 
 		for (UINT32 x = 0; x < count; x++)
 		{
-			RdpdrDevice device = { 0 };
+			RdpdrDevice device = WINPR_C_ARRAY_INIT;
 			const size_t charCount = ARRAYSIZE(device.PreferredDosName);
 			if (Stream_GetRemainingLength(clone) < 20)
 				goto fail;
@@ -1108,6 +1139,7 @@ fail:
 	return rc;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL pf_channel_rdpdr_rewrite_device_list(pf_channel_client_context* rdpdr,
                                                  pServerContext* ps, wStream* s, BOOL toServer)
 {
@@ -1117,7 +1149,7 @@ static BOOL pf_channel_rdpdr_rewrite_device_list(pf_channel_client_context* rdpd
 	const size_t pos = Stream_GetPosition(s);
 	UINT16 component = 0;
 	UINT16 packetid = 0;
-	Stream_SetPosition(s, 0);
+	Stream_ResetPosition(s);
 
 	if (!Stream_CheckAndLogRequiredLengthWLog(rdpdr->log, s, 4))
 		return FALSE;
@@ -1125,10 +1157,7 @@ static BOOL pf_channel_rdpdr_rewrite_device_list(pf_channel_client_context* rdpd
 	Stream_Read_UINT16(s, component);
 	Stream_Read_UINT16(s, packetid);
 	if ((component != RDPDR_CTYP_CORE) || (packetid != PAKID_CORE_DEVICELIST_ANNOUNCE))
-	{
-		Stream_SetPosition(s, pos);
-		return TRUE;
-	}
+		return Stream_SetPosition(s, pos);
 
 	const pf_channel_server_context* srv =
 	    HashTable_GetItemValue(ps->interceptContextMap, RDPDR_SVC_CHANNEL_NAME);
@@ -1148,10 +1177,10 @@ static BOOL pf_channel_rdpdr_rewrite_device_list(pf_channel_client_context* rdpd
 	if (!pf_channel_rdpdr_rewrite_device_list_to(s, from, to))
 		return FALSE;
 
-	Stream_SetPosition(s, pos);
-	return TRUE;
+	return Stream_SetPosition(s, pos);
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL pf_channel_rdpdr_client_send_to_server(pf_channel_client_context* rdpdr,
                                                    pServerContext* ps, wStream* s)
 {
@@ -1169,7 +1198,8 @@ static BOOL pf_channel_rdpdr_client_send_to_server(pf_channel_client_context* rd
 		if (!pf_channel_rdpdr_rewrite_device_list(rdpdr, ps, s, TRUE))
 			return FALSE;
 		size_t len = Stream_Length(s);
-		Stream_SetPosition(s, len);
+		if (!Stream_SetPosition(s, len))
+			return ERROR_INVALID_DATA;
 		rdpdr_dump_send_packet(rdpdr->log, WLOG_TRACE, s, proxy_client_tx);
 		WINPR_ASSERT(ps->context.peer);
 		WINPR_ASSERT(ps->context.peer->SendChannelData);
@@ -1179,9 +1209,11 @@ static BOOL pf_channel_rdpdr_client_send_to_server(pf_channel_client_context* rd
 	return TRUE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL pf_channel_send_client_queue(pClientContext* pc, pf_channel_client_context* rdpdr);
 
 #if defined(WITH_PROXY_EMULATE_SMARTCARD)
+WINPR_ATTR_NODISCARD
 static BOOL rdpdr_process_server_loggedon_request(pServerContext* ps, pClientContext* pc,
                                                   pf_channel_client_context* rdpdr, wStream* s,
                                                   UINT16 component, UINT16 packetid)
@@ -1196,6 +1228,7 @@ static BOOL rdpdr_process_server_loggedon_request(pServerContext* ps, pClientCon
 	return pf_channel_rdpdr_client_send_to_server(rdpdr, ps, s);
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL filter_smartcard_io_requests(pf_channel_client_context* rdpdr, wStream* s,
                                          UINT16* pPacketid)
 {
@@ -1259,23 +1292,31 @@ static BOOL filter_smartcard_io_requests(pf_channel_client_context* rdpdr, wStre
 	rc = TRUE;
 
 fail:
-	Stream_SetPosition(s, pos);
+	if (!Stream_SetPosition(s, pos))
+		return FALSE;
 	return rc;
 }
 #endif
 
 BOOL pf_channel_send_client_queue(pClientContext* pc, pf_channel_client_context* rdpdr)
 {
-	UINT16 channelId = 0;
-
 	WINPR_ASSERT(pc);
 	WINPR_ASSERT(rdpdr);
 
 	if (rdpdr->state != STATE_CLIENT_CHANNEL_RUNNING)
-		return FALSE;
-	channelId = freerdp_channels_get_id_by_name(pc->context.instance, RDPDR_SVC_CHANNEL_NAME);
-	if ((channelId == 0) || (channelId == UINT16_MAX))
+	{
+		CLIENT_TX_LOG(rdpdr->log, WLOG_WARN, "Client RDPDR channel not ready, dropping packet!");
 		return TRUE;
+	}
+
+	const UINT16 channelId =
+	    freerdp_channels_get_id_by_name(pc->context.instance, RDPDR_SVC_CHANNEL_NAME);
+	if ((channelId == 0) || (channelId == UINT16_MAX))
+	{
+		CLIENT_TX_LOG(rdpdr->log, WLOG_WARN,
+		              "Client RDPDR channel not available, dropping packet!");
+		return TRUE;
+	}
 
 	Queue_Lock(rdpdr->queue);
 	while (Queue_Count(rdpdr->queue) > 0)
@@ -1285,7 +1326,11 @@ BOOL pf_channel_send_client_queue(pClientContext* pc, pf_channel_client_context*
 			continue;
 
 		size_t len = Stream_Length(s);
-		Stream_SetPosition(s, len);
+		if (!Stream_SetPosition(s, len))
+		{
+			Stream_Free(s, TRUE);
+			continue;
+		}
 
 		rdpdr_dump_send_packet(rdpdr->log, WLOG_TRACE, s, proxy_server_tx " (queue) ");
 		WINPR_ASSERT(pc->context.instance->SendChannelData);
@@ -1300,6 +1345,7 @@ BOOL pf_channel_send_client_queue(pClientContext* pc, pf_channel_client_context*
 	return TRUE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL rdpdr_handle_server_announce_request(pClientContext* pc,
                                                  pf_channel_client_context* rdpdr, wStream* s)
 {
@@ -1320,9 +1366,9 @@ static BOOL rdpdr_handle_server_announce_request(pClientContext* pc,
 BOOL pf_channel_rdpdr_client_handle(pClientContext* pc, UINT16 channelId, const char* channel_name,
                                     const BYTE* xdata, size_t xsize, UINT32 flags, size_t totalSize)
 {
-	pf_channel_client_context* rdpdr = NULL;
-	pServerContext* ps = NULL;
-	wStream* s = NULL;
+	pf_channel_client_context* rdpdr = nullptr;
+	pServerContext* ps = nullptr;
+	wStream* s = nullptr;
 #if defined(WITH_PROXY_EMULATE_SMARTCARD)
 	UINT16 packetid = 0;
 #endif
@@ -1345,7 +1391,7 @@ BOOL pf_channel_rdpdr_client_handle(pClientContext* pc, UINT16 channelId, const 
 	}
 	s = rdpdr->common.buffer;
 	if (flags & CHANNEL_FLAG_FIRST)
-		Stream_SetPosition(s, 0);
+		Stream_ResetPosition(s);
 	if (!Stream_EnsureRemainingCapacity(s, xsize))
 	{
 		CLIENT_RX_LOG(rdpdr->log, WLOG_ERROR,
@@ -1358,7 +1404,7 @@ BOOL pf_channel_rdpdr_client_handle(pClientContext* pc, UINT16 channelId, const 
 		return TRUE;
 
 	Stream_SealLength(s);
-	Stream_SetPosition(s, 0);
+	Stream_ResetPosition(s);
 	if (Stream_Length(s) != totalSize)
 	{
 		CLIENT_RX_LOG(rdpdr->log, WLOG_WARN,
@@ -1397,7 +1443,8 @@ BOOL pf_channel_rdpdr_client_handle(pClientContext* pc, UINT16 channelId, const 
 #endif
 			{
 				rdpdr->state = STATE_CLIENT_CHANNEL_RUNNING;
-				pf_channel_send_client_queue(pc, rdpdr);
+				if (!pf_channel_send_client_queue(pc, rdpdr))
+					return FALSE;
 			}
 
 			break;
@@ -1482,23 +1529,25 @@ static void pf_channel_rdpdr_client_context_free(InterceptContextMapEntry* base)
 
 	pf_channel_rdpdr_common_context_free(&entry->common);
 	Queue_Free(entry->queue);
+	WLog_Discard(entry->log);
 	free(entry);
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL pf_channel_rdpdr_common_context_new(pf_channel_common_context* common,
                                                 void (*fkt)(InterceptContextMapEntry*))
 {
 	if (!common)
 		return FALSE;
 	common->base.free = fkt;
-	common->s = Stream_New(NULL, 1024);
+	common->s = Stream_New(nullptr, 1024);
 	if (!common->s)
 		return FALSE;
-	common->buffer = Stream_New(NULL, 1024);
+	common->buffer = Stream_New(nullptr, 1024);
 	if (!common->buffer)
 		return FALSE;
 	common->computerNameUnicode = 1;
-	common->computerName.v = NULL;
+	common->computerName.v = nullptr;
 	common->versionMajor = RDPDR_VERSION_MAJOR;
 	common->versionMinor = RDPDR_VERSION_MINOR_RDP10X;
 	common->clientID = SCARD_DEVICE_ID;
@@ -1514,11 +1563,12 @@ static BOOL pf_channel_rdpdr_common_context_new(pf_channel_common_context* commo
 	return TRUE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL pf_channel_rdpdr_client_pass_message(pServerContext* ps, pClientContext* pc,
                                                  WINPR_ATTR_UNUSED UINT16 channelId,
                                                  const char* channel_name, wStream* s)
 {
-	pf_channel_client_context* rdpdr = NULL;
+	pf_channel_client_context* rdpdr = nullptr;
 
 	WINPR_ASSERT(ps);
 	WINPR_ASSERT(pc);
@@ -1532,11 +1582,11 @@ static BOOL pf_channel_rdpdr_client_pass_message(pServerContext* ps, pClientCont
 		return FALSE;
 	if (!Queue_Enqueue(rdpdr->queue, s))
 		return FALSE;
-	pf_channel_send_client_queue(pc, rdpdr);
-	return TRUE;
+	return pf_channel_send_client_queue(pc, rdpdr);
 }
 
 #if defined(WITH_PROXY_EMULATE_SMARTCARD)
+WINPR_ATTR_NODISCARD
 static BOOL filter_smartcard_device_list_remove(pf_channel_server_context* rdpdr, wStream* s)
 {
 	size_t pos = 0;
@@ -1571,8 +1621,8 @@ static BOOL filter_smartcard_device_list_remove(pf_channel_server_context* rdpdr
 			memmove(dst, Stream_ConstPointer(s), (count - x - 1) * sizeof(UINT32));
 
 			count--;
-			Stream_SetPosition(s, pos);
-			Stream_Write_UINT32(s, count);
+			if (Stream_SetPosition(s, pos))
+				Stream_Write_UINT32(s, count);
 			return FALSE;
 		}
 	}
@@ -1580,6 +1630,7 @@ static BOOL filter_smartcard_device_list_remove(pf_channel_server_context* rdpdr
 	return FALSE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL filter_smartcard_device_io_request(pf_channel_server_context* rdpdr, wStream* s)
 {
 	UINT32 DeviceID = 0;
@@ -1589,6 +1640,7 @@ static BOOL filter_smartcard_device_io_request(pf_channel_server_context* rdpdr,
 	return ArrayList_Contains(rdpdr->blockedDevices, (void*)(size_t)DeviceID);
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL filter_smartcard_device_list_announce(pf_channel_server_context* rdpdr, wStream* s)
 {
 	UINT32 count = 0;
@@ -1619,7 +1671,8 @@ static BOOL filter_smartcard_device_list_announce(pf_channel_server_context* rdp
 			return TRUE;
 		if (DeviceType == RDPDR_DTYP_SMARTCARD)
 		{
-			ArrayList_Append(rdpdr->blockedDevices, (void*)(size_t)DeviceId);
+			if (!ArrayList_Append(rdpdr->blockedDevices, (void*)(size_t)DeviceId))
+				return FALSE;
 			if (count == 1)
 				return TRUE;
 
@@ -1627,8 +1680,8 @@ static BOOL filter_smartcard_device_list_announce(pf_channel_server_context* rdp
 			           DeviceId);
 
 			memmove(dst, Stream_ConstPointer(s), Stream_GetRemainingLength(s));
-			Stream_SetPosition(s, pos);
-			Stream_Write_UINT32(s, count - 1);
+			if (Stream_SetPosition(s, pos))
+				Stream_Write_UINT32(s, count - 1);
 			return FALSE;
 		}
 	}
@@ -1636,6 +1689,7 @@ static BOOL filter_smartcard_device_list_announce(pf_channel_server_context* rdp
 	return FALSE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL filter_smartcard_device_list_announce_request(pf_channel_server_context* rdpdr,
                                                           wStream* s)
 {
@@ -1687,21 +1741,29 @@ static BOOL filter_smartcard_device_list_announce_request(pf_channel_server_cont
 
 	rc = FALSE;
 fail:
-	Stream_SetPosition(s, pos);
+	if (!Stream_SetPosition(s, pos))
+		return FALSE;
 	return rc;
 }
 #endif
 
+WINPR_ATTR_MALLOC(Stream_Free, 1)
+WINPR_ATTR_NODISCARD
 static void* stream_copy(const void* obj)
 {
 	const wStream* src = obj;
-	wStream* dst = Stream_New(NULL, Stream_Capacity(src));
+	wStream* dst = Stream_New(nullptr, Stream_Capacity(src));
 	if (!dst)
-		return NULL;
+		return nullptr;
 	memcpy(Stream_Buffer(dst), Stream_ConstBuffer(src), Stream_Capacity(dst));
-	Stream_SetLength(dst, Stream_Length(src));
-	Stream_SetPosition(dst, Stream_GetPosition(src));
+	if (!Stream_SetLength(dst, Stream_Length(src)))
+		goto fail;
+	if (!Stream_SetPosition(dst, Stream_GetPosition(src)))
+		goto fail;
 	return dst;
+fail:
+	Stream_Free(dst, TRUE);
+	return nullptr;
 }
 
 static void stream_free(void* obj)
@@ -1710,6 +1772,7 @@ static void stream_free(void* obj)
 	Stream_Free(s, TRUE);
 }
 
+WINPR_ATTR_NODISCARD
 static const char* pf_channel_rdpdr_client_context(void* arg)
 {
 	pClientContext* pc = arg;
@@ -1722,8 +1785,8 @@ static const char* pf_channel_rdpdr_client_context(void* arg)
 
 BOOL pf_channel_rdpdr_client_new(pClientContext* pc)
 {
-	wObject* obj = NULL;
-	pf_channel_client_context* rdpdr = NULL;
+	wObject* obj = nullptr;
+	pf_channel_client_context* rdpdr = nullptr;
 
 	WINPR_ASSERT(pc);
 	WINPR_ASSERT(pc->interceptContextMap);
@@ -1731,10 +1794,13 @@ BOOL pf_channel_rdpdr_client_new(pClientContext* pc)
 	rdpdr = calloc(1, sizeof(pf_channel_client_context));
 	if (!rdpdr)
 		return FALSE;
-	rdpdr->log = WLog_Get(RTAG);
-	WINPR_ASSERT(rdpdr->log);
+	rdpdr->log = WLog_Create(RTAG, WLog_GetRoot());
+	if (!rdpdr->log)
+		goto fail;
 
-	WLog_SetContext(rdpdr->log, pf_channel_rdpdr_client_context, pc);
+	if (!WLog_SetContext(rdpdr->log, pf_channel_rdpdr_client_context, pc))
+		goto fail;
+
 	if (!pf_channel_rdpdr_common_context_new(&rdpdr->common, pf_channel_rdpdr_client_context_free))
 		goto fail;
 
@@ -1774,9 +1840,11 @@ static void pf_channel_rdpdr_server_context_free(InterceptContextMapEntry* base)
 	(void)WTSVirtualChannelClose(entry->handle);
 	pf_channel_rdpdr_common_context_free(&entry->common);
 	ArrayList_Free(entry->blockedDevices);
+	WLog_Discard(entry->log);
 	free(entry);
 }
 
+WINPR_ATTR_NODISCARD
 static const char* pf_channel_rdpdr_server_context(void* arg)
 {
 	pServerContext* ps = arg;
@@ -1789,8 +1857,8 @@ static const char* pf_channel_rdpdr_server_context(void* arg)
 
 BOOL pf_channel_rdpdr_server_new(pServerContext* ps)
 {
-	pf_channel_server_context* rdpdr = NULL;
-	PULONG pSessionId = NULL;
+	pf_channel_server_context* rdpdr = nullptr;
+	PULONG pSessionId = nullptr;
 	DWORD BytesReturned = 0;
 
 	WINPR_ASSERT(ps);
@@ -1799,9 +1867,12 @@ BOOL pf_channel_rdpdr_server_new(pServerContext* ps)
 	rdpdr = calloc(1, sizeof(pf_channel_server_context));
 	if (!rdpdr)
 		return FALSE;
-	rdpdr->log = WLog_Get(RTAG);
-	WINPR_ASSERT(rdpdr->log);
-	WLog_SetContext(rdpdr->log, pf_channel_rdpdr_server_context, ps);
+	rdpdr->log = WLog_Create(RTAG, WLog_GetRoot());
+	if (!rdpdr->log)
+		goto fail;
+
+	if (!WLog_SetContext(rdpdr->log, pf_channel_rdpdr_server_context, ps))
+		goto fail;
 
 	if (!pf_channel_rdpdr_common_context_new(&rdpdr->common, pf_channel_rdpdr_server_context_free))
 		goto fail;
@@ -1820,7 +1891,7 @@ BOOL pf_channel_rdpdr_server_new(pServerContext* ps)
 	}
 
 	rdpdr->handle = WTSVirtualChannelOpenEx(rdpdr->SessionId, RDPDR_SVC_CHANNEL_NAME, 0);
-	if (rdpdr->handle == 0)
+	if (rdpdr->handle == nullptr)
 		goto fail;
 	if (!HashTable_Insert(ps->interceptContextMap, RDPDR_SVC_CHANNEL_NAME, rdpdr))
 		goto fail;
@@ -1839,9 +1910,10 @@ void pf_channel_rdpdr_server_free(pServerContext* ps)
 	HashTable_Remove(ps->interceptContextMap, RDPDR_SVC_CHANNEL_NAME);
 }
 
+WINPR_ATTR_NODISCARD
 static pf_channel_server_context* get_channel(pServerContext* ps, BOOL send)
 {
-	pf_channel_server_context* rdpdr = NULL;
+	pf_channel_server_context* rdpdr = nullptr;
 	WINPR_ASSERT(ps);
 	WINPR_ASSERT(ps->interceptContextMap);
 
@@ -1851,7 +1923,7 @@ static pf_channel_server_context* get_channel(pServerContext* ps, BOOL send)
 		SERVER_RXTX_LOG(send, WLog_Get(RTAG), WLOG_ERROR,
 		                "Channel %s missing context in interceptContextMap",
 		                RDPDR_SVC_CHANNEL_NAME);
-		return NULL;
+		return nullptr;
 	}
 
 	return rdpdr;
@@ -1860,8 +1932,8 @@ static pf_channel_server_context* get_channel(pServerContext* ps, BOOL send)
 BOOL pf_channel_rdpdr_server_handle(pServerContext* ps, UINT16 channelId, const char* channel_name,
                                     const BYTE* xdata, size_t xsize, UINT32 flags, size_t totalSize)
 {
-	wStream* s = NULL;
-	pClientContext* pc = NULL;
+	wStream* s = nullptr;
+	pClientContext* pc = nullptr;
 	pf_channel_server_context* rdpdr = get_channel(ps, FALSE);
 	if (!rdpdr)
 		return FALSE;
@@ -1872,7 +1944,7 @@ BOOL pf_channel_rdpdr_server_handle(pServerContext* ps, UINT16 channelId, const 
 	s = rdpdr->common.buffer;
 
 	if (flags & CHANNEL_FLAG_FIRST)
-		Stream_SetPosition(s, 0);
+		Stream_ResetPosition(s);
 
 	if (!Stream_EnsureRemainingCapacity(s, xsize))
 		return FALSE;
@@ -1882,7 +1954,7 @@ BOOL pf_channel_rdpdr_server_handle(pServerContext* ps, UINT16 channelId, const 
 		return TRUE;
 
 	Stream_SealLength(s);
-	Stream_SetPosition(s, 0);
+	Stream_ResetPosition(s);
 
 	if (Stream_Length(s) != totalSize)
 	{
@@ -1955,7 +2027,7 @@ BOOL pf_channel_rdpdr_server_announce(pServerContext* ps)
 
 BOOL pf_channel_rdpdr_client_reset(pClientContext* pc)
 {
-	pf_channel_client_context* rdpdr = NULL;
+	pf_channel_client_context* rdpdr = nullptr;
 
 	WINPR_ASSERT(pc);
 	WINPR_ASSERT(pc->pdata);
@@ -1972,6 +2044,7 @@ BOOL pf_channel_rdpdr_client_reset(pClientContext* pc)
 	return TRUE;
 }
 
+WINPR_ATTR_NODISCARD
 static PfChannelResult pf_rdpdr_back_data(proxyData* pdata,
                                           const pServerStaticChannelContext* channel,
                                           const BYTE* xdata, size_t xsize, UINT32 flags,
@@ -1992,6 +2065,7 @@ static PfChannelResult pf_rdpdr_back_data(proxyData* pdata,
 	return PF_CHANNEL_RESULT_DROP;
 }
 
+WINPR_ATTR_NODISCARD
 static PfChannelResult pf_rdpdr_front_data(proxyData* pdata,
                                            const pServerStaticChannelContext* channel,
                                            const BYTE* xdata, size_t xsize, UINT32 flags,

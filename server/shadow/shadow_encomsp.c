@@ -32,6 +32,7 @@
  *
  * @return 0 on success, otherwise a Win32 error code
  */
+WINPR_ATTR_NODISCARD
 static UINT
 encomsp_change_participant_control_level(EncomspServerContext* context,
                                          ENCOMSP_CHANGE_PARTICIPANT_CONTROL_LEVEL_PDU* pdu)
@@ -45,8 +46,8 @@ encomsp_change_participant_control_level(EncomspServerContext* context,
 	          "ChangeParticipantControlLevel: ParticipantId: %" PRIu32 " Flags: 0x%04" PRIX16 "",
 	          pdu->ParticipantId, pdu->Flags);
 
-	mayView = (pdu->Flags & ENCOMSP_MAY_VIEW) ? TRUE : FALSE;
-	mayInteract = (pdu->Flags & ENCOMSP_MAY_INTERACT) ? TRUE : FALSE;
+	mayView = (pdu->Flags & ENCOMSP_MAY_VIEW) != 0;
+	mayInteract = (pdu->Flags & ENCOMSP_MAY_INTERACT) != 0;
 
 	if (mayInteract && !mayView)
 		mayView = TRUE; /* may interact implies may view */
@@ -89,11 +90,12 @@ encomsp_change_participant_control_level(EncomspServerContext* context,
 		}
 	}
 
-	inLobby = client->mayView ? FALSE : TRUE;
+	inLobby = !(client->mayView);
 
 	if (inLobby != client->inLobby)
 	{
-		shadow_encoder_reset(client->encoder);
+		if (shadow_encoder_reset(client->encoder) < 0)
+			return ERROR_NOT_READY;
 		client->inLobby = inLobby;
 	}
 
@@ -102,9 +104,11 @@ encomsp_change_participant_control_level(EncomspServerContext* context,
 
 int shadow_client_encomsp_init(rdpShadowClient* client)
 {
-	EncomspServerContext* encomsp = NULL;
+	WINPR_ASSERT(client);
 
-	encomsp = client->encomsp = encomsp_server_context_new(client->vcm);
+	EncomspServerContext* encomsp = client->encomsp = encomsp_server_context_new(client->vcm);
+	if (!encomsp)
+		return -1;
 
 	encomsp->rdpcontext = &client->context;
 
@@ -113,17 +117,22 @@ int shadow_client_encomsp_init(rdpShadowClient* client)
 	encomsp->ChangeParticipantControlLevel = encomsp_change_participant_control_level;
 
 	if (client->encomsp)
-		client->encomsp->Start(client->encomsp);
+	{
+		const UINT rc = client->encomsp->Start(client->encomsp);
+		if (rc != CHANNEL_RC_OK)
+			return -1;
+	}
 
 	return 1;
 }
 
 void shadow_client_encomsp_uninit(rdpShadowClient* client)
 {
+	WINPR_ASSERT(client);
 	if (client->encomsp)
 	{
 		client->encomsp->Stop(client->encomsp);
 		encomsp_server_context_free(client->encomsp);
-		client->encomsp = NULL;
+		client->encomsp = nullptr;
 	}
 }

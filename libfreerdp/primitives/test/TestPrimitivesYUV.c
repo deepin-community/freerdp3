@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <math.h>
+#include <errno.h>
 
 #include "prim_test.h"
 
@@ -21,6 +22,7 @@
 
 /* YUV to RGB conversion is lossy, so consider every value only
  * differing by less than 2 abs equal. */
+WINPR_ATTR_NODISCARD
 static BOOL similar(const BYTE* src, const BYTE* dst, size_t size)
 {
 	for (size_t x = 0; x < size; x++)
@@ -38,6 +40,7 @@ static BOOL similar(const BYTE* src, const BYTE* dst, size_t size)
 	return TRUE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL similarRGB(size_t y, const BYTE* src, const BYTE* dst, size_t size, UINT32 format,
                        BOOL use444)
 {
@@ -68,8 +71,8 @@ static BOOL similarRGB(size_t y, const BYTE* src, const BYTE* dst, size_t size, 
 		dColor = FreeRDPReadColor(dst, format);
 		src += bpp;
 		dst += bpp;
-		FreeRDPSplitColor(sColor, format, &sR, &sG, &sB, &sA, NULL);
-		FreeRDPSplitColor(dColor, format, &dR, &dG, &dB, &dA, NULL);
+		FreeRDPSplitColor(sColor, format, &sR, &sG, &sB, &sA, nullptr);
+		FreeRDPSplitColor(dColor, format, &dR, &dG, &dB, &dA, nullptr);
 
 		const long diffr = labs(1L * sR - dR);
 		const long diffg = labs(1L * sG - dG);
@@ -120,20 +123,25 @@ static BOOL similarRGB(size_t y, const BYTE* src, const BYTE* dst, size_t size, 
 	return rc;
 }
 
-static void get_size(BOOL large, UINT32* width, UINT32* height)
+WINPR_ATTR_NODISCARD
+static BOOL get_size(BOOL large, UINT32* width, UINT32* height)
 {
 	UINT32 shift = large ? 8 : 1;
-	winpr_RAND(width, sizeof(*width));
-	winpr_RAND(height, sizeof(*height));
+	if (winpr_RAND(width, sizeof(*width)) < 0)
+		return FALSE;
+	if (winpr_RAND(height, sizeof(*height)) < 0)
+		return FALSE;
 	*width = (*width % 64 + 1) << shift;
 	*height = (*height % 64 + 1);
+	return TRUE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL check_padding(const BYTE* psrc, size_t size, size_t padding, const char* buffer)
 {
 	BOOL rc = TRUE;
-	const BYTE* src = NULL;
-	const BYTE* esrc = NULL;
+	const BYTE* src = nullptr;
+	const BYTE* esrc = nullptr;
 	size_t halfPad = (padding + 1) / 2;
 
 	if (!psrc)
@@ -182,11 +190,11 @@ static BOOL check_padding(const BYTE* psrc, size_t size, size_t padding, const c
 static void* set_padding(size_t size, size_t padding)
 {
 	size_t halfPad = (padding + 1) / 2;
-	BYTE* psrc = NULL;
+	BYTE* psrc = nullptr;
 	BYTE* src = winpr_aligned_malloc(size + 2 * halfPad, 16);
 
 	if (!src)
-		return NULL;
+		return nullptr;
 
 	memset(&src[0], 'A', halfPad);
 	memset(&src[halfPad], PADDING_FILL_VALUE, size);
@@ -196,7 +204,7 @@ static void* set_padding(size_t size, size_t padding)
 	if (!check_padding(psrc, size, padding, "init"))
 	{
 		winpr_aligned_free(src);
-		return NULL;
+		return nullptr;
 	}
 
 	return psrc;
@@ -204,7 +212,7 @@ static void* set_padding(size_t size, size_t padding)
 
 static void free_padding(void* src, size_t padding)
 {
-	BYTE* ptr = NULL;
+	BYTE* ptr = nullptr;
 
 	if (!src)
 		return;
@@ -225,16 +233,16 @@ static BOOL TestPrimitiveYUVCombine(primitives_t* prims, prim_size_t roi)
 	size_t awidth = 0;
 	size_t aheight = 0;
 	BOOL rc = FALSE;
-	BYTE* luma[3] = { 0 };
-	BYTE* chroma[3] = { 0 };
-	BYTE* yuv[3] = { 0 };
-	BYTE* pmain[3] = { 0 };
-	BYTE* paux[3] = { 0 };
-	UINT32 lumaStride[3] = { 0 };
-	UINT32 chromaStride[3] = { 0 };
-	UINT32 yuvStride[3] = { 0 };
+	BYTE* luma[3] = WINPR_C_ARRAY_INIT;
+	BYTE* chroma[3] = WINPR_C_ARRAY_INIT;
+	BYTE* yuv[3] = WINPR_C_ARRAY_INIT;
+	BYTE* pmain[3] = WINPR_C_ARRAY_INIT;
+	BYTE* paux[3] = WINPR_C_ARRAY_INIT;
+	UINT32 lumaStride[3] = WINPR_C_ARRAY_INIT;
+	UINT32 chromaStride[3] = WINPR_C_ARRAY_INIT;
+	UINT32 yuvStride[3] = WINPR_C_ARRAY_INIT;
 	const size_t padding = 10000;
-	RECTANGLE_16 rect = { 0 };
+	RECTANGLE_16 rect = WINPR_C_ARRAY_INIT;
 	PROFILER_DEFINE(yuvCombine)
 	PROFILER_DEFINE(yuvSplit)
 
@@ -437,10 +445,10 @@ static BOOL TestPrimitiveYUV(primitives_t* prims, prim_size_t roi, BOOL use444)
 	BOOL res = FALSE;
 	UINT32 awidth = 0;
 	UINT32 aheight = 0;
-	BYTE* yuv[3] = { 0 };
-	UINT32 yuv_step[3] = { 0 };
-	BYTE* rgb = NULL;
-	BYTE* rgb_dst = NULL;
+	BYTE* yuv[3] = WINPR_C_ARRAY_INIT;
+	UINT32 yuv_step[3] = WINPR_C_ARRAY_INIT;
+	BYTE* rgb = nullptr;
+	BYTE* rgb_dst = nullptr;
 	size_t size = 0;
 	size_t uvsize = 0;
 	size_t uvwidth = 0;
@@ -498,7 +506,8 @@ static BOOL TestPrimitiveYUV(primitives_t* prims, prim_size_t roi, BOOL use444)
 	for (size_t y = 0; y < roi.height; y++)
 	{
 		BYTE* line = &rgb[y * stride];
-		winpr_RAND(line, stride);
+		if (winpr_RAND(line, stride) < 0)
+			goto fail;
 	}
 
 	yuv_step[0] = awidth;
@@ -662,9 +671,9 @@ static void free_yuv420(BYTE** planes, UINT32 padding)
 	free_padding(planes[0], padding);
 	free_padding(planes[1], padding);
 	free_padding(planes[2], padding);
-	planes[0] = NULL;
-	planes[1] = NULL;
-	planes[2] = NULL;
+	planes[0] = nullptr;
+	planes[1] = nullptr;
+	planes[2] = nullptr;
 }
 
 static BOOL check_yuv420(BYTE** planes, UINT32 width, UINT32 height, UINT32 padding)
@@ -731,7 +740,12 @@ static UINT32 prand(UINT32 max)
 	UINT32 tmp = 0;
 	if (max <= 1)
 		return 1;
-	winpr_RAND(&tmp, sizeof(tmp));
+	if (winpr_RAND(&tmp, sizeof(tmp)) < 0)
+	{
+		(void)fprintf(stderr, "winpr_RAND failed, retry...\n");
+		// NOLINTNEXTLINE(concurrency-mt-unsafe)
+		exit(-1);
+	}
 	return tmp % (max - 1) + 1;
 }
 
@@ -740,18 +754,18 @@ static BOOL TestPrimitiveRgbToLumaChroma(primitives_t* prims, prim_size_t roi, U
 	BOOL res = FALSE;
 	UINT32 awidth = 0;
 	UINT32 aheight = 0;
-	BYTE* luma[3] = { 0 };
-	BYTE* chroma[3] = { 0 };
-	BYTE* lumaGeneric[3] = { 0 };
-	BYTE* chromaGeneric[3] = { 0 };
+	BYTE* luma[3] = WINPR_C_ARRAY_INIT;
+	BYTE* chroma[3] = WINPR_C_ARRAY_INIT;
+	BYTE* lumaGeneric[3] = WINPR_C_ARRAY_INIT;
+	BYTE* chromaGeneric[3] = WINPR_C_ARRAY_INIT;
 	UINT32 yuv_step[3];
-	BYTE* rgb = NULL;
+	BYTE* rgb = nullptr;
 	size_t size = 0;
 	size_t uvwidth = 0;
 	const size_t padding = 0x1000;
 	UINT32 stride = 0;
-	fn_RGBToAVC444YUV_t fkt = NULL;
-	fn_RGBToAVC444YUV_t gen = NULL;
+	fn_RGBToAVC444YUV_t fkt = nullptr;
+	fn_RGBToAVC444YUV_t gen = nullptr;
 	const UINT32 formats[] = { PIXEL_FORMAT_XRGB32, PIXEL_FORMAT_XBGR32, PIXEL_FORMAT_ARGB32,
 		                       PIXEL_FORMAT_ABGR32, PIXEL_FORMAT_RGBA32, PIXEL_FORMAT_RGBX32,
 		                       PIXEL_FORMAT_BGRA32, PIXEL_FORMAT_BGRX32 };
@@ -817,7 +831,8 @@ static BOOL TestPrimitiveRgbToLumaChroma(primitives_t* prims, prim_size_t roi, U
 	{
 		BYTE* line = &rgb[y * stride];
 
-		winpr_RAND(line, 4ULL * roi.width);
+		if (winpr_RAND(line, 4ULL * roi.width) < 0)
+			goto fail;
 	}
 
 	yuv_step[0] = awidth;
@@ -970,7 +985,7 @@ static void free_yuv(BYTE* yuv[3])
 	for (size_t x = 0; x < 3; x++)
 	{
 		free(yuv[x]);
-		yuv[x] = NULL;
+		yuv[x] = nullptr;
 	}
 }
 
@@ -986,9 +1001,12 @@ static BOOL allocate_yuv(BYTE* yuv[3], prim_size_t roi)
 		return FALSE;
 	}
 
-	winpr_RAND(yuv[0], 1ULL * roi.width * roi.height);
-	winpr_RAND(yuv[1], 1ULL * roi.width * roi.height);
-	winpr_RAND(yuv[2], 1ULL * roi.width * roi.height);
+	if (winpr_RAND(yuv[0], 1ULL * roi.width * roi.height) < 0)
+		return FALSE;
+	if (winpr_RAND(yuv[1], 1ULL * roi.width * roi.height) < 0)
+		return FALSE;
+	if (winpr_RAND(yuv[2], 1ULL * roi.width * roi.height) < 0)
+		return FALSE;
 	return TRUE;
 }
 
@@ -1022,7 +1040,7 @@ static BOOL compare_yuv444_to_rgb(prim_size_t roi, DWORD type)
 {
 	BOOL rc = FALSE;
 	const UINT32 format = PIXEL_FORMAT_BGRA32;
-	BYTE* yuv[3] = { 0 };
+	BYTE* yuv[3] = WINPR_C_ARRAY_INIT;
 	const UINT32 yuvStep[3] = { roi.width, roi.width, roi.width };
 	const size_t stride = 4ULL * roi.width;
 
@@ -1071,12 +1089,12 @@ static BOOL compare_yuv444_to_rgb(prim_size_t roi, DWORD type)
 			BYTE r1 = 0;
 			BYTE g1 = 0;
 			BYTE b1 = 0;
-			FreeRDPSplitColor(color1, format, &r1, &g1, &b1, NULL, NULL);
+			FreeRDPSplitColor(color1, format, &r1, &g1, &b1, nullptr, nullptr);
 
 			BYTE r2 = 0;
 			BYTE g2 = 0;
 			BYTE b2 = 0;
-			FreeRDPSplitColor(color2, format, &r2, &g2, &b2, NULL, NULL);
+			FreeRDPSplitColor(color2, format, &r2, &g2, &b2, nullptr, nullptr);
 
 			const int dr12 = abs(r1 - r2);
 			const int dg12 = abs(g1 - g2);
@@ -1130,8 +1148,8 @@ static BOOL compare_rgb_to_yuv444(prim_size_t roi, DWORD type)
 	const UINT32 format = PIXEL_FORMAT_BGRA32;
 	const size_t stride = 4ULL * roi.width;
 	const UINT32 yuvStep[] = { roi.width, roi.width, roi.width };
-	BYTE* yuv1[3] = { 0 };
-	BYTE* yuv2[3] = { 0 };
+	BYTE* yuv1[3] = WINPR_C_ARRAY_INIT;
+	BYTE* yuv2[3] = WINPR_C_ARRAY_INIT;
 
 	primitives_t* prims = primitives_get_by_type(type);
 	if (!prims)
@@ -1195,7 +1213,7 @@ static BOOL compare_yuv420_to_rgb(prim_size_t roi, DWORD type)
 {
 	BOOL rc = FALSE;
 	const UINT32 format = PIXEL_FORMAT_BGRA32;
-	BYTE* yuv[3] = { 0 };
+	BYTE* yuv[3] = WINPR_C_ARRAY_INIT;
 	const UINT32 yuvStep[3] = { roi.width, roi.width / 2, roi.width / 2 };
 	const size_t stride = 4ULL * roi.width;
 
@@ -1244,12 +1262,12 @@ static BOOL compare_yuv420_to_rgb(prim_size_t roi, DWORD type)
 			BYTE r1 = 0;
 			BYTE g1 = 0;
 			BYTE b1 = 0;
-			FreeRDPSplitColor(color1, format, &r1, &g1, &b1, NULL, NULL);
+			FreeRDPSplitColor(color1, format, &r1, &g1, &b1, nullptr, nullptr);
 
 			BYTE r2 = 0;
 			BYTE g2 = 0;
 			BYTE b2 = 0;
-			FreeRDPSplitColor(color2, format, &r2, &g2, &b2, NULL, NULL);
+			FreeRDPSplitColor(color2, format, &r2, &g2, &b2, nullptr, nullptr);
 
 			const int dr12 = abs(r1 - r2);
 			const int dg12 = abs(g1 - g2);
@@ -1290,9 +1308,7 @@ static BOOL similarYUV(const BYTE* line1, const BYTE* line2, size_t len)
 		const int a = line1[x];
 		const int b = line2[x];
 		const int diff = abs(a - b);
-		if (diff >= 2)
-			return FALSE;
-		return TRUE;
+		return (diff < 2);
 	}
 }
 
@@ -1327,8 +1343,8 @@ static BOOL compare_rgb_to_yuv420(prim_size_t roi, DWORD type)
 	const UINT32 format = PIXEL_FORMAT_BGRA32;
 	const size_t stride = 4ULL * roi.width;
 	const UINT32 yuvStep[] = { roi.width, roi.width / 2, roi.width / 2 };
-	BYTE* yuv1[3] = { 0 };
-	BYTE* yuv2[3] = { 0 };
+	BYTE* yuv1[3] = WINPR_C_ARRAY_INIT;
+	BYTE* yuv2[3] = WINPR_C_ARRAY_INIT;
 
 	primitives_t* prims = primitives_get_by_type(type);
 	if (!prims)
@@ -1344,7 +1360,8 @@ static BOOL compare_rgb_to_yuv420(prim_size_t roi, DWORD type)
 	if (!soft || !rgb || !rgbcopy)
 		goto fail;
 
-	winpr_RAND(rgb, roi.height * stride);
+	if (winpr_RAND(rgb, roi.height * stride) < 0)
+		goto fail;
 	memcpy(rgbcopy, rgb, roi.height * stride);
 
 	if (!allocate_yuv(yuv1, roi) || !allocate_yuv(yuv2, roi))
@@ -1409,14 +1426,25 @@ int TestPrimitivesYUV(int argc, char* argv[])
 	int rc = -1;
 	WINPR_UNUSED(argc);
 	WINPR_UNUSED(argv);
-	prim_size_t roi = { 0 };
+	prim_size_t roi = WINPR_C_ARRAY_INIT;
 
 	if (argc > 1)
 	{
-		// NOLINTNEXTLINE(cert-err34-c)
-		int crc = sscanf(argv[1], "%" PRIu32 "x%" PRIu32, &roi.width, &roi.height);
+		BOOL reset = TRUE;
+		char* str = argv[1];
+		char* ptr = strchr(str, 'x');
+		if (ptr)
+		{
+			*ptr++ = '\0';
 
-		if (crc != 2)
+			errno = 0;
+			roi.width = strtoul(str, nullptr, 0);
+			if (errno == 0)
+				roi.height = strtoul(str, nullptr, 0);
+			reset = errno != 0;
+		}
+
+		if (reset)
 		{
 			roi.width = 1920;
 			roi.height = 1080;

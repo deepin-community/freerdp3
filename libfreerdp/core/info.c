@@ -78,9 +78,9 @@ static BOOL rdp_read_info_null_string(rdpSettings* settings, FreeRDP_Settings_Ke
                                       const char* what, UINT32 flags, wStream* s, size_t cbLen,
                                       size_t max)
 {
-	const BOOL unicode = (flags & INFO_UNICODE) ? TRUE : FALSE;
+	const BOOL unicode = (flags & INFO_UNICODE) != 0;
 
-	if (!freerdp_settings_set_string(settings, id, NULL))
+	if (!freerdp_settings_set_string(settings, id, nullptr))
 		return FALSE;
 
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, (size_t)(cbLen)))
@@ -119,13 +119,13 @@ static BOOL rdp_read_info_null_string(rdpSettings* settings, FreeRDP_Settings_Ke
 
 static char* rdp_info_package_flags_description(UINT32 flags)
 {
-	char* result = NULL;
+	char* result = nullptr;
 	size_t maximum_size = 1 + MAX_LABEL_LENGTH * ARRAYSIZE(info_flags);
 
 	result = calloc(maximum_size, sizeof(char));
 
 	if (!result)
-		return 0;
+		return nullptr;
 
 	for (size_t i = 0; i < ARRAYSIZE(info_flags); i++)
 	{
@@ -141,10 +141,10 @@ static char* rdp_info_package_flags_description(UINT32 flags)
 
 static BOOL rdp_compute_client_auto_reconnect_cookie(rdpRdp* rdp)
 {
-	BYTE ClientRandom[CLIENT_RANDOM_LENGTH] = { 0 };
-	BYTE AutoReconnectRandom[32] = { 0 };
-	ARC_SC_PRIVATE_PACKET* serverCookie = NULL;
-	ARC_CS_PRIVATE_PACKET* clientCookie = NULL;
+	BYTE ClientRandom[CLIENT_RANDOM_LENGTH] = WINPR_C_ARRAY_INIT;
+	BYTE AutoReconnectRandom[32] = WINPR_C_ARRAY_INIT;
+	ARC_SC_PRIVATE_PACKET* serverCookie = nullptr;
+	ARC_CS_PRIVATE_PACKET* clientCookie = nullptr;
 
 	WINPR_ASSERT(rdp);
 	rdpSettings* settings = rdp->settings;
@@ -178,8 +178,8 @@ static BOOL rdp_compute_client_auto_reconnect_cookie(rdpRdp* rdp)
 
 static BOOL rdp_read_server_auto_reconnect_cookie(rdpRdp* rdp, wStream* s, logon_info_ex* info)
 {
-	BYTE* p = NULL;
-	ARC_SC_PRIVATE_PACKET* autoReconnectCookie = NULL;
+	BYTE* p = nullptr;
+	ARC_SC_PRIVATE_PACKET* autoReconnectCookie = nullptr;
 	rdpSettings* settings = rdp->settings;
 	autoReconnectCookie = settings->ServerAutoReconnectCookie;
 
@@ -212,7 +212,7 @@ static BOOL rdp_read_server_auto_reconnect_cookie(rdpRdp* rdp, wStream* s, logon
 
 	if ((settings->PrintReconnectCookie))
 	{
-		char* base64 = NULL;
+		char* base64 = nullptr;
 		base64 = crypto_base64_encode((BYTE*)autoReconnectCookie, sizeof(ARC_SC_PRIVATE_PACKET));
 		WLog_INFO(TAG, "Reconnect-cookie: %s", base64);
 		free(base64);
@@ -228,7 +228,7 @@ static BOOL rdp_read_server_auto_reconnect_cookie(rdpRdp* rdp, wStream* s, logon
 
 static BOOL rdp_read_client_auto_reconnect_cookie(rdpRdp* rdp, wStream* s)
 {
-	ARC_CS_PRIVATE_PACKET* autoReconnectCookie = NULL;
+	ARC_CS_PRIVATE_PACKET* autoReconnectCookie = nullptr;
 	rdpSettings* settings = rdp->settings;
 	autoReconnectCookie = settings->ClientAutoReconnectCookie;
 
@@ -249,9 +249,9 @@ static BOOL rdp_read_client_auto_reconnect_cookie(rdpRdp* rdp, wStream* s)
 
 static BOOL rdp_write_client_auto_reconnect_cookie(rdpRdp* rdp, wStream* s)
 {
-	BYTE* p = NULL;
-	ARC_CS_PRIVATE_PACKET* autoReconnectCookie = NULL;
-	rdpSettings* settings = NULL;
+	BYTE* p = nullptr;
+	ARC_CS_PRIVATE_PACKET* autoReconnectCookie = nullptr;
+	rdpSettings* settings = nullptr;
 
 	WINPR_ASSERT(rdp);
 
@@ -289,7 +289,7 @@ static BOOL rdp_write_client_auto_reconnect_cookie(rdpRdp* rdp, wStream* s)
 static size_t rdp_get_client_address_max_size(const rdpRdp* rdp)
 {
 	UINT32 version = 0;
-	rdpSettings* settings = NULL;
+	rdpSettings* settings = nullptr;
 
 	WINPR_ASSERT(rdp);
 
@@ -325,7 +325,7 @@ static BOOL rdp_read_extended_info_packet(rdpRdp* rdp, wStream* s)
 	Stream_Read_UINT16(s, clientAddressFamily); /* clientAddressFamily (2 bytes) */
 	Stream_Read_UINT16(s, cbClientAddress);     /* cbClientAddress (2 bytes) */
 
-	settings->IPv6Enabled = (clientAddressFamily == ADDRESS_FAMILY_INET6 ? TRUE : FALSE);
+	settings->IPv6Enabled = ((clientAddressFamily == ADDRESS_FAMILY_INET6));
 
 	if (!rdp_read_info_null_string(settings, FreeRDP_ClientAddress, "cbClientAddress", INFO_UNICODE,
 	                               s, cbClientAddress, rdp_get_client_address_max_size(rdp)))
@@ -465,7 +465,7 @@ static BOOL rdp_write_extended_info_packet(rdpRdp* rdp, wStream* s)
 	BOOL ret = FALSE;
 	size_t cbClientAddress = 0;
 	const size_t cbClientAddressMax = rdp_get_client_address_max_size(rdp);
-	WCHAR* clientDir = NULL;
+	WCHAR* clientDir = nullptr;
 	size_t cbClientDir = 0;
 	const size_t cbClientDirMax = 512;
 	UINT16 cbAutoReconnectCookie = 0;
@@ -600,10 +600,10 @@ static BOOL rdp_read_info_string(rdpSettings* settings, FreeRDP_Settings_Keys_St
 		BYTE b[2];
 	} terminator;
 
-	const BOOL unicode = (flags & INFO_UNICODE) ? TRUE : FALSE;
+	const BOOL unicode = (flags & INFO_UNICODE) != 0;
 	const size_t nullSize = unicode ? sizeof(WCHAR) : sizeof(CHAR);
 
-	if (!freerdp_settings_set_string(settings, id, NULL))
+	if (!freerdp_settings_set_string(settings, id, nullptr))
 		return FALSE;
 
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, (size_t)(cbLenNonNull + nullSize)))
@@ -644,7 +644,9 @@ static BOOL rdp_read_info_string(rdpSettings* settings, FreeRDP_Settings_Keys_St
 	if (terminator.w != L'\0')
 	{
 		WLog_ERR(TAG, "protocol error: Domain must be null terminated");
-		(void)freerdp_settings_set_string(settings, id, NULL);
+		if (!freerdp_settings_set_string(settings, id, nullptr))
+			WLog_ERR(TAG, "freerdp_settings_set_string(settings, id=%d, nullptr) failed", id);
+
 		return FALSE;
 	}
 
@@ -673,18 +675,18 @@ static BOOL rdp_read_info_packet(rdpRdp* rdp, wStream* s, UINT16 tpktlength)
 
 	Stream_Read_UINT32(s, settings->KeyboardCodePage); /* CodePage (4 bytes ) */
 	Stream_Read_UINT32(s, flags);                      /* flags (4 bytes) */
-	settings->AudioCapture = ((flags & INFO_AUDIOCAPTURE) ? TRUE : FALSE);
-	settings->AudioPlayback = ((flags & INFO_NOAUDIOPLAYBACK) ? FALSE : TRUE);
-	settings->AutoLogonEnabled = ((flags & INFO_AUTOLOGON) ? TRUE : FALSE);
-	settings->RemoteApplicationMode = ((flags & INFO_RAIL) ? TRUE : FALSE);
-	settings->HiDefRemoteApp = ((flags & INFO_HIDEF_RAIL_SUPPORTED) ? TRUE : FALSE);
-	settings->RemoteConsoleAudio = ((flags & INFO_REMOTECONSOLEAUDIO) ? TRUE : FALSE);
-	settings->CompressionEnabled = ((flags & INFO_COMPRESSION) ? TRUE : FALSE);
-	settings->LogonNotify = ((flags & INFO_LOGONNOTIFY) ? TRUE : FALSE);
-	settings->MouseHasWheel = ((flags & INFO_MOUSE_HAS_WHEEL) ? TRUE : FALSE);
-	settings->DisableCtrlAltDel = ((flags & INFO_DISABLECTRLALTDEL) ? TRUE : FALSE);
-	settings->ForceEncryptedCsPdu = ((flags & INFO_FORCE_ENCRYPTED_CS_PDU) ? TRUE : FALSE);
-	settings->PasswordIsSmartcardPin = ((flags & INFO_PASSWORD_IS_SC_PIN) ? TRUE : FALSE);
+	settings->AudioCapture = ((flags & INFO_AUDIOCAPTURE) != 0);
+	settings->AudioPlayback = (!(flags & INFO_NOAUDIOPLAYBACK));
+	settings->AutoLogonEnabled = ((flags & INFO_AUTOLOGON) != 0);
+	settings->RemoteApplicationMode = ((flags & INFO_RAIL) != 0);
+	settings->HiDefRemoteApp = ((flags & INFO_HIDEF_RAIL_SUPPORTED) != 0);
+	settings->RemoteConsoleAudio = ((flags & INFO_REMOTECONSOLEAUDIO) != 0);
+	settings->CompressionEnabled = ((flags & INFO_COMPRESSION) != 0);
+	settings->LogonNotify = ((flags & INFO_LOGONNOTIFY) != 0);
+	settings->MouseHasWheel = ((flags & INFO_MOUSE_HAS_WHEEL) != 0);
+	settings->DisableCtrlAltDel = ((flags & INFO_DISABLECTRLALTDEL) != 0);
+	settings->ForceEncryptedCsPdu = ((flags & INFO_FORCE_ENCRYPTED_CS_PDU) != 0);
+	settings->PasswordIsSmartcardPin = ((flags & INFO_PASSWORD_IS_SC_PIN) != 0);
 
 	if (flags & INFO_COMPRESSION)
 	{
@@ -744,18 +746,18 @@ static BOOL rdp_write_info_packet(rdpRdp* rdp, wStream* s)
 {
 	BOOL ret = FALSE;
 	UINT32 flags = 0;
-	WCHAR* domainW = NULL;
+	WCHAR* domainW = nullptr;
 	size_t cbDomain = 0;
-	WCHAR* userNameW = NULL;
+	WCHAR* userNameW = nullptr;
 	size_t cbUserName = 0;
-	WCHAR* passwordW = NULL;
+	WCHAR* passwordW = nullptr;
 	size_t cbPassword = 0;
-	WCHAR* alternateShellW = NULL;
+	WCHAR* alternateShellW = nullptr;
 	size_t cbAlternateShell = 0;
-	WCHAR* workingDirW = NULL;
+	WCHAR* workingDirW = nullptr;
 	size_t cbWorkingDir = 0;
 	BOOL usedPasswordCookie = FALSE;
-	rdpSettings* settings = NULL;
+	rdpSettings* settings = nullptr;
 
 	WINPR_ASSERT(rdp);
 	settings = rdp->settings;
@@ -878,7 +880,7 @@ static BOOL rdp_write_info_packet(rdpRdp* rdp, wStream* s)
 	}
 
 	{
-		const char* altShell = NULL;
+		const char* altShell = nullptr;
 		if (!settings->RemoteAssistanceMode)
 			altShell = freerdp_settings_get_string(settings, FreeRDP_AlternateShell);
 		else if (settings->RemoteAssistancePassStub)
@@ -891,7 +893,7 @@ static BOOL rdp_write_info_packet(rdpRdp* rdp, wStream* s)
 			alternateShellW = ConvertUtf8ToWCharAlloc(altShell, &cbAlternateShell);
 			if (!alternateShellW)
 			{
-				WLog_ERR(TAG, "alternateShellW == NULL");
+				WLog_ERR(TAG, "alternateShellW == nullptr");
 				goto fail;
 			}
 			if (cbAlternateShell > (UINT16_MAX / sizeof(WCHAR)))
@@ -1023,7 +1025,7 @@ BOOL rdp_recv_client_info(rdpRdp* rdp, wStream* s)
 BOOL rdp_send_client_info(rdpRdp* rdp)
 {
 	UINT16 sec_flags = SEC_INFO_PKT;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 	WINPR_ASSERT(rdp);
 	s = rdp_send_stream_init(rdp, &sec_flags);
 
@@ -1048,7 +1050,7 @@ static void rdp_free_logon_info(logon_info* info)
 	free(info->domain);
 	free(info->username);
 
-	const logon_info empty = { 0 };
+	const logon_info empty = WINPR_C_ARRAY_INIT;
 	*info = empty;
 }
 
@@ -1056,7 +1058,7 @@ static BOOL rdp_info_read_string(const char* what, wStream* s, size_t size, size
                                  BOOL skipMax, char** dst)
 {
 	WINPR_ASSERT(dst);
-	*dst = NULL;
+	*dst = nullptr;
 
 	if (size == 0)
 	{
@@ -1238,7 +1240,7 @@ static BOOL rdp_recv_logon_plain_notify(rdpRdp* rdp, wStream* s)
 
 static BOOL rdp_recv_logon_error_info(rdpRdp* rdp, wStream* s, logon_info_ex* info)
 {
-	freerdp* instance = NULL;
+	freerdp* instance = nullptr;
 	UINT32 errorNotificationType = 0;
 	UINT32 errorNotificationData = 0;
 
@@ -1257,7 +1259,13 @@ static BOOL rdp_recv_logon_error_info(rdpRdp* rdp, wStream* s, logon_info_ex* in
 	Stream_Read_UINT32(s, errorNotificationData); /* errorNotificationData (4 bytes) */
 	WLog_DBG(TAG, "LogonErrorInfo: Data: 0x%08" PRIX32 " Type: 0x%08" PRIX32 "",
 	         errorNotificationData, errorNotificationType);
-	IFCALL(instance->LogonErrorInfo, instance, errorNotificationData, errorNotificationType);
+	if (instance->LogonErrorInfo)
+	{
+		const int rc =
+		    instance->LogonErrorInfo(instance, errorNotificationData, errorNotificationType);
+		if (rc < 0)
+			return FALSE;
+	}
 	info->ErrorNotificationType = errorNotificationType;
 	info->ErrorNotificationData = errorNotificationData;
 	return TRUE;
@@ -1337,8 +1345,8 @@ BOOL rdp_recv_save_session_info(rdpRdp* rdp, wStream* s)
 {
 	UINT32 infoType = 0;
 	BOOL status = 0;
-	logon_info logonInfo = { 0 };
-	logon_info_ex logonInfoEx = { 0 };
+	logon_info logonInfo = WINPR_C_ARRAY_INIT;
+	logon_info_ex logonInfoEx = WINPR_C_ARRAY_INIT;
 	rdpContext* context = rdp->context;
 	rdpUpdate* update = rdp->context->update;
 
@@ -1371,7 +1379,7 @@ BOOL rdp_recv_save_session_info(rdpRdp* rdp, wStream* s)
 			status = rdp_recv_logon_plain_notify(rdp, s);
 
 			if (status && update->SaveSessionInfo)
-				status = update->SaveSessionInfo(context, infoType, NULL);
+				status = update->SaveSessionInfo(context, infoType, nullptr);
 
 			break;
 
@@ -1584,7 +1592,7 @@ BOOL rdp_send_save_session_info(rdpContext* context, UINT32 type, void* data)
 BOOL rdp_send_server_status_info(rdpContext* context, UINT32 status)
 {
 	UINT16 sec_flags = 0;
-	wStream* s = NULL;
+	wStream* s = nullptr;
 	rdpRdp* rdp = context->rdp;
 	s = rdp_data_pdu_init(rdp, &sec_flags);
 

@@ -24,7 +24,7 @@
 
 BOOL freerdp_smartcard_list(const rdpSettings* settings)
 {
-	SmartcardCertInfo** certs = NULL;
+	SmartcardCertInfo** certs = nullptr;
 	size_t count = 0;
 
 	if (!smartcard_enumerateCerts(settings, &certs, &count, FALSE))
@@ -34,7 +34,7 @@ BOOL freerdp_smartcard_list(const rdpSettings* settings)
 	for (size_t i = 0; i < count; i++)
 	{
 		const SmartcardCertInfo* info = certs[i];
-		char asciiStr[256] = { 0 };
+		char asciiStr[256] = WINPR_C_ARRAY_INIT;
 
 		WINPR_ASSERT(info);
 

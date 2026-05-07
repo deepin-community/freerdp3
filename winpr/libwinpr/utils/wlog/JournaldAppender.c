@@ -39,7 +39,7 @@ typedef struct
 static BOOL WLog_JournaldAppender_Open(wLog* log, wLogAppender* appender)
 {
 	int fd = 0;
-	wLogJournaldAppender* journaldAppender = NULL;
+	wLogJournaldAppender* journaldAppender = nullptr;
 
 	if (!log || !appender)
 		return FALSE;
@@ -59,15 +59,23 @@ static BOOL WLog_JournaldAppender_Open(wLog* log, wLogAppender* appender)
 		return FALSE;
 	}
 
-	setbuffer(journaldAppender->stream, NULL, 0);
+	setbuffer(journaldAppender->stream, nullptr, 0);
 	return TRUE;
 }
 
 static BOOL WLog_JournaldAppender_Close(wLog* log, wLogAppender* appender)
 {
+	wLogJournaldAppender* journaldAppender = (wLogJournaldAppender*)appender;
 	if (!log || !appender)
 		return FALSE;
 
+	if (journaldAppender->stream)
+		(void)fclose(journaldAppender->stream);
+
+	free(journaldAppender->identifier);
+
+	journaldAppender->stream = nullptr;
+	journaldAppender->identifier = nullptr;
 	return TRUE;
 }
 
@@ -79,7 +87,7 @@ static BOOL WLog_JournaldAppender_WriteMessage(wLog* log, wLogAppender* appender
 
 	wLogJournaldAppender* journaldAppender = (wLogJournaldAppender*)appender;
 
-	const char* formatStr = NULL;
+	const char* formatStr = nullptr;
 	switch (cmessage->Level)
 	{
 		case WLOG_TRACE:
@@ -105,7 +113,7 @@ static BOOL WLog_JournaldAppender_WriteMessage(wLog* log, wLogAppender* appender
 			return FALSE;
 	}
 
-	char prefix[WLOG_MAX_PREFIX_SIZE] = { 0 };
+	char prefix[WLOG_MAX_PREFIX_SIZE] = WINPR_C_ARRAY_INIT;
 	WLog_Layout_GetMessagePrefix(log, appender->Layout, cmessage, prefix, sizeof(prefix));
 
 	if (cmessage->Level != WLOG_OFF)
@@ -124,6 +132,7 @@ static BOOL WLog_JournaldAppender_WriteDataMessage(wLog* log, wLogAppender* appe
 	if (!log || !appender || !message)
 		return FALSE;
 
+	(void)fprintf(stderr, "[TODO: %s] data messages not implemented! Ignoring.\n", __func__);
 	return TRUE;
 }
 
@@ -133,6 +142,7 @@ static BOOL WLog_JournaldAppender_WriteImageMessage(wLog* log, wLogAppender* app
 	if (!log || !appender || !message)
 		return FALSE;
 
+	(void)fprintf(stderr, "[TODO: %s] image messages not implemented! Ignoring.\n", __func__);
 	return TRUE;
 }
 
@@ -154,12 +164,12 @@ static BOOL WLog_JournaldAppender_Set(wLogAppender* appender, const char* settin
 	if (journaldAppender->identifier)
 		free(journaldAppender->identifier);
 
-	return ((journaldAppender->identifier = _strdup((const char*)value)) != NULL);
+	return ((journaldAppender->identifier = _strdup((const char*)value)) != nullptr);
 }
 
 static void WLog_JournaldAppender_Free(wLogAppender* appender)
 {
-	wLogJournaldAppender* journaldAppender = NULL;
+	wLogJournaldAppender* journaldAppender = nullptr;
 	if (appender)
 	{
 		journaldAppender = (wLogJournaldAppender*)appender;
@@ -176,7 +186,7 @@ wLogAppender* WLog_JournaldAppender_New(wLog* log)
 
 	wLogJournaldAppender* appender = (wLogJournaldAppender*)calloc(1, sizeof(wLogJournaldAppender));
 	if (!appender)
-		return NULL;
+		return nullptr;
 
 	appender->common.Type = WLOG_APPENDER_JOURNALD;
 	appender->common.Open = WLog_JournaldAppender_Open;
@@ -187,7 +197,7 @@ wLogAppender* WLog_JournaldAppender_New(wLog* log)
 	appender->common.Set = WLog_JournaldAppender_Set;
 	appender->common.Free = WLog_JournaldAppender_Free;
 
-	const DWORD nSize = GetEnvironmentVariableA(name, NULL, 0);
+	const DWORD nSize = GetEnvironmentVariableA(name, nullptr, 0);
 	if (nSize)
 	{
 		appender->identifier = (LPSTR)malloc(nSize);
@@ -206,5 +216,5 @@ wLogAppender* WLog_JournaldAppender_New(wLog* log)
 error_open:
 	free(appender->identifier);
 	free(appender);
-	return NULL;
+	return nullptr;
 }

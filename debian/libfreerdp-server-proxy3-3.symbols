@@ -1,5 +1,6 @@
 libfreerdp-server-proxy3.so.3 libfreerdp-server-proxy3-3 #MINVER#
-* Build-Depends-Package: freerdp3-dev
+* Build-Depends-Package: freerdp-dev
+ StaticChannelContext_free@Base 3.23.0
  intercept_context_entry_free@Base 3.0.0
  pf_config_clone@Base 3.0.0
  pf_config_get@Base 3.0.0

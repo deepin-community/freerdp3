@@ -11,13 +11,13 @@ static TCHAR testDirectory2File2[] = _T("TestDirectory2File2");
 
 int TestFileFindNextFile(int argc, char* argv[])
 {
-	char* str = NULL;
+	char* str = nullptr;
 	size_t length = 0;
 	BOOL status = 0;
-	HANDLE hFind = NULL;
-	LPTSTR BasePath = NULL;
+	HANDLE hFind = nullptr;
+	LPTSTR BasePath = nullptr;
 	WIN32_FIND_DATA FindData;
-	TCHAR FilePath[PATHCCH_MAX_CCH] = { 0 };
+	TCHAR FilePath[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
 	WINPR_UNUSED(argc);
 	str = argv[1];
 #ifdef UNICODE

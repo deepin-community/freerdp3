@@ -71,7 +71,7 @@ static int rts_destination_command_read(rdpRpc* rpc, wStream* buffer, UINT32* De
 
 static const char* rts_command_to_string(UINT32 cmd, char* buffer, size_t len)
 {
-	const char* str = NULL;
+	const char* str = nullptr;
 
 #undef ENTRY
 #define ENTRY(x)    \
@@ -161,7 +161,7 @@ static const char* rts_pdu_ptype_to_string(UINT32 ptype)
 
 static rpcconn_rts_hdr_t rts_pdu_header_init(void)
 {
-	rpcconn_rts_hdr_t header = { 0 };
+	rpcconn_rts_hdr_t header = WINPR_C_ARRAY_INIT;
 	header.header.rpc_vers = 5;
 	header.header.rpc_vers_minor = 0;
 	header.header.ptype = PTYPE_RTS;
@@ -191,14 +191,14 @@ static BOOL rts_align_stream(wStream* s, size_t alignment, BOOL silent)
 
 static char* sdup(const void* src, size_t length)
 {
-	char* dst = NULL;
+	char* dst = nullptr;
 	WINPR_ASSERT(src || (length == 0));
 	if (length == 0)
-		return NULL;
+		return nullptr;
 
 	dst = calloc(length + 1, sizeof(char));
 	if (!dst)
-		return NULL;
+		return nullptr;
 	memcpy(dst, src, length);
 	return dst;
 }
@@ -221,7 +221,8 @@ static BOOL rts_write_common_pdu_header(wStream* s, const rpcconn_common_hdr_t* 
 	return TRUE;
 }
 
-BOOL rts_read_common_pdu_header(wStream* s, rpcconn_common_hdr_t* header, BOOL ignoreErrors)
+rts_pdu_status_t rts_read_common_pdu_header(wStream* s, rpcconn_common_hdr_t* header,
+                                            BOOL ignoreErrors)
 {
 	WINPR_ASSERT(s);
 	WINPR_ASSERT(header);
@@ -229,13 +230,13 @@ BOOL rts_read_common_pdu_header(wStream* s, rpcconn_common_hdr_t* header, BOOL i
 	if (!ignoreErrors)
 	{
 		if (!Stream_CheckAndLogRequiredLength(TAG, s, sizeof(rpcconn_common_hdr_t)))
-			return FALSE;
+			return RTS_PDU_INCOMPLETE;
 	}
 	else
 	{
 		const size_t sz = Stream_GetRemainingLength(s);
 		if (sz < sizeof(rpcconn_common_hdr_t))
-			return FALSE;
+			return RTS_PDU_INCOMPLETE;
 	}
 
 	Stream_Read_UINT8(s, header->rpc_vers);
@@ -252,22 +253,31 @@ BOOL rts_read_common_pdu_header(wStream* s, rpcconn_common_hdr_t* header, BOOL i
 		if (!ignoreErrors)
 			WLog_WARN(TAG, "Invalid header->frag_length of %" PRIu16 ", expected %" PRIuz,
 			          header->frag_length, sizeof(rpcconn_common_hdr_t));
-		return FALSE;
+		return RTS_PDU_FAIL;
+	}
+	if (header->auth_length > header->frag_length - 8ull)
+	{
+		if (!ignoreErrors)
+			WLog_WARN(TAG,
+			          "Invalid header->auth_length(%" PRIu16 ") > header->frag_length(%" PRIu16
+			          ") - 8ull",
+			          header->frag_length, header->auth_length);
+		return RTS_PDU_FAIL;
 	}
 
 	if (!ignoreErrors)
 	{
 		if (!Stream_CheckAndLogRequiredLength(TAG, s,
 		                                      header->frag_length - sizeof(rpcconn_common_hdr_t)))
-			return FALSE;
+			return RTS_PDU_INCOMPLETE;
 	}
 	else
 	{
 		const size_t sz2 = Stream_GetRemainingLength(s);
 		if (sz2 < header->frag_length - sizeof(rpcconn_common_hdr_t))
-			return FALSE;
+			return RTS_PDU_INCOMPLETE;
 	}
-	return TRUE;
+	return RTS_PDU_VALID;
 }
 
 static BOOL rts_read_auth_verifier_no_checks(wStream* s, auth_verifier_co_t* auth,
@@ -287,7 +297,8 @@ static BOOL rts_read_auth_verifier_no_checks(wStream* s, auth_verifier_co_t* aut
 	{
 		const size_t expected = header->frag_length - header->auth_length - 8;
 
-		Stream_SetPosition(s, expected);
+		if (!Stream_SetPosition(s, expected))
+			return FALSE;
 		if (!Stream_ConditionalCheckAndLogRequiredLength(TAG, s, 8, silent))
 			return FALSE;
 
@@ -304,7 +315,7 @@ static BOOL rts_read_auth_verifier_no_checks(wStream* s, auth_verifier_co_t* aut
 		if (!Stream_ConditionalSafeSeek(s, header->auth_length, silent))
 			return FALSE;
 		auth->auth_value = (BYTE*)sdup(ptr, header->auth_length);
-		if (auth->auth_value == NULL)
+		if (auth->auth_value == nullptr)
 			return FALSE;
 	}
 
@@ -332,7 +343,7 @@ static BOOL rts_read_auth_verifier_with_stub(wStream* s, auth_verifier_co_t* aut
 {
 	size_t pos = 0;
 	size_t alloc_hint = 0;
-	BYTE** ptr = NULL;
+	BYTE** ptr = nullptr;
 
 	if (!rts_read_auth_verifier_no_checks(s, auth, header, &pos, silent))
 		return FALSE;
@@ -377,7 +388,7 @@ static BOOL rts_read_auth_verifier_with_stub(wStream* s, auth_verifier_co_t* aut
 			          alloc_hint, rts_pdu_ptype_to_string(header->ptype), size, header->frag_length,
 			          off);
 
-		*ptr = NULL;
+		*ptr = nullptr;
 		if (size > 0)
 		{
 			*ptr = (BYTE*)sdup(src, size);
@@ -458,7 +469,7 @@ static void rts_free_supported_versions(p_rt_versions_supported_t* versions)
 	if (!versions)
 		return;
 	free(versions->p_protocols);
-	versions->p_protocols = NULL;
+	versions->p_protocols = nullptr;
 }
 
 static BOOL rts_read_supported_versions(wStream* s, p_rt_versions_supported_t* versions,
@@ -507,7 +518,7 @@ static BOOL rts_read_port_any(wStream* s, port_any_t* port, BOOL silent)
 	if (!Stream_ConditionalSafeSeek(s, port->length, silent))
 		return FALSE;
 	port->port_spec = sdup(ptr, port->length);
-	return port->port_spec != NULL;
+	return port->port_spec != nullptr;
 }
 
 static void rts_free_port_any(port_any_t* port)
@@ -1189,7 +1200,8 @@ BOOL rts_read_pdu_header_ex(wStream* s, rpcconn_hdr_t* header, BOOL silent)
 	WINPR_ASSERT(s);
 	WINPR_ASSERT(header);
 
-	if (!rts_read_common_pdu_header(s, &header->common, silent))
+	const rts_pdu_status_t status = rts_read_common_pdu_header(s, &header->common, silent);
+	if (status != RTS_PDU_VALID)
 		return FALSE;
 
 	WLog_DBG(TAG, "Reading PDU type %s", rts_pdu_ptype_to_string(header->common.ptype));
@@ -1323,8 +1335,8 @@ static int rts_flow_control_ack_command_read(rdpRpc* rpc, wStream* buffer, UINT3
 
 	if (Command != RTS_CMD_FLOW_CONTROL_ACK)
 	{
-		char buffer1[64] = { 0 };
-		char buffer2[64] = { 0 };
+		char buffer1[64] = WINPR_C_ARRAY_INIT;
+		char buffer2[64] = WINPR_C_ARRAY_INIT;
 		WLog_Print(rpc->log, WLOG_ERROR, "got command %s, expected %s",
 		           rts_command_to_string(Command, buffer1, sizeof(buffer1)),
 		           rts_command_to_string(RTS_CMD_FLOW_CONTROL_ACK, buffer2, sizeof(buffer2)));
@@ -1574,10 +1586,10 @@ static BOOL rts_destination_command_write(wStream* s, UINT32 Destination)
 	return TRUE;
 }
 
-void rts_generate_cookie(BYTE* cookie)
+BOOL rts_generate_cookie(BYTE* cookie)
 {
 	WINPR_ASSERT(cookie);
-	winpr_RAND(cookie, 16);
+	return winpr_RAND(cookie, 16) >= 0;
 }
 
 #define rts_send_buffer(channel, s, frag_length) \
@@ -1620,13 +1632,13 @@ fail:
 BOOL rts_send_CONN_A1_pdu(rdpRpc* rpc)
 {
 	BOOL status = FALSE;
-	wStream* buffer = NULL;
+	wStream* buffer = nullptr;
 	rpcconn_rts_hdr_t header = rts_pdu_header_init();
 	UINT32 ReceiveWindowSize = 0;
-	BYTE* OUTChannelCookie = NULL;
-	BYTE* VirtualConnectionCookie = NULL;
-	RpcVirtualConnection* connection = NULL;
-	RpcOutChannel* outChannel = NULL;
+	BYTE* OUTChannelCookie = nullptr;
+	BYTE* VirtualConnectionCookie = nullptr;
+	RpcVirtualConnection* connection = nullptr;
+	RpcOutChannel* outChannel = nullptr;
 
 	WINPR_ASSERT(rpc);
 
@@ -1645,7 +1657,7 @@ BOOL rts_send_CONN_A1_pdu(rdpRpc* rpc)
 	OUTChannelCookie = (BYTE*)&(outChannel->common.Cookie);
 	ReceiveWindowSize = outChannel->ReceiveWindow;
 
-	buffer = Stream_New(NULL, header.header.frag_length);
+	buffer = Stream_New(nullptr, header.header.frag_length);
 
 	if (!buffer)
 		return -1;
@@ -1677,7 +1689,7 @@ BOOL rts_recv_CONN_A3_pdu(rdpRpc* rpc, wStream* buffer)
 	BOOL rc = FALSE;
 	UINT32 ConnectionTimeout = 0;
 
-	rpcconn_hdr_t header = { 0 };
+	rpcconn_hdr_t header = WINPR_C_ARRAY_INIT;
 	if (!rts_read_pdu_header(buffer, &header))
 		goto fail;
 
@@ -1722,13 +1734,13 @@ fail:
 BOOL rts_send_CONN_B1_pdu(rdpRpc* rpc)
 {
 	BOOL status = FALSE;
-	wStream* buffer = NULL;
+	wStream* buffer = nullptr;
 	rpcconn_rts_hdr_t header = rts_pdu_header_init();
-	BYTE* INChannelCookie = NULL;
-	BYTE* AssociationGroupId = NULL;
-	BYTE* VirtualConnectionCookie = NULL;
-	RpcVirtualConnection* connection = NULL;
-	RpcInChannel* inChannel = NULL;
+	BYTE* INChannelCookie = nullptr;
+	BYTE* AssociationGroupId = nullptr;
+	BYTE* VirtualConnectionCookie = nullptr;
+	RpcVirtualConnection* connection = nullptr;
+	RpcInChannel* inChannel = nullptr;
 
 	WINPR_ASSERT(rpc);
 
@@ -1747,7 +1759,7 @@ BOOL rts_send_CONN_B1_pdu(rdpRpc* rpc)
 	VirtualConnectionCookie = (BYTE*)&(connection->Cookie);
 	INChannelCookie = (BYTE*)&(inChannel->common.Cookie);
 	AssociationGroupId = (BYTE*)&(connection->AssociationGroupId);
-	buffer = Stream_New(NULL, header.header.frag_length);
+	buffer = Stream_New(nullptr, header.header.frag_length);
 
 	if (!buffer)
 		goto fail;
@@ -1786,7 +1798,7 @@ BOOL rts_recv_CONN_C2_pdu(rdpRpc* rpc, wStream* buffer)
 	WINPR_ASSERT(rpc);
 	WINPR_ASSERT(buffer);
 
-	rpcconn_hdr_t header = { 0 };
+	rpcconn_hdr_t header = WINPR_C_ARRAY_INIT;
 	if (!rts_read_pdu_header(buffer, &header))
 		goto fail;
 
@@ -1806,7 +1818,7 @@ BOOL rts_recv_CONN_C2_pdu(rdpRpc* rpc, wStream* buffer)
 		           header.rts.NumberOfCommands);
 		goto fail;
 	}
-	if (!rts_version_command_read(rpc, buffer, NULL))
+	if (!rts_version_command_read(rpc, buffer, nullptr))
 		goto fail;
 
 	if (!rts_receive_window_size_command_read(rpc, buffer, &ReceiveWindowSize))
@@ -1839,14 +1851,14 @@ fail:
 BOOL rts_send_flow_control_ack_pdu(rdpRpc* rpc)
 {
 	BOOL status = FALSE;
-	wStream* buffer = NULL;
+	wStream* buffer = nullptr;
 	rpcconn_rts_hdr_t header = rts_pdu_header_init();
 	UINT32 BytesReceived = 0;
 	UINT32 AvailableWindow = 0;
-	BYTE* ChannelCookie = NULL;
-	RpcVirtualConnection* connection = NULL;
-	RpcInChannel* inChannel = NULL;
-	RpcOutChannel* outChannel = NULL;
+	BYTE* ChannelCookie = nullptr;
+	RpcVirtualConnection* connection = nullptr;
+	RpcInChannel* inChannel = nullptr;
+	RpcOutChannel* outChannel = nullptr;
 
 	WINPR_ASSERT(rpc);
 
@@ -1869,7 +1881,7 @@ BOOL rts_send_flow_control_ack_pdu(rdpRpc* rpc)
 	AvailableWindow = outChannel->AvailableWindowAdvertised;
 	ChannelCookie = (BYTE*)&(outChannel->common.Cookie);
 	outChannel->ReceiverAvailableWindow = outChannel->AvailableWindowAdvertised;
-	buffer = Stream_New(NULL, header.header.frag_length);
+	buffer = Stream_New(nullptr, header.header.frag_length);
 
 	if (!buffer)
 		goto fail;
@@ -1894,7 +1906,7 @@ static int rts_recv_flow_control_ack_pdu(rdpRpc* rpc, wStream* buffer)
 	int rc = 0;
 	UINT32 BytesReceived = 0;
 	UINT32 AvailableWindow = 0;
-	BYTE ChannelCookie[16] = { 0 };
+	BYTE ChannelCookie[16] = WINPR_C_ARRAY_INIT;
 
 	rc = rts_flow_control_ack_command_read(rpc, buffer, &BytesReceived, &AvailableWindow,
 	                                       (BYTE*)&ChannelCookie);
@@ -1919,7 +1931,7 @@ static int rts_recv_flow_control_ack_with_destination_pdu(rdpRpc* rpc, wStream* 
 	UINT32 Destination = 0;
 	UINT32 BytesReceived = 0;
 	UINT32 AvailableWindow = 0;
-	BYTE ChannelCookie[16] = { 0 };
+	BYTE ChannelCookie[16] = WINPR_C_ARRAY_INIT;
 	/**
 	 * When the sender receives a FlowControlAck RTS PDU, it MUST use the following formula to
 	 * recalculate its Sender AvailableWindow variable:
@@ -1943,8 +1955,8 @@ static int rts_recv_flow_control_ack_with_destination_pdu(rdpRpc* rpc, wStream* 
 
 	if (Command != RTS_CMD_DESTINATION)
 	{
-		char buffer1[64] = { 0 };
-		char buffer2[64] = { 0 };
+		char buffer1[64] = WINPR_C_ARRAY_INIT;
+		char buffer2[64] = WINPR_C_ARRAY_INIT;
 		WLog_Print(rpc->log, WLOG_ERROR, "got command %s, expected %s",
 		           rts_command_to_string(Command, buffer1, sizeof(buffer1)),
 		           rts_command_to_string(RTS_CMD_DESTINATION, buffer2, sizeof(buffer2)));
@@ -1993,7 +2005,7 @@ static int rts_recv_flow_control_ack_with_destination_pdu(rdpRpc* rpc, wStream* 
 BOOL rts_recv_ping_pdu(rdpRpc* rpc, wStream* s)
 {
 	BOOL rc = FALSE;
-	rpcconn_hdr_t header = { 0 };
+	rpcconn_hdr_t header = WINPR_C_ARRAY_INIT;
 
 	WINPR_ASSERT(rpc);
 	WINPR_ASSERT(rpc->auth);
@@ -2023,9 +2035,9 @@ fail:
 static int rts_send_ping_pdu(rdpRpc* rpc)
 {
 	BOOL status = FALSE;
-	wStream* buffer = NULL;
+	wStream* buffer = nullptr;
 	rpcconn_rts_hdr_t header = rts_pdu_header_init();
-	RpcInChannel* inChannel = NULL;
+	RpcInChannel* inChannel = nullptr;
 
 	WINPR_ASSERT(rpc);
 	WINPR_ASSERT(rpc->VirtualConnection);
@@ -2038,7 +2050,7 @@ static int rts_send_ping_pdu(rdpRpc* rpc)
 	header.NumberOfCommands = 0;
 
 	WLog_DBG(TAG, "Sending Ping RTS PDU");
-	buffer = Stream_New(NULL, header.header.frag_length);
+	buffer = Stream_New(nullptr, header.header.frag_length);
 
 	if (!buffer)
 		goto fail;
@@ -2139,11 +2151,11 @@ BOOL rts_command_length(UINT32 CommandType, wStream* s, size_t* length, BOOL sil
 static int rts_send_OUT_R2_A7_pdu(rdpRpc* rpc)
 {
 	BOOL status = FALSE;
-	wStream* buffer = NULL;
+	wStream* buffer = nullptr;
 	rpcconn_rts_hdr_t header = rts_pdu_header_init();
-	BYTE* SuccessorChannelCookie = NULL;
-	RpcInChannel* inChannel = NULL;
-	RpcOutChannel* nextOutChannel = NULL;
+	BYTE* SuccessorChannelCookie = nullptr;
+	RpcInChannel* inChannel = nullptr;
+	RpcOutChannel* nextOutChannel = nullptr;
 
 	WINPR_ASSERT(rpc);
 	WINPR_ASSERT(rpc->VirtualConnection);
@@ -2161,7 +2173,7 @@ static int rts_send_OUT_R2_A7_pdu(rdpRpc* rpc)
 	WLog_DBG(TAG, "Sending OUT_R2/A7 RTS PDU");
 
 	SuccessorChannelCookie = (BYTE*)&(nextOutChannel->common.Cookie);
-	buffer = Stream_New(NULL, header.header.frag_length);
+	buffer = Stream_New(nullptr, header.header.frag_length);
 
 	if (!buffer)
 		return -1;
@@ -2184,9 +2196,9 @@ fail:
 static int rts_send_OUT_R2_C1_pdu(rdpRpc* rpc)
 {
 	BOOL status = FALSE;
-	wStream* buffer = NULL;
+	wStream* buffer = nullptr;
 	rpcconn_rts_hdr_t header = rts_pdu_header_init();
-	RpcOutChannel* nextOutChannel = NULL;
+	RpcOutChannel* nextOutChannel = nullptr;
 
 	WINPR_ASSERT(rpc);
 	WINPR_ASSERT(rpc->VirtualConnection);
@@ -2199,7 +2211,7 @@ static int rts_send_OUT_R2_C1_pdu(rdpRpc* rpc)
 	header.NumberOfCommands = 1;
 
 	WLog_DBG(TAG, "Sending OUT_R2/C1 RTS PDU");
-	buffer = Stream_New(NULL, header.header.frag_length);
+	buffer = Stream_New(nullptr, header.header.frag_length);
 
 	if (!buffer)
 		return -1;
@@ -2218,15 +2230,15 @@ fail:
 BOOL rts_send_OUT_R1_A3_pdu(rdpRpc* rpc)
 {
 	BOOL status = FALSE;
-	wStream* buffer = NULL;
+	wStream* buffer = nullptr;
 	rpcconn_rts_hdr_t header = rts_pdu_header_init();
 	UINT32 ReceiveWindowSize = 0;
-	BYTE* VirtualConnectionCookie = NULL;
-	BYTE* PredecessorChannelCookie = NULL;
-	BYTE* SuccessorChannelCookie = NULL;
-	RpcVirtualConnection* connection = NULL;
-	RpcOutChannel* outChannel = NULL;
-	RpcOutChannel* nextOutChannel = NULL;
+	BYTE* VirtualConnectionCookie = nullptr;
+	BYTE* PredecessorChannelCookie = nullptr;
+	BYTE* SuccessorChannelCookie = nullptr;
+	RpcVirtualConnection* connection = nullptr;
+	RpcOutChannel* outChannel = nullptr;
+	RpcOutChannel* nextOutChannel = nullptr;
 
 	WINPR_ASSERT(rpc);
 
@@ -2249,7 +2261,7 @@ BOOL rts_send_OUT_R1_A3_pdu(rdpRpc* rpc)
 	PredecessorChannelCookie = (BYTE*)&(outChannel->common.Cookie);
 	SuccessorChannelCookie = (BYTE*)&(nextOutChannel->common.Cookie);
 	ReceiveWindowSize = outChannel->ReceiveWindow;
-	buffer = Stream_New(NULL, header.header.frag_length);
+	buffer = Stream_New(nullptr, header.header.frag_length);
 
 	if (!buffer)
 		return -1;
@@ -2281,7 +2293,7 @@ static int rts_recv_OUT_R1_A2_pdu(rdpRpc* rpc, wStream* buffer)
 {
 	int status = 0;
 	UINT32 Destination = 0;
-	RpcVirtualConnection* connection = NULL;
+	RpcVirtualConnection* connection = nullptr;
 	WINPR_ASSERT(rpc);
 	WINPR_ASSERT(buffer);
 
@@ -2315,7 +2327,7 @@ static int rts_recv_OUT_R1_A2_pdu(rdpRpc* rpc, wStream* buffer)
 static int rts_recv_OUT_R2_A6_pdu(rdpRpc* rpc, WINPR_ATTR_UNUSED wStream* buffer)
 {
 	int status = 0;
-	RpcVirtualConnection* connection = NULL;
+	RpcVirtualConnection* connection = nullptr;
 
 	WINPR_ASSERT(rpc);
 	WINPR_ASSERT(buffer);
@@ -2349,7 +2361,7 @@ static int rts_recv_OUT_R2_A6_pdu(rdpRpc* rpc, WINPR_ATTR_UNUSED wStream* buffer
 
 static int rts_recv_OUT_R2_B3_pdu(rdpRpc* rpc, WINPR_ATTR_UNUSED wStream* buffer)
 {
-	RpcVirtualConnection* connection = NULL;
+	RpcVirtualConnection* connection = nullptr;
 
 	WINPR_ASSERT(rpc);
 	WINPR_ASSERT(buffer);
@@ -2367,8 +2379,8 @@ BOOL rts_recv_out_of_sequence_pdu(rdpRpc* rpc, wStream* buffer, const rpcconn_hd
 {
 	BOOL status = FALSE;
 	size_t length = 0;
-	RtsPduSignature signature = { 0 };
-	RpcVirtualConnection* connection = NULL;
+	RtsPduSignature signature = WINPR_C_ARRAY_INIT;
+	RpcVirtualConnection* connection = nullptr;
 
 	WINPR_ASSERT(rpc);
 	WINPR_ASSERT(buffer);
@@ -2438,7 +2450,7 @@ BOOL rts_recv_out_of_sequence_pdu(rdpRpc* rpc, wStream* buffer, const rpcconn_hd
 
 	if (!status)
 	{
-		const UINT32 SignatureId = rts_identify_pdu_signature(&signature, NULL);
+		const UINT32 SignatureId = rts_identify_pdu_signature(&signature, nullptr);
 		WLog_Print(log, WLOG_ERROR, "error parsing RTS PDU with signature id: 0x%08" PRIX32 "",
 		           SignatureId);
 		rts_print_pdu_signature(log, WLOG_ERROR, &signature);
@@ -2501,9 +2513,7 @@ BOOL rts_conditional_check_and_log(const char* tag, wStream* s, size_t size, BOO
 	if (silent)
 	{
 		const size_t rem = Stream_GetRemainingLength(s);
-		if (rem < size)
-			return FALSE;
-		return TRUE;
+		return (rem >= size);
 	}
 
 	return Stream_CheckAndLogRequiredLengthEx(tag, WLOG_WARN, s, size, 1, "%s(%s:%" PRIuz ")", fkt,

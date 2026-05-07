@@ -189,7 +189,8 @@ UINT rdpdr_process_capability_request(rdpdrPlugin* rdpdr, wStream* s)
 	if (!rdpdr || !s)
 		return CHANNEL_RC_NULL_DATA;
 
-	rdpdr_state_advance(rdpdr, RDPDR_CHANNEL_STATE_CLIENT_CAPS);
+	if (!rdpdr_state_advance(rdpdr, RDPDR_CHANNEL_STATE_CLIENT_CAPS))
+		return ERROR_INVALID_STATE;
 
 	if (!Stream_CheckAndLogRequiredLengthWLog(rdpdr->log, s, 4))
 		return ERROR_INVALID_DATA;
@@ -200,7 +201,7 @@ UINT rdpdr_process_capability_request(rdpdrPlugin* rdpdr, wStream* s)
 	memset(rdpdr->capabilities, 0, sizeof(rdpdr->capabilities));
 	for (UINT16 i = 0; i < numCapabilities; i++)
 	{
-		RDPDR_CAPABILITY_HEADER header = { 0 };
+		RDPDR_CAPABILITY_HEADER header = WINPR_C_ARRAY_INIT;
 		UINT error = rdpdr_read_capset_header(rdpdr->log, s, &header);
 		if (error != CHANNEL_RC_OK)
 			return error;

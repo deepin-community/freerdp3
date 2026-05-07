@@ -53,6 +53,9 @@ include(CheckCCompilerFlag)
 include(CMakePackageConfigHelpers)
 include(SetFreeRDPCMakeInstallDir)
 
+include(WarnUnmaintained)
+warn_unmaintained("RDTK" "-DWITH_RDTK=OFF")
+
 option(RDTK_FORCE_STATIC_BUILD "Force RDTK to be build as static library (recommended)" OFF)
 if(RDTK_FORCE_STATIC_BUILD)
   set(BUILD_SHARED_LIBS OFF)

@@ -309,16 +309,14 @@ bool sdlInput::keyboard_focus_in()
 	WINPR_ASSERT(input);
 
 	auto syncFlags = sdl_get_kbd_flags();
-	freerdp_input_send_focus_in_event(input, WINPR_ASSERTING_INT_CAST(uint16_t, syncFlags));
+	if (!freerdp_input_send_focus_in_event(input, WINPR_ASSERTING_INT_CAST(uint16_t, syncFlags)))
+		return false;
 
 	/* finish with a mouse pointer position like mstsc.exe if required */
 	// TODO: fullscreen/remote app
 	float fx = 0.0f;
 	float fy = 0.0f;
-	if (_sdl->fullscreen())
-		SDL_GetGlobalMouseState(&fx, &fy);
-	else
-		SDL_GetMouseState(&fx, &fy);
+	SDL_GetMouseState(&fx, &fy);
 
 	auto w = SDL_GetMouseFocus();
 	const auto& pos = _sdl->screenToPixel(SDL_GetWindowID(w), SDL_FPoint{ fx, fy });
@@ -382,7 +380,8 @@ BOOL sdlInput::keyboard_set_ime_status(rdpContext* context, UINT16 imeId, UINT32
 		{ "SDL_KMOD_CAPS", SDL_KMOD_CAPS },     { "SDL_KMOD_MODE", SDL_KMOD_MODE },
 		{ "SDL_KMOD_SCROLL", SDL_KMOD_SCROLL }, { "SDL_KMOD_CTRL", SDL_KMOD_CTRL },
 		{ "SDL_KMOD_SHIFT", SDL_KMOD_SHIFT },   { "SDL_KMOD_ALT", SDL_KMOD_ALT },
-		{ "SDL_KMOD_GUI", SDL_KMOD_GUI },       { "SDL_KMOD_NONE", SDL_KMOD_NONE }
+		{ "SDL_KMOD_GUI", SDL_KMOD_GUI },       { "SDL_KMOD_NONE", SDL_KMOD_NONE },
+		{ "SDL_KMOD_MODE", SDL_KMOD_MODE },     { "SDL_KMOD_LEVEL5", SDL_KMOD_LEVEL5 }
 	};
 
 	return s_map;
@@ -408,7 +407,7 @@ BOOL sdlInput::keyboard_set_ime_status(rdpContext* context, UINT16 imeId, UINT32
 	std::string str = "<";
 	for (uint32_t x = 0; x < 32; x++)
 	{
-		uint32_t cmask = 1 << x;
+		uint32_t cmask = 1u << x;
 		if ((mask & cmask) != 0)
 		{
 			auto s = modbyvalue(cmask);

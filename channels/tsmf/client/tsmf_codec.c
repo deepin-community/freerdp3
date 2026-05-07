@@ -594,7 +594,8 @@ BOOL tsmf_codec_check_media_type(const char* decoder_name, wStream* s)
 	pos = Stream_GetPosition(s);
 	if (decoderAvailable)
 		ret = tsmf_codec_parse_media_type(&mediatype, s);
-	Stream_SetPosition(s, pos);
+	if (!Stream_SetPosition(s, pos))
+		return FALSE;
 
 	if (ret)
 	{

@@ -285,14 +285,14 @@ static const RTS_PDU_SIGNATURE_ENTRY RTS_PDU_SIGNATURE_TABLE[] = {
 BOOL rts_match_pdu_signature(const RtsPduSignature* signature, wStream* src,
                              const rpcconn_hdr_t* header)
 {
-	return rts_match_pdu_signature_ex(signature, src, header, NULL, FALSE);
+	return rts_match_pdu_signature_ex(signature, src, header, nullptr, FALSE);
 }
 
 BOOL rts_match_pdu_signature_ex(const RtsPduSignature* signature, wStream* src,
                                 const rpcconn_hdr_t* header, RtsPduSignature* found_signature,
                                 BOOL silent)
 {
-	RtsPduSignature extracted = { 0 };
+	RtsPduSignature extracted = WINPR_C_ARRAY_INIT;
 
 	WINPR_ASSERT(signature);
 	WINPR_ASSERT(src);
@@ -315,9 +315,9 @@ BOOL rts_extract_pdu_signature_ex(RtsPduSignature* signature, wStream* src,
                                   const rpcconn_hdr_t* header, BOOL silent)
 {
 	BOOL rc = FALSE;
-	wStream sbuffer = { 0 };
-	rpcconn_hdr_t rheader = { 0 };
-	const rpcconn_rts_hdr_t* rts = NULL;
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
+	rpcconn_hdr_t rheader = WINPR_C_ARRAY_INIT;
+	const rpcconn_rts_hdr_t* rts = nullptr;
 
 	WINPR_ASSERT(signature);
 	WINPR_ASSERT(src);
@@ -366,7 +366,7 @@ UINT32 rts_identify_pdu_signature(const RtsPduSignature* signature,
                                   const RTS_PDU_SIGNATURE_ENTRY** entry)
 {
 	if (entry)
-		*entry = NULL;
+		*entry = nullptr;
 
 	for (size_t i = 0; i < ARRAYSIZE(RTS_PDU_SIGNATURE_TABLE); i++)
 	{
@@ -400,10 +400,9 @@ UINT32 rts_identify_pdu_signature(const RtsPduSignature* signature,
 BOOL rts_print_pdu_signature(wLog* log, DWORD level, const RtsPduSignature* signature)
 {
 	UINT32 SignatureId = 0;
-	const RTS_PDU_SIGNATURE_ENTRY* entry = NULL;
+	const RTS_PDU_SIGNATURE_ENTRY* entry = nullptr;
 
-	if (!signature)
-		return FALSE;
+	WINPR_ASSERT(signature);
 
 	WLog_Print(log, level,
 	           "RTS PDU Signature: Flags: 0x%04" PRIX16 " NumberOfCommands: %" PRIu16 "",

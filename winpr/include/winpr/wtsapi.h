@@ -227,20 +227,20 @@ typedef struct tagCHANNEL_ENTRY_POINTS
 {
 	DWORD cbSize;
 	DWORD protocolVersion;
-	PVIRTUALCHANNELINIT pVirtualChannelInit;
-	PVIRTUALCHANNELOPEN pVirtualChannelOpen;
-	PVIRTUALCHANNELCLOSE pVirtualChannelClose;
-	PVIRTUALCHANNELWRITE pVirtualChannelWrite;
+	WINPR_ATTR_NODISCARD PVIRTUALCHANNELINIT pVirtualChannelInit;
+	WINPR_ATTR_NODISCARD PVIRTUALCHANNELOPEN pVirtualChannelOpen;
+	WINPR_ATTR_NODISCARD PVIRTUALCHANNELCLOSE pVirtualChannelClose;
+	WINPR_ATTR_NODISCARD PVIRTUALCHANNELWRITE pVirtualChannelWrite;
 } CHANNEL_ENTRY_POINTS, *PCHANNEL_ENTRY_POINTS;
 
 typedef struct tagCHANNEL_ENTRY_POINTS_EX
 {
 	DWORD cbSize;
 	DWORD protocolVersion;
-	PVIRTUALCHANNELINITEX pVirtualChannelInitEx;
-	PVIRTUALCHANNELOPENEX pVirtualChannelOpenEx;
-	PVIRTUALCHANNELCLOSEEX pVirtualChannelCloseEx;
-	PVIRTUALCHANNELWRITEEX pVirtualChannelWriteEx;
+	WINPR_ATTR_NODISCARD PVIRTUALCHANNELINITEX pVirtualChannelInitEx;
+	WINPR_ATTR_NODISCARD PVIRTUALCHANNELOPENEX pVirtualChannelOpenEx;
+	WINPR_ATTR_NODISCARD PVIRTUALCHANNELCLOSEEX pVirtualChannelCloseEx;
+	WINPR_ATTR_NODISCARD PVIRTUALCHANNELWRITEEX pVirtualChannelWriteEx;
 } CHANNEL_ENTRY_POINTS_EX, *PCHANNEL_ENTRY_POINTS_EX;
 
 typedef BOOL VCAPITYPE VIRTUALCHANNELENTRY(PCHANNEL_ENTRY_POINTS pEntryPoints);
@@ -262,9 +262,9 @@ typedef HRESULT(VCAPITYPE* PFNVCAPIGETINSTANCE)(REFIID refiid, PULONG pNumObjs, 
  * Windows Terminal Services API (wtsapi32.h)
  */
 
-#define WTS_CURRENT_SERVER ((HANDLE)NULL)
-#define WTS_CURRENT_SERVER_HANDLE ((HANDLE)NULL)
-#define WTS_CURRENT_SERVER_NAME (NULL)
+#define WTS_CURRENT_SERVER ((HANDLE) nullptr)
+#define WTS_CURRENT_SERVER_HANDLE ((HANDLE) nullptr)
+#define WTS_CURRENT_SERVER_NAME (nullptr)
 
 #define WTS_CURRENT_SESSION ((DWORD)-1)
 
@@ -983,186 +983,250 @@ extern "C"
 {
 #endif
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSStopRemoteControlSession(ULONG LogonId);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSStartRemoteControlSessionW(LPWSTR pTargetServerName,
 	                                                    ULONG TargetLogonId, BYTE HotkeyVk,
 	                                                    USHORT HotkeyModifiers);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSStartRemoteControlSessionA(LPSTR pTargetServerName,
 	                                                    ULONG TargetLogonId, BYTE HotkeyVk,
 	                                                    USHORT HotkeyModifiers);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSStartRemoteControlSessionExW(LPWSTR pTargetServerName,
 	                                                      ULONG TargetLogonId, BYTE HotkeyVk,
 	                                                      USHORT HotkeyModifiers, DWORD flags);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSStartRemoteControlSessionExA(LPSTR pTargetServerName,
 	                                                      ULONG TargetLogonId, BYTE HotkeyVk,
 	                                                      USHORT HotkeyModifiers, DWORD flags);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSConnectSessionW(ULONG LogonId, ULONG TargetLogonId, PWSTR pPassword,
 	                                         BOOL bWait);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSConnectSessionA(ULONG LogonId, ULONG TargetLogonId, PSTR pPassword,
 	                                         BOOL bWait);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateServersW(LPWSTR pDomainName, DWORD Reserved, DWORD Version,
 	                                           PWTS_SERVER_INFOW* ppServerInfo, DWORD* pCount);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateServersA(LPSTR pDomainName, DWORD Reserved, DWORD Version,
 	                                           PWTS_SERVER_INFOA* ppServerInfo, DWORD* pCount);
 
 	WINPR_API VOID WINAPI WTSCloseServer(HANDLE hServer);
 
 	WINPR_ATTR_MALLOC(WTSCloseServer, 1)
-	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSOpenServerW(LPWSTR pServerName);
 
 	WINPR_ATTR_MALLOC(WTSCloseServer, 1)
-	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSOpenServerA(LPSTR pServerName);
 
 	WINPR_ATTR_MALLOC(WTSCloseServer, 1)
-	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSOpenServerExW(LPWSTR pServerName);
 
 	WINPR_ATTR_MALLOC(WTSCloseServer, 1)
-	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSOpenServerExA(LPSTR pServerName);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateSessionsW(HANDLE hServer, DWORD Reserved, DWORD Version,
 	                                            PWTS_SESSION_INFOW* ppSessionInfo, DWORD* pCount);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateSessionsA(HANDLE hServer, DWORD Reserved, DWORD Version,
 	                                            PWTS_SESSION_INFOA* ppSessionInfo, DWORD* pCount);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateSessionsExW(HANDLE hServer, DWORD* pLevel, DWORD Filter,
 	                                              PWTS_SESSION_INFO_1W* ppSessionInfo,
 	                                              DWORD* pCount);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateSessionsExA(HANDLE hServer, DWORD* pLevel, DWORD Filter,
 	                                              PWTS_SESSION_INFO_1A* ppSessionInfo,
 	                                              DWORD* pCount);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateProcessesW(HANDLE hServer, DWORD Reserved, DWORD Version,
 	                                             PWTS_PROCESS_INFOW* ppProcessInfo, DWORD* pCount);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateProcessesA(HANDLE hServer, DWORD Reserved, DWORD Version,
 	                                             PWTS_PROCESS_INFOA* ppProcessInfo, DWORD* pCount);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSTerminateProcess(HANDLE hServer, DWORD ProcessId, DWORD ExitCode);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSQuerySessionInformationW(HANDLE hServer, DWORD SessionId,
 	                                                  WTS_INFO_CLASS WTSInfoClass, LPWSTR* ppBuffer,
 	                                                  DWORD* pBytesReturned);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSQuerySessionInformationA(HANDLE hServer, DWORD SessionId,
 	                                                  WTS_INFO_CLASS WTSInfoClass, LPSTR* ppBuffer,
 	                                                  DWORD* pBytesReturned);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSQueryUserConfigW(LPWSTR pServerName, LPWSTR pUserName,
 	                                          WTS_CONFIG_CLASS WTSConfigClass, LPWSTR* ppBuffer,
 	                                          DWORD* pBytesReturned);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSQueryUserConfigA(LPSTR pServerName, LPSTR pUserName,
 	                                          WTS_CONFIG_CLASS WTSConfigClass, LPSTR* ppBuffer,
 	                                          DWORD* pBytesReturned);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSSetUserConfigW(LPWSTR pServerName, LPWSTR pUserName,
 	                                        WTS_CONFIG_CLASS WTSConfigClass, LPWSTR pBuffer,
 	                                        DWORD DataLength);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSSetUserConfigA(LPSTR pServerName, LPSTR pUserName,
 	                                        WTS_CONFIG_CLASS WTSConfigClass, LPSTR pBuffer,
 	                                        DWORD DataLength);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSSendMessageW(HANDLE hServer, DWORD SessionId, LPWSTR pTitle,
 	                                      DWORD TitleLength, LPWSTR pMessage, DWORD MessageLength,
 	                                      DWORD Style, DWORD Timeout, DWORD* pResponse, BOOL bWait);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSSendMessageA(HANDLE hServer, DWORD SessionId, LPSTR pTitle,
 	                                      DWORD TitleLength, LPSTR pMessage, DWORD MessageLength,
 	                                      DWORD Style, DWORD Timeout, DWORD* pResponse, BOOL bWait);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSDisconnectSession(HANDLE hServer, DWORD SessionId, BOOL bWait);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSLogoffSession(HANDLE hServer, DWORD SessionId, BOOL bWait);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSShutdownSystem(HANDLE hServer, DWORD ShutdownFlag);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSWaitSystemEvent(HANDLE hServer, DWORD EventMask, DWORD* pEventFlags);
 
 	WINPR_API BOOL WINAPI WTSVirtualChannelClose(HANDLE hChannelHandle);
 
 	WINPR_ATTR_MALLOC(WTSVirtualChannelClose, 1)
-	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSVirtualChannelOpen(HANDLE hServer, DWORD SessionId,
 	                                              LPSTR pVirtualName);
 
 	WINPR_ATTR_MALLOC(WTSVirtualChannelClose, 1)
-	WINPR_ATTR_NODISCARD
 	WINPR_API HANDLE WINAPI WTSVirtualChannelOpenEx(DWORD SessionId, LPSTR pVirtualName,
 	                                                DWORD flags);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSVirtualChannelRead(HANDLE hChannelHandle, ULONG TimeOut, PCHAR Buffer,
 	                                            ULONG BufferSize, PULONG pBytesRead);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSVirtualChannelWrite(HANDLE hChannelHandle, PCHAR Buffer, ULONG Length,
 	                                             PULONG pBytesWritten);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSVirtualChannelPurgeInput(HANDLE hChannelHandle);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSVirtualChannelPurgeOutput(HANDLE hChannelHandle);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSVirtualChannelQuery(HANDLE hChannelHandle,
 	                                             WTS_VIRTUAL_CLASS WtsVirtualClass, PVOID* ppBuffer,
 	                                             DWORD* pBytesReturned);
 
 	WINPR_API VOID WINAPI WTSFreeMemory(PVOID pMemory);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSRegisterSessionNotification(HWND hWnd, DWORD dwFlags);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSUnRegisterSessionNotification(HWND hWnd);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSRegisterSessionNotificationEx(HANDLE hServer, HWND hWnd,
 	                                                       DWORD dwFlags);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSUnRegisterSessionNotificationEx(HANDLE hServer, HWND hWnd);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSQueryUserToken(ULONG SessionId, PHANDLE phToken);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSFreeMemoryExW(WTS_TYPE_CLASS WTSTypeClass, PVOID pMemory,
 	                                       ULONG NumberOfEntries);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSFreeMemoryExA(WTS_TYPE_CLASS WTSTypeClass, PVOID pMemory,
 	                                       ULONG NumberOfEntries);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateProcessesExW(HANDLE hServer, DWORD* pLevel, DWORD SessionId,
 	                                               LPWSTR* ppProcessInfo, DWORD* pCount);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateProcessesExA(HANDLE hServer, DWORD* pLevel, DWORD SessionId,
 	                                               LPSTR* ppProcessInfo, DWORD* pCount);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateListenersW(HANDLE hServer, PVOID pReserved, DWORD Reserved,
 	                                             PWTSLISTENERNAMEW pListeners, DWORD* pCount);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSEnumerateListenersA(HANDLE hServer, PVOID pReserved, DWORD Reserved,
 	                                             PWTSLISTENERNAMEA pListeners, DWORD* pCount);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSQueryListenerConfigW(HANDLE hServer, PVOID pReserved, DWORD Reserved,
 	                                              LPWSTR pListenerName,
 	                                              PWTSLISTENERCONFIGW pBuffer);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSQueryListenerConfigA(HANDLE hServer, PVOID pReserved, DWORD Reserved,
 	                                              LPSTR pListenerName, PWTSLISTENERCONFIGA pBuffer);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSCreateListenerW(HANDLE hServer, PVOID pReserved, DWORD Reserved,
 	                                         LPWSTR pListenerName, PWTSLISTENERCONFIGW pBuffer,
 	                                         DWORD flag);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSCreateListenerA(HANDLE hServer, PVOID pReserved, DWORD Reserved,
 	                                         LPSTR pListenerName, PWTSLISTENERCONFIGA pBuffer,
 	                                         DWORD flag);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSSetListenerSecurityW(HANDLE hServer, PVOID pReserved, DWORD Reserved,
 	                                              LPWSTR pListenerName,
 	                                              SECURITY_INFORMATION SecurityInformation,
 	                                              PSECURITY_DESCRIPTOR pSecurityDescriptor);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSSetListenerSecurityA(HANDLE hServer, PVOID pReserved, DWORD Reserved,
 	                                              LPSTR pListenerName,
 	                                              SECURITY_INFORMATION SecurityInformation,
 	                                              PSECURITY_DESCRIPTOR pSecurityDescriptor);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSGetListenerSecurityW(HANDLE hServer, PVOID pReserved, DWORD Reserved,
 	                                              LPWSTR pListenerName,
 	                                              SECURITY_INFORMATION SecurityInformation,
 	                                              PSECURITY_DESCRIPTOR pSecurityDescriptor,
 	                                              DWORD nLength, LPDWORD lpnLengthNeeded);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WINAPI WTSGetListenerSecurityA(HANDLE hServer, PVOID pReserved, DWORD Reserved,
 	                                              LPSTR pListenerName,
 	                                              SECURITY_INFORMATION SecurityInformation,
@@ -1175,15 +1239,20 @@ extern "C"
 	 * Since they are declared as extern "C", we explicitly declare them as CDECL.
 	 */
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL CDECL WTSEnableChildSessions(BOOL bEnable);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL CDECL WTSIsChildSessionsEnabled(PBOOL pbEnabled);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL CDECL WTSGetChildSessionId(PULONG pSessionId);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL CDECL WTSLogonUser(HANDLE hServer, LPCSTR username, LPCSTR password,
 	                                  LPCSTR domain);
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL CDECL WTSLogoffUser(HANDLE hServer);
 
 #ifdef __cplusplus
@@ -1243,6 +1312,7 @@ extern "C"
  * and exported by kernel32.dll, so we have to treat it separately.
  */
 
+WINPR_ATTR_NODISCARD
 WINPR_API DWORD WINAPI WTSGetActiveConsoleSessionId(void);
 
 #endif
@@ -1445,73 +1515,73 @@ typedef struct
 	DWORD dwVersion;
 	DWORD dwFlags;
 
-	WTS_STOP_REMOTE_CONTROL_SESSION_FN pStopRemoteControlSession;
-	WTS_START_REMOTE_CONTROL_SESSION_FN_W pStartRemoteControlSessionW;
-	WTS_START_REMOTE_CONTROL_SESSION_FN_A pStartRemoteControlSessionA;
-	WTS_CONNECT_SESSION_FN_W pConnectSessionW;
-	WTS_CONNECT_SESSION_FN_A pConnectSessionA;
-	WTS_ENUMERATE_SERVERS_FN_W pEnumerateServersW;
-	WTS_ENUMERATE_SERVERS_FN_A pEnumerateServersA;
-	WTS_OPEN_SERVER_FN_W pOpenServerW;
-	WTS_OPEN_SERVER_FN_A pOpenServerA;
-	WTS_OPEN_SERVER_EX_FN_W pOpenServerExW;
-	WTS_OPEN_SERVER_EX_FN_A pOpenServerExA;
+	WINPR_ATTR_NODISCARD WTS_STOP_REMOTE_CONTROL_SESSION_FN pStopRemoteControlSession;
+	WINPR_ATTR_NODISCARD WTS_START_REMOTE_CONTROL_SESSION_FN_W pStartRemoteControlSessionW;
+	WINPR_ATTR_NODISCARD WTS_START_REMOTE_CONTROL_SESSION_FN_A pStartRemoteControlSessionA;
+	WINPR_ATTR_NODISCARD WTS_CONNECT_SESSION_FN_W pConnectSessionW;
+	WINPR_ATTR_NODISCARD WTS_CONNECT_SESSION_FN_A pConnectSessionA;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_SERVERS_FN_W pEnumerateServersW;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_SERVERS_FN_A pEnumerateServersA;
+	WINPR_ATTR_NODISCARD WTS_OPEN_SERVER_FN_W pOpenServerW;
+	WINPR_ATTR_NODISCARD WTS_OPEN_SERVER_FN_A pOpenServerA;
+	WINPR_ATTR_NODISCARD WTS_OPEN_SERVER_EX_FN_W pOpenServerExW;
+	WINPR_ATTR_NODISCARD WTS_OPEN_SERVER_EX_FN_A pOpenServerExA;
 	WTS_CLOSE_SERVER_FN pCloseServer;
-	WTS_ENUMERATE_SESSIONS_FN_W pEnumerateSessionsW;
-	WTS_ENUMERATE_SESSIONS_FN_A pEnumerateSessionsA;
-	WTS_ENUMERATE_SESSIONS_EX_FN_W pEnumerateSessionsExW;
-	WTS_ENUMERATE_SESSIONS_EX_FN_A pEnumerateSessionsExA;
-	WTS_ENUMERATE_PROCESSES_FN_W pEnumerateProcessesW;
-	WTS_ENUMERATE_PROCESSES_FN_A pEnumerateProcessesA;
-	WTS_TERMINATE_PROCESS_FN pTerminateProcess;
-	WTS_QUERY_SESSION_INFORMATION_FN_W pQuerySessionInformationW;
-	WTS_QUERY_SESSION_INFORMATION_FN_A pQuerySessionInformationA;
-	WTS_QUERY_USER_CONFIG_FN_W pQueryUserConfigW;
-	WTS_QUERY_USER_CONFIG_FN_A pQueryUserConfigA;
-	WTS_SET_USER_CONFIG_FN_W pSetUserConfigW;
-	WTS_SET_USER_CONFIG_FN_A pSetUserConfigA;
-	WTS_SEND_MESSAGE_FN_W pSendMessageW;
-	WTS_SEND_MESSAGE_FN_A pSendMessageA;
-	WTS_DISCONNECT_SESSION_FN pDisconnectSession;
-	WTS_LOGOFF_SESSION_FN pLogoffSession;
-	WTS_SHUTDOWN_SYSTEM_FN pShutdownSystem;
-	WTS_WAIT_SYSTEM_EVENT_FN pWaitSystemEvent;
-	WTS_VIRTUAL_CHANNEL_OPEN_FN pVirtualChannelOpen;
-	WTS_VIRTUAL_CHANNEL_OPEN_EX_FN pVirtualChannelOpenEx;
-	WTS_VIRTUAL_CHANNEL_CLOSE_FN pVirtualChannelClose;
-	WTS_VIRTUAL_CHANNEL_READ_FN pVirtualChannelRead;
-	WTS_VIRTUAL_CHANNEL_WRITE_FN pVirtualChannelWrite;
-	WTS_VIRTUAL_CHANNEL_PURGE_INPUT_FN pVirtualChannelPurgeInput;
-	WTS_VIRTUAL_CHANNEL_PURGE_OUTPUT_FN pVirtualChannelPurgeOutput;
-	WTS_VIRTUAL_CHANNEL_QUERY_FN pVirtualChannelQuery;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_SESSIONS_FN_W pEnumerateSessionsW;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_SESSIONS_FN_A pEnumerateSessionsA;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_SESSIONS_EX_FN_W pEnumerateSessionsExW;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_SESSIONS_EX_FN_A pEnumerateSessionsExA;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_PROCESSES_FN_W pEnumerateProcessesW;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_PROCESSES_FN_A pEnumerateProcessesA;
+	WINPR_ATTR_NODISCARD WTS_TERMINATE_PROCESS_FN pTerminateProcess;
+	WINPR_ATTR_NODISCARD WTS_QUERY_SESSION_INFORMATION_FN_W pQuerySessionInformationW;
+	WINPR_ATTR_NODISCARD WTS_QUERY_SESSION_INFORMATION_FN_A pQuerySessionInformationA;
+	WINPR_ATTR_NODISCARD WTS_QUERY_USER_CONFIG_FN_W pQueryUserConfigW;
+	WINPR_ATTR_NODISCARD WTS_QUERY_USER_CONFIG_FN_A pQueryUserConfigA;
+	WINPR_ATTR_NODISCARD WTS_SET_USER_CONFIG_FN_W pSetUserConfigW;
+	WINPR_ATTR_NODISCARD WTS_SET_USER_CONFIG_FN_A pSetUserConfigA;
+	WINPR_ATTR_NODISCARD WTS_SEND_MESSAGE_FN_W pSendMessageW;
+	WINPR_ATTR_NODISCARD WTS_SEND_MESSAGE_FN_A pSendMessageA;
+	WINPR_ATTR_NODISCARD WTS_DISCONNECT_SESSION_FN pDisconnectSession;
+	WINPR_ATTR_NODISCARD WTS_LOGOFF_SESSION_FN pLogoffSession;
+	WINPR_ATTR_NODISCARD WTS_SHUTDOWN_SYSTEM_FN pShutdownSystem;
+	WINPR_ATTR_NODISCARD WTS_WAIT_SYSTEM_EVENT_FN pWaitSystemEvent;
+	WINPR_ATTR_NODISCARD WTS_VIRTUAL_CHANNEL_OPEN_FN pVirtualChannelOpen;
+	WINPR_ATTR_NODISCARD WTS_VIRTUAL_CHANNEL_OPEN_EX_FN pVirtualChannelOpenEx;
+	WINPR_ATTR_NODISCARD WTS_VIRTUAL_CHANNEL_CLOSE_FN pVirtualChannelClose;
+	WINPR_ATTR_NODISCARD WTS_VIRTUAL_CHANNEL_READ_FN pVirtualChannelRead;
+	WINPR_ATTR_NODISCARD WTS_VIRTUAL_CHANNEL_WRITE_FN pVirtualChannelWrite;
+	WINPR_ATTR_NODISCARD WTS_VIRTUAL_CHANNEL_PURGE_INPUT_FN pVirtualChannelPurgeInput;
+	WINPR_ATTR_NODISCARD WTS_VIRTUAL_CHANNEL_PURGE_OUTPUT_FN pVirtualChannelPurgeOutput;
+	WINPR_ATTR_NODISCARD WTS_VIRTUAL_CHANNEL_QUERY_FN pVirtualChannelQuery;
 	WTS_FREE_MEMORY_FN pFreeMemory;
-	WTS_REGISTER_SESSION_NOTIFICATION_FN pRegisterSessionNotification;
-	WTS_UNREGISTER_SESSION_NOTIFICATION_FN pUnRegisterSessionNotification;
-	WTS_REGISTER_SESSION_NOTIFICATION_EX_FN pRegisterSessionNotificationEx;
-	WTS_UNREGISTER_SESSION_NOTIFICATION_EX_FN pUnRegisterSessionNotificationEx;
-	WTS_QUERY_USER_TOKEN_FN pQueryUserToken;
-	WTS_FREE_MEMORY_EX_FN_W pFreeMemoryExW;
-	WTS_FREE_MEMORY_EX_FN_A pFreeMemoryExA;
-	WTS_ENUMERATE_PROCESSES_EX_FN_W pEnumerateProcessesExW;
-	WTS_ENUMERATE_PROCESSES_EX_FN_A pEnumerateProcessesExA;
-	WTS_ENUMERATE_LISTENERS_FN_W pEnumerateListenersW;
-	WTS_ENUMERATE_LISTENERS_FN_A pEnumerateListenersA;
-	WTS_QUERY_LISTENER_CONFIG_FN_W pQueryListenerConfigW;
-	WTS_QUERY_LISTENER_CONFIG_FN_A pQueryListenerConfigA;
-	WTS_CREATE_LISTENER_FN_W pCreateListenerW;
-	WTS_CREATE_LISTENER_FN_A pCreateListenerA;
-	WTS_SET_LISTENER_SECURITY_FN_W pSetListenerSecurityW;
-	WTS_SET_LISTENER_SECURITY_FN_A pSetListenerSecurityA;
-	WTS_GET_LISTENER_SECURITY_FN_W pGetListenerSecurityW;
-	WTS_GET_LISTENER_SECURITY_FN_A pGetListenerSecurityA;
-	WTS_ENABLE_CHILD_SESSIONS_FN pEnableChildSessions;
-	WTS_IS_CHILD_SESSIONS_ENABLED_FN pIsChildSessionsEnabled;
-	WTS_GET_CHILD_SESSION_ID_FN pGetChildSessionId;
-	WTS_GET_ACTIVE_CONSOLE_SESSION_ID_FN pGetActiveConsoleSessionId;
-	WTS_LOGON_USER_FN pLogonUser;
-	WTS_LOGOFF_USER_FN pLogoffUser;
-	WTS_START_REMOTE_CONTROL_SESSION_EX_FN_W pStartRemoteControlSessionExW;
-	WTS_START_REMOTE_CONTROL_SESSION_EX_FN_A pStartRemoteControlSessionExA;
+	WINPR_ATTR_NODISCARD WTS_REGISTER_SESSION_NOTIFICATION_FN pRegisterSessionNotification;
+	WINPR_ATTR_NODISCARD WTS_UNREGISTER_SESSION_NOTIFICATION_FN pUnRegisterSessionNotification;
+	WINPR_ATTR_NODISCARD WTS_REGISTER_SESSION_NOTIFICATION_EX_FN pRegisterSessionNotificationEx;
+	WINPR_ATTR_NODISCARD WTS_UNREGISTER_SESSION_NOTIFICATION_EX_FN pUnRegisterSessionNotificationEx;
+	WINPR_ATTR_NODISCARD WTS_QUERY_USER_TOKEN_FN pQueryUserToken;
+	WINPR_ATTR_NODISCARD WTS_FREE_MEMORY_EX_FN_W pFreeMemoryExW;
+	WINPR_ATTR_NODISCARD WTS_FREE_MEMORY_EX_FN_A pFreeMemoryExA;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_PROCESSES_EX_FN_W pEnumerateProcessesExW;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_PROCESSES_EX_FN_A pEnumerateProcessesExA;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_LISTENERS_FN_W pEnumerateListenersW;
+	WINPR_ATTR_NODISCARD WTS_ENUMERATE_LISTENERS_FN_A pEnumerateListenersA;
+	WINPR_ATTR_NODISCARD WTS_QUERY_LISTENER_CONFIG_FN_W pQueryListenerConfigW;
+	WINPR_ATTR_NODISCARD WTS_QUERY_LISTENER_CONFIG_FN_A pQueryListenerConfigA;
+	WINPR_ATTR_NODISCARD WTS_CREATE_LISTENER_FN_W pCreateListenerW;
+	WINPR_ATTR_NODISCARD WTS_CREATE_LISTENER_FN_A pCreateListenerA;
+	WINPR_ATTR_NODISCARD WTS_SET_LISTENER_SECURITY_FN_W pSetListenerSecurityW;
+	WINPR_ATTR_NODISCARD WTS_SET_LISTENER_SECURITY_FN_A pSetListenerSecurityA;
+	WINPR_ATTR_NODISCARD WTS_GET_LISTENER_SECURITY_FN_W pGetListenerSecurityW;
+	WINPR_ATTR_NODISCARD WTS_GET_LISTENER_SECURITY_FN_A pGetListenerSecurityA;
+	WINPR_ATTR_NODISCARD WTS_ENABLE_CHILD_SESSIONS_FN pEnableChildSessions;
+	WINPR_ATTR_NODISCARD WTS_IS_CHILD_SESSIONS_ENABLED_FN pIsChildSessionsEnabled;
+	WINPR_ATTR_NODISCARD WTS_GET_CHILD_SESSION_ID_FN pGetChildSessionId;
+	WINPR_ATTR_NODISCARD WTS_GET_ACTIVE_CONSOLE_SESSION_ID_FN pGetActiveConsoleSessionId;
+	WINPR_ATTR_NODISCARD WTS_LOGON_USER_FN pLogonUser;
+	WINPR_ATTR_NODISCARD WTS_LOGOFF_USER_FN pLogoffUser;
+	WINPR_ATTR_NODISCARD WTS_START_REMOTE_CONTROL_SESSION_EX_FN_W pStartRemoteControlSessionExW;
+	WINPR_ATTR_NODISCARD WTS_START_REMOTE_CONTROL_SESSION_EX_FN_A pStartRemoteControlSessionExA;
 } WtsApiFunctionTable;
 typedef WtsApiFunctionTable* PWtsApiFunctionTable;
 
@@ -1522,8 +1592,13 @@ extern "C"
 {
 #endif
 
+	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL WTSRegisterWtsApiFunctionTable(const WtsApiFunctionTable* table);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API const CHAR* WTSErrorToString(UINT error);
+
+	WINPR_ATTR_NODISCARD
 	WINPR_API const CHAR* WTSSessionStateToString(WTS_CONNECTSTATE_CLASS state);
 
 #ifdef __cplusplus
