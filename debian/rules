@@ -81,9 +81,13 @@ ifneq (,$(filter linux,$(DEB_HOST_ARCH_OS)))
         -DWITH_VAAPI_H264_ENCODING=ON \
         -DCHANNEL_RDPECAM=ON \
         -DCHANNEL_RDPECAM_CLIENT=ON \
-        -DCHANNEL_RDPEWA=ON \
-        -DCHANNEL_RDPEWA_CLIENT=ON \
         -DWITH_SSO_MIB=ON \
+        $(empty)
+    # RDPEWA (WebAuthn) needs libcbor >= 0.10.2, but the archive only has
+    # 0.8.0; keep the channel off until libcbor gets bumped
+    DEB_CMAKE_EXTRA_FLAGS += \
+        -DCHANNEL_RDPEWA=OFF \
+        -DCHANNEL_RDPEWA_CLIENT=OFF \
         $(empty)
 else
     DEB_CMAKE_EXTRA_FLAGS += \
