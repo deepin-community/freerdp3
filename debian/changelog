@@ -1,3 +1,11 @@
+freerdp3 (3.26.0+dfsg-2) unstable; urgency=medium
+
+  * Rebuild with LTO enabled (dpkg vendor feature optimize/lto).
+  * d/rules: disable RDPEWA channel: it needs libcbor >= 0.10.2 but the
+    archive only provides 0.8.0.
+
+ -- tunaichao <tunaichao@uniontech.com>  Fri, 11 Sep 2026 14:39:11 +0800
+
 freerdp3 (3.26.0+dfsg-1) unstable; urgency=medium
 
   * new upstream release, with 3 High ranking CVE (no numbers assigned yet)
