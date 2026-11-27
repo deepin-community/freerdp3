@@ -1,3 +1,9 @@
+freerdp3 (3.33.1+dfsg-3deepin1) unstable; urgency=medium
+
+  * Turn RDPEWA (WebAuthn) off for deepin, they need libcbor >= 0.10.2.
+
+ -- Tianyu Chen <sweetyfish@deepin.org>  Fri, 27 Nov 2026 16:07:32 +0800
+
 freerdp3 (3.33.1+dfsg-3) unstable; urgency=medium
 
   * d/libwinpr.symbols: add symbols appeared after fixing BE issue

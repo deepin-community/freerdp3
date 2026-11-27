@@ -13,10 +13,8 @@ Build-Depends-Arch:
  libasound2-dev,
 # ffmpeg is in universe in ubuntu (not enabled):
  libavcodec-dev, libavutil-dev, libswscale-dev,
- libcbor-dev [linux-any],
 # cairo is used on ubuntu only (alternative to swscale from ffmpeg):
  libcairo2-dev,
- libfido2-dev [linux-any],
  libjson-c-dev,
  libcups2-dev,
  libfuse3-dev [linux-any],
