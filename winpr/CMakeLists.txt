@@ -108,6 +108,7 @@ endif()
 
 option(WITH_WINPR_TOOLS "Build WinPR helper binaries" ${TOOLS_DEFAULT})
 option(WITH_WINPR_DEPRECATED "Build WinPR deprecated symbols" OFF)
+option(WITHOUT_WINPR_3x_DEPRECATED "Build without symbols deprecated during 3.x version" OFF)
 option(WITH_DEBUG_THREADS "Print thread debug messages, enables handle dump" ${DEFAULT_DEBUG_OPTION})
 option(WITH_DEBUG_EVENTS "Print event debug messages, enables handle dump" ${DEFAULT_DEBUG_OPTION})
 option(WITH_DEBUG_SYMBOLS "Pack debug symbols to installer" OFF)
@@ -122,6 +123,16 @@ option(WINPR_USE_LEGACY_RESOURCE_DIR "use a resource directory of <base>/WinPR i
 option(WINPR_USE_VENDOR_PRODUCT_CONFIG_DIR
        "use a configuration <base>/<product>/<vendor>/ subdirectory instead of </base>/winpr" OFF
 )
+
+set(WINPR_THREAD_DEFAULT_STACK_SIZE "8388608"
+    CACHE STRING
+          "Least stack size in bytes of a thread created with the default size (POSIX), 0 for the platform default"
+)
+if(NOT WINPR_THREAD_DEFAULT_STACK_SIZE MATCHES "^[0-9]+$")
+  message(
+    FATAL_ERROR "WINPR_THREAD_DEFAULT_STACK_SIZE must be a number of bytes, not '${WINPR_THREAD_DEFAULT_STACK_SIZE}'"
+  )
+endif()
 
 # This option MUST be off to avoid symbol conflicts when loading an external SSPI module library
 option(SSPI_DLL "Define and export SSPI API symbols for usage as a Windows SSPI DLL replacement" OFF)
@@ -142,6 +153,20 @@ endif()
 
 if(WITH_WINPR_DEPRECATED)
   add_compile_definitions(WITH_WINPR_DEPRECATED)
+endif()
+
+if(WITHOUT_WINPR_3x_DEPRECATED)
+  add_compile_definitions(WITHOUT_WINPR_3x_DEPRECATED)
+endif()
+
+option(
+  DISABLE_SUPPORTED_ARCH_CHECKS
+  "[experimental,dangerous,unsupported] Build for unknown systems or such missing essential features (unaligned memory access, ...)"
+  OFF
+)
+if(DISABLE_SUPPORTED_ARCH_CHECKS)
+  include(WarnExperimental)
+  warn_experimental("Skip PlatformChecks" "-DDISABLE_SUPPORTED_ARCH_CHECKS=OFF")
 endif()
 
 # Include cmake modules
@@ -194,6 +219,8 @@ else()
   endif()
 endif()
 
+add_compile_definitions(WINPR_RESOURCE_ROOT="${WINPR_RESOURCE_ROOT}")
+
 include(CheckTypeSize)
 set(CMAKE_EXTRA_INCLUDE_FILES "sys/types.h")
 check_type_size(ssize_t SSIZE_T)
@@ -204,21 +231,120 @@ check_type_size(SSIZE_T WIN_SSIZE_T)
 set(WINPR_HAVE_SSIZE_T ${HAVE_SSIZE_T})
 set(WINPR_HAVE_WIN_SSIZE_T ${HAVE_WIN_SSIZE_T})
 
-check_symbol_exists(strndup string.h WINPR_HAVE_STRNDUP)
-check_include_files(unistd.h WINPR_HAVE_UNISTD_H)
-check_include_files(execinfo.h WINPR_HAVE_EXECINFO_HEADER)
-if(WINPR_HAVE_EXECINFO_HEADER)
-  check_symbol_exists(backtrace execinfo.h WINPR_HAVE_EXECINFO_BACKTRACE)
-  check_symbol_exists(backtrace_symbols execinfo.h WINPR_HAVE_EXECINFO_BACKTRACE_SYMBOLS)
-  check_symbol_exists(backtrace_symbols_fd execinfo.h WINPR_HAVE_EXECINFO_BACKTRACE_SYMBOLS_FD)
-
-  # Some implementations (e.g. Android NDK API < 33) provide execinfo.h but do not define
-  # the backtrace functions. Disable detection for these cases
-  if(WINPR_HAVE_EXECINFO_BACKTRACE AND WINPR_HAVE_EXECINFO_BACKTRACE_SYMBOLS
-     AND WINPR_HAVE_EXECINFO_BACKTRACE_SYMBOLS_FD
-  )
-    set(WINPR_HAVE_EXECINFO_H ON)
+if(APPLE)
+  include(CheckCCompilerFlag)
+  check_c_compiler_flag("-Werror=unguarded-availability-new" C_FLAG)
+  if(C_FLAG)
+    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror=unguarded-availability-new")
   endif()
+endif()
+
+if(CMAKE_VERSION VERSION_LESS "3.19")
+  check_symbol_exists(strnstr string.h WINPR_HAVE_STRNSTR)
+  check_symbol_exists(strndup string.h WINPR_HAVE_STRNDUP)
+
+  # pipe2()/accept4() are GNU/BSD extensions; glibc only declares them when _GNU_SOURCE is visible,
+  # which this project does not set globally (see cmake/PlatformDefaults.cmake) - request it just
+  # for these checks, matching the _GNU_SOURCE the actual call sites (pipe.c) define for themselves.
+  set(CMAKE_REQUIRED_DEFINITIONS_SAVE ${CMAKE_REQUIRED_DEFINITIONS})
+  set(CMAKE_REQUIRED_DEFINITIONS "-D_GNU_SOURCE")
+  check_symbol_exists(pipe2 unistd.h WINPR_HAVE_PIPE2)
+  check_symbol_exists(accept4 sys/socket.h WINPR_HAVE_ACCEPT4)
+  set(CMAKE_REQUIRED_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS_SAVE})
+  check_include_files(unistd.h WINPR_HAVE_UNISTD_H)
+  check_include_files(execinfo.h WINPR_HAVE_EXECINFO_HEADER)
+  if(WINPR_HAVE_EXECINFO_HEADER)
+    check_symbol_exists(backtrace execinfo.h WINPR_HAVE_EXECINFO_BACKTRACE)
+    check_symbol_exists(backtrace_symbols execinfo.h WINPR_HAVE_EXECINFO_BACKTRACE_SYMBOLS)
+    check_symbol_exists(backtrace_symbols_fd execinfo.h WINPR_HAVE_EXECINFO_BACKTRACE_SYMBOLS_FD)
+
+    # Some implementations (e.g. Android NDK API < 33) provide execinfo.h but do not define
+    # the backtrace functions. Disable detection for these cases
+    if(WINPR_HAVE_EXECINFO_BACKTRACE AND WINPR_HAVE_EXECINFO_BACKTRACE_SYMBOLS
+       AND WINPR_HAVE_EXECINFO_BACKTRACE_SYMBOLS_FD
+    )
+      set(WINPR_HAVE_EXECINFO_H ON)
+    endif()
+  endif()
+
+else()
+
+  include(CheckSourceCompiles)
+  check_source_compiles(
+    C
+    [[
+    #include <string.h>
+
+    int main(void) {
+        strnstr("foo", "o", 3);
+        return 0;
+    }
+    ]]
+    WINPR_HAVE_STRNSTR
+  )
+
+  if(NOT MINGW)
+    check_source_compiles(
+      C
+      [[
+    #include <string.h>
+
+    int main(void) {
+    strndup("foo", 3);
+    return 0;
+    }
+    ]]
+      WINPR_HAVE_STRNDUP
+    )
+  endif()
+
+  # pipe2()/accept4() are GNU/BSD extensions; glibc only declares them when _GNU_SOURCE is visible,
+  # which this project does not set globally (see cmake/PlatformDefaults.cmake) - request it just
+  # for these checks, matching the _GNU_SOURCE the actual call sites (pipe.c) define for themselves.
+  set(CMAKE_REQUIRED_DEFINITIONS_SAVE ${CMAKE_REQUIRED_DEFINITIONS})
+  set(CMAKE_REQUIRED_DEFINITIONS "-D_GNU_SOURCE")
+  check_source_compiles(
+    C
+    [[
+#include <unistd.h>
+
+int main(void) {
+int pipes[2] = {0};
+return pipe2(pipes, 0);
+}
+]]
+    WINPR_HAVE_PIPE2
+  )
+
+  check_source_compiles(
+    C
+    [[
+#include <sys/socket.h>
+
+int main(void) {
+int sockfd = -1;
+struct sockaddr addr = {0};
+socklen_t addrlen = 0;
+       return accept4(sockfd, &addr, &addrlen, 0);
+}
+]]
+    WINPR_HAVE_ACCEPT4
+  )
+  set(CMAKE_REQUIRED_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS_SAVE})
+  check_include_files(unistd.h WINPR_HAVE_UNISTD_H)
+  check_source_compiles(
+    C
+    [[
+        #include <execinfo.h>
+
+        int main(void) {
+            int rc = backtrace(NULL, 23);
+            backtrace_symbols(NULL, 23);
+            backtrace_symbols_fd(NULL, 23, 2);
+        }
+        ]]
+    WINPR_HAVE_EXECINFO_H
+  )
 endif()
 
 check_include_files(stdint.h WINPR_HAVE_STDINT_H)
@@ -239,17 +365,24 @@ endif()
 if(NOT IOS)
   check_include_files(fcntl.h WINPR_HAVE_FCNTL_H)
   check_include_files(aio.h WINPR_HAVE_AIO_H)
-  check_include_files(sys/timerfd.h WINPR_HAVE_SYS_TIMERFD_H)
   check_include_files(unistd.h WINPR_HAVE_UNISTD_H)
   check_include_files(inttypes.h WINPR_HAVE_INTTYPES_H)
   check_include_files(sys/filio.h WINPR_HAVE_SYS_FILIO_H)
   check_include_files(sys/sockio.h WINPR_HAVE_SYS_SOCKIO_H)
   check_include_files(syslog.h WINPR_HAVE_SYSLOG_H)
   check_include_files(sys/select.h WINPR_HAVE_SYS_SELECT_H)
-  check_include_files(sys/eventfd.h WINPR_HAVE_SYS_EVENTFD_H)
+  check_include_files(linux/msdos_fs.h WINPR_HAVE_LINUX_MSDOS_FS_H)
   check_include_files(unwind.h WINPR_HAVE_UNWIND_H)
+  if(EPOLLSHIM)
+    list(APPEND CMAKE_REQUIRED_LIBRARIES PkgConfig::EPOLLSHIM)
+  endif()
+  check_include_files(sys/timerfd.h WINPR_HAVE_SYS_TIMERFD_H)
+  check_include_files(sys/eventfd.h WINPR_HAVE_SYS_EVENTFD_H)
   if(WINPR_HAVE_SYS_EVENTFD_H)
     check_symbol_exists(eventfd_read sys/eventfd.h WITH_EVENTFD_READ_WRITE)
+  endif()
+  if(EPOLLSHIM)
+    list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES PkgConfig::EPOLLSHIM)
   endif()
 
   include(CheckFunctionExists)
@@ -257,6 +390,22 @@ if(NOT IOS)
   check_function_exists(getlogin_r WINPR_HAVE_GETLOGIN_R)
   check_function_exists(getpwuid_r WINPR_HAVE_GETPWUID_R)
   check_struct_has_member("struct tm" tm_gmtoff time.h WINPR_HAVE_TM_GMTOFF)
+
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
+    include(CheckSourceCompiles)
+    check_source_compiles(
+      C
+      [[
+  #include <sys/xattr.h>
+  int main(void) {
+    int intAttr = 42;
+    const int rc = setxattr("/tmp/foobar", "somename", &intAttr, sizeof(intAttr), 0);
+    return 0;
+  }
+  ]]
+      WINPR_HAVE_SYS_XATTR_H
+    )
+  endif()
 else()
   set(WINPR_HAVE_FCNTL_H 1)
   set(WINPR_HAVE_UNISTD_H 1)
@@ -266,12 +415,6 @@ else()
 endif()
 
 if(UNIX OR CYGWIN)
-  if(FREEBSD)
-    list(APPEND CMAKE_REQUIRED_INCLUDES ${EPOLLSHIM_INCLUDE_DIR})
-  endif()
-  if(FREEBSD)
-    list(REMOVE_ITEM CMAKE_REQUIRED_INCLUDES ${EPOLLSHIM_INCLUDE_DIR})
-  endif()
   option(WITH_POLL "Check for and include poll.h" ON)
   if(WITH_POLL)
     check_include_files(poll.h WINPR_HAVE_POLL_H)
@@ -347,7 +490,13 @@ add_subdirectory(libwinpr)
 list(REMOVE_DUPLICATES WINPR_PC_REQUIRES_PRIVATE)
 list(JOIN WINPR_PC_REQUIRES_PRIVATE " " WINPR_PC_REQUIRES_PRIVATE)
 
-set(WINPR_PC_LIBRARY_PRIVATE "-ldl -lrt -lm -lpthread")
+set(WINPR_PC_LIBRARY_PRIVATE "")
+include(PkgConfigAddThreads)
+if(OPENBSD)
+  pkg_config_add_threads(WINPR_PC_LIBRARY_PRIVATE m)
+else()
+  pkg_config_add_threads(WINPR_PC_LIBRARY_PRIVATE ${CMAKE_DL_LIBS} rt m)
+endif()
 
 # Do not set Requires.Private if not a static build
 if(BUILD_SHARED_LIBS)
@@ -359,9 +508,65 @@ if(WITH_WINPR_TOOLS)
   add_subdirectory(tools)
 endif()
 
-if(BUILD_TESTING_INTERNAL OR BUILD_TESTING)
+if(BUILD_TESTING)
   add_subdirectory(test)
+  add_subdirectory(test-header)
 endif()
+
+set(WINPR_BUILD_CONFIG_DEBUG_FILTER
+    WITH_DEBUG_THREADS
+    WITH_DEBUG_EVENTS
+    WITH_DEBUG_SYMBOLS
+    WITH_DEBUG_MUTEX
+    WITH_DEBUG_NTLM
+    WITH_DEBUG_NLA
+    WITH_DEBUG_SCHANNEL
+    WITH_DEBUG_UTILS_CMDLINE_DUMP
+    WITH_DEBUG_STREAMPOOL
+)
+set(WINPR_BUILD_CONFIG_FILTER
+    ${WINPR_BUILD_CONFIG_DEBUG_FILTER}
+    WITH_LIBRESSL
+    WITH_WINPR_TOOLS
+    WITH_WINPR_DEPRECATED
+    WITHOUT_WINPR_3x_DEPRECATED
+    WITH_NATIVE_SSPI
+    WITH_SMARTCARD_INSPECT
+    WITH_INTERNAL_RC4
+    WITH_INTERNAL_MD4
+    WITH_INTERNAL_MD5
+    WITH_UNICODE_BUILTIN
+    WINPR_USE_LEGACY_RESOURCE_DIR
+    WINPR_USE_VENDOR_PRODUCT_CONFIG_DIR
+    SSPI_DLL
+    WITH_POLL
+    WITH_PKCS11
+    WITH_URIPARSER
+    WITH_SMARTCARD_PCSC
+    WITH_KRB5
+    WITH_TIMEZONE_COMPILED
+    WITH_TIMEZONE_ICU
+    WITH_TIMEZONE_UPDATER
+    WITH_LODEPNG
+    WINPR_UTILS_IMAGE_DIBv5
+    WINPR_UTILS_IMAGE_PNG
+    WINPR_UTILS_IMAGE_WEBP
+    WINPR_UTILS_IMAGE_JPEG
+    WITH_SYSTEMD
+    USE_EXECINFO
+    USE_UNWIND
+    WITH_WINPR_TOOLS_CLI
+)
+
+set(WINPR_BUILD_CONFIG_LIST "")
+get_cmake_property(res VARIABLES)
+foreach(var ${res})
+  list(FIND WINPR_BUILD_CONFIG_FILTER ${var} LOOP_VAR_FOUND)
+  if(LOOP_VAR_FOUND GREATER -1)
+    list(APPEND WINPR_BUILD_CONFIG_LIST "${var}=${${var}}")
+  endif()
+endforeach()
+string(REPLACE ";" " " WINPR_BUILD_CONFIG "${WINPR_BUILD_CONFIG_LIST}")
 
 add_subdirectory(include)
 

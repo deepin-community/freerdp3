@@ -1,14 +1,377 @@
-freerdp3 (3.26.0+dfsg-1deepin1) unstable; urgency=medium
+freerdp3 (3.33.1+dfsg-3deepin1) unstable; urgency=medium
 
-  * Rebuild with LTO enabled (dpkg vendor feature optimize/lto).
-  * d/rules: disable RDPEWA channel: it needs libcbor >= 0.10.2 but the
-    archive only provides 0.8.0.
+  * Turn RDPEWA (WebAuthn) off for deepin, they need libcbor >= 0.10.2.
 
- -- tunaichao <tunaichao@uniontech.com>  Fri, 11 Sep 2026 14:39:11 +0800
+ -- Tianyu Chen <sweetyfish@deepin.org>  Fri, 27 Nov 2026 16:07:32 +0800
+
+freerdp3 (3.33.1+dfsg-3) unstable; urgency=medium
+
+  * d/libwinpr.symbols: add symbols appeared after fixing BE issue
+    (should up version for these symbols for the next upstream version)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 18 Nov 2026 12:36:58 +0300
+
+freerdp3 (3.33.1+dfsg-2) unstable; urgency=medium
+
+  [ Greg Lamberson ]
+  * debian/rules sets misnamed WINPR_UTILS_IMAGE options, so clipboard
+    PNG, JPEG and WebP support is off.  Fix the options to enable the support.
+    Closes: #1154246
+
+  [ Michael Tokarev ]
+  * winpr-ndr-store-the-decoded-WCHAR-in-UTF-16LE.patch: patch from upstream
+    to fix big-endian test failures
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 18 Nov 2026 12:18:15 +0300
+
+freerdp3 (3.33.1+dfsg-1) unstable; urgency=medium
+
+  * new upstream minor/bugfix release.  Closes: #1153529.
+    From the release announcement:
+    - Improved shadow server:
+      + faster encoding by avoiding unchanged areas
+      + back pressure from client: if it can not keep up with in flight frames
+        reduce quality and do not send new frames
+      + windows backend improvements
+    - mac os backend improvements
+    - hashless certificate support (Ed25519, Ed448, ML-DSA, SLH-DSA)
+    - apple videotoolbox h264 encoder/decoder support
+    - various RAILS fixes (x11 and sdl)
+    Security fixes:
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-x863-43r4-f7c2
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-m33m-4qxh-hq76
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-52rf-pppx-qm55
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3664-pr8r-3254
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-rp99-f9qv-c446
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-23fv-6wrf-5hfq
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-f6v9-vx5q-vjpf
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-m6hp-4798-x78x
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-9c9j-2r7q-5gx2
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-ch3p-5r9r-w86p
+    - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-76c4-7552-ffhv
+  * d/control: remove Rules-Requires-Root and Priority fields
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Tue, 10 Nov 2026 16:28:46 +0300
+
+freerdp3 (3.33.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release.
+    Major feature release, accompanied by the usual bugfix and CVE fixes.
+
+    - webassembly support, now can run from within your browser
+    - improved SDL client RAILS
+    - experimental UDP support for direct (without gateway) RDP connections
+    - unicode keyboard input pipe now supported by all clients
+      (on systems that support mkfifo unix style pipes)
+    - experimental windows shadow server support.  It is back from the dead!
+    - mac OS file clipboard support without FUSE (all clients)
+    - initial support for translation of messages
+
+    The influx of pull requests and feedback for bugs/regressions/... was huge,
+    so we will do a patch release with all the papercuts and bug still in the
+    backlog soon.
+
+  * Security fixes:
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-hhfh-fvm7-7w65
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-pq35-c472-69w2
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-v7hr-xh82-79p7
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-9r9q-9r7p-4mr6
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-76c4-7552-ffhv
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-j5pq-cm28-qm6v
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-2hm9-2h5q-x525
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-hj6g-r86h-wrcg
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-fw6x-h8gw-778w
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-q8p6-8mmj-j4ph
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-r664-f94r-rgg6
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4g67-jhpc-q5xp
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8m87-jj8p-2fqc
+
+  * d/lib*.symbols: add new symbols
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Mon, 02 Nov 2026 20:56:08 +0300
+
+freerdp3 (3.32.2+dfsg-1) unstable; urgency=medium
+
+  * new upstream stable/security update, with the following security fixes:
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4g67-jhpc-q5xp
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-799q-hjgw-g55g
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-cg4f-57hc-v7w7
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-rrp5-666j-g6gp
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-wg7g-gx9g-r96c
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-f53w-3364-jr35
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-66mr-7wc7-23vc
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-hqf8-95c7-6r92
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8g9g-hqqp-fw69
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-jq25-3374-4262
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-7qw2-8h66-pvpw
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-5j39-x36c-x9pm
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-6p3w-fv52-cf24
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4qq4-qwxq-49m8
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-x7w3-32ch-x2jq
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-v3q2-qjvf-7rqw
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4vh4-3pc3-32p7
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-x4x6-2hrm-hvq9
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8rjm-m7xg-mg6m
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-xc85-4mqc-xgcx
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-v85m-wg84-5ffh
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-6wqx-rv3q-vcxp
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-fg78-v8j5-8697
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-983v-jp34-f3fm
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-2557-79qc-6gfr
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-xjhw-2r55-m95g
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-m59q-wm7v-mp57
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-x26g-fp9v-c2pg
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-c426-ppvf-jpfg
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-5qqp-5ffm-m3p9
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-fqcj-rwww-2498
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-r387-jjq3-87hv
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-2c9x-4gr7-hrwx
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-x8vp-ff7m-294g
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3pg4-5r42-wxvj
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-qw7w-hhxq-763c
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-w897-ffhv-5j7g
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3hf9-w6hr-hf9j
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-j536-qc58-pmf8
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-fqw6-jf2h-6fj6
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-cx9c-q4jc-wm6c
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-wffv-rjv2-h2x2
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-jqf4-4p68-4p43
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-q82v-5wjg-6h57
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-m7xq-5f7v-hjvw
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Mon, 12 Oct 2026 20:03:31 +0300
+
+freerdp3 (3.32.1+dfsg-1) unstable; urgency=medium
+
+  * new upstream regression and bugfix release.  After the latest hardening
+    a few corner cases were not covered by regression tests and needed
+    adjustment.  Most notably fragmented static channel PDU were rejected
+    breaking copy & paste for larger data.  Security fixes:
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-9qqc-m43j-g4r2
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3m9q-g533-rqjq
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-262p-h989-vmpv
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-5xjc-c64q-m8r6
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-f3vg-h45x-6wgf
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-c49c-xm94-5qf3
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Mon, 28 Sep 2026 11:08:44 +0300
+
+freerdp3 (3.32.0+dfsg-1) unstable; urgency=medium
+
+  [ Michael Tokarev ]
+  * new upstream release.  List of security fixes:
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-xq87-9rrm-6wqw
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3rvr-qvx8-rj23
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-pvgq-84w2-93ph
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-xm53-352c-57jw
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3mq5-xh88-9v62
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-mqxv-c882-m8w9
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-q6pp-28g8-xqjc
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-jgw9-wqvx-j495
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-5cgr-vmp8-fmvj
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-m7g5-gw57-cwcr
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-pjxv-5j98-cqx4
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-pw4j-ff39-9vjm
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-87v8-2gwr-ww9j
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-h7fx-22wv-4cg8
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-996j-34w6-5hgm
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-52xc-5973-w5vv
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-qjwp-c855-hc69
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4ww8-3vqm-jgcf
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-96rv-gf42-7wq9
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-9qr4-rgq4-jfp8
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-cq4m-gwc5-w8rc
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-q9p9-j22r-577p
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-2jfv-j3wx-5cg4
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-g8jw-gv54-r94p
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-7vfc-chg9-q5r8
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-f46f-pxh9-w2rh
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-pg3f-chj4-mrw6
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-f526-rq4j-5ch8
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8rpr-jjjg-5qv6
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-cmgx-558f-vh67
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-m998-cvfm-9444
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-99p4-8j24-wvj4
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-97pf-pwp3-2wrv
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-27m7-gwhh-6hhf
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-qpfh-m9w6-xf2x
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-q56j-jjh6-38jf
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-f554-v4xw-5j39
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-chh2-527f-x255
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-xf45-j844-588v
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-qq23-mqmv-pc65
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-jhxw-3hj9-9hqh
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-h44v-39x6-9xvg
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-6vjv-4hm3-6698
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-c3rh-2hv6-7hf2
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-jp2r-gm4v-wvq2
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-gvq8-v2fm-ffxv
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-jhv5-m83m-hxhq
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-grvc-qhhp-7h6m
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-26cc-wjh8-hjw6
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-945c-qq5h-jqwp
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-93g7-296p-j77j
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-6rj3-rf6g-3vw5
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-wf3x-658c-52m5
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-2hhg-8xx6-v73w
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-g4wg-67xq-8q53
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-72qv-gcph-rfwf
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-vqxm-9w7c-hvvx
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-hxw3-57rq-3v4m
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-f4pf-pgp4-f2r3
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-4mpr-hmqx-83q8
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-x7v7-9jp5-wqj2
+   - https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-83g2-gf92-5c4g
+  * *.symbols: add new symbols
+  * libfreerdp3-3.manpages: add freerdp.7
+
+  [ Jeremy Bícha ]
+  * Opt into Salsa CI
+
+  [ Seyeong Kim ]
+  * autopkgtest: Add xrdp user to ssl-cert group and restart the service
+    to apply the new group membership (LP: #2167457)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 23 Sep 2026 12:35:21 +0300
+
+freerdp3 (3.31.1+dfsg-1) unstable; urgency=medium
+
+  * new upstream minor release
+  * d/control: add ${misc:Depends} to transitional packages
+    to make lintian a bit more happy
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 02 Sep 2026 10:05:51 +0300
+
+freerdp3 (3.31.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream "Huge bugfix and security release"
+  * debian/*.symbols: add new symbols
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Wed, 26 Aug 2026 23:25:36 +0300
+
+freerdp3 (3.30.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release, with security fixes:
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-m37j-jcr2-8gcc
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-vv64-95pc-vj9v
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-rqgv-grx4-xm6x
+  * libfreerdp3-3.symbols: add new symbol
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Thu, 16 Jul 2026 11:40:14 +0300
+
+freerdp3 (3.29.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release, fixing the following security issues:
+    o Bin Luo, University of Electronic Science and Technology of China (UESTC).
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-43hh-p3vw-hfx3
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-ph3q-f9w8-7jf3
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-mwwh-mhp9-q7vm
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-whq8-c3v3-p8v8
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-hgj8-g595-wfc6
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8v6m-2cmc-chx9
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-5wr6-8m8j-3h7f
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-89c6-jjrw-96h4
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8xqm-wp3f-rfp9
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-jm8r-22j6-4m4v
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-2c6r-4pr4-9x8m
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-qmvw-52ph-q5pv
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-34hq-hwjw-q8v3
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-33gg-h66j-3697
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-vxp3-7g6q-rq2w
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-v89x-pc32-hqr7
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-pfxq-3qmw-8vjx
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-78jj-45vh-jpm5
+    o @canomer
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-69xf-pqrw-596x
+    o Reported by Team Atlanta
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-8jj2-67pg-j6mg
+    o @HEXER365
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-qrxx-7g3c-j6w3
+    o cbcs — found by Tencent Yunding Security Lab using agents
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-cj9v-h4hq-29jr
+  * d/libwinpr3-3.symbols,d/libfreerdp3-3.symbols: add new symbols
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Tue, 14 Jul 2026 15:26:41 +0300
+
+freerdp3 (3.28.0+dfsg-2) unstable; urgency=medium
+
+  * d/tests/connect: stop enforcing TLS security
+    apparently xrdp does not work with TLS at all, see #1138658.
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Sun, 12 Jul 2026 00:44:33 +0300
+
+freerdp3 (3.28.0+dfsg-1) unstable; urgency=medium
+
+  * new upstream release, fixing a number of (security) issues
+  * d/copyright: remove stale entry from Files-Excluded
+  * d/*.symbols: add new symbols
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Mon, 06 Jul 2026 11:06:13 +0300
+
+freerdp3 (3.27.1+dfsg-1) unstable; urgency=medium
+
+  [ Jeremy Bícha ]
+  * Don't build sso-mib feature on i386
+
+  [ Grayson Wolf ]
+  * fix test failures by enforcing TLS security
+
+  [ Michael Tokarev ]
+  * Revert "Don't build sso-mib feature on i386"
+  * stop disabling PKCS11 on ubuntu (Closes: #1140689)
+  * new upstream bugfix release 3.27.1
+    Hopefully closes: #1138658 (xrdp debci failure)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Tue, 30 Jun 2026 09:34:23 +0300
+
+freerdp3 (3.27.0+dfsg-1) unstable; urgency=medium
+
+  * a major feature/bugfix/cleanup upstream release, including:
+   - TLS seclevel now defaults to 2 and a minimum of TLS 1.2 is required
+   - Enhancements with Azure/Entra support
+   - keyboard mapping
+   - Allow RDPDR channel to pass additional arguments to the channel
+   - Some client side statistics logging API was added
+   - security fixes:
+    - Heap-buffer-overflow write in TS Gateway RPC RESPONSE reassembly
+      due to alloc_hint capacity mismatch
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-9gxm-3mf5-f5cx
+    - Heap-buffer-overflow write in TS Gateway RPC fragment receive
+      due to uncapped bind_ack max_xmit_frag
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-7rp4-66mc-j9vx
+    - Out-of-bounds read in H.264 YUV-to-RGB conversion
+      due to decoder/surface dimension mismatch
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3mmf-qh4f-frm6
+    - Heap-buffer-overflow write in AVC444 YUV buffer allocation
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-vx73-w5q6-7jqr
+    - integer Overflow in `freerdp_image_copy_from_icon_data`
+      Bypasses Bounds Check
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-5c5v-f78v-h2f6
+  * add new symbols to: libfreerdp, libfreerdp-client, libfreerdp-server-proxy,
+    libwinpr
+  * Revert "d/rules: -DWITH_INTERNAL_MD4=ON, due to libssl/libcrypto does not
+    provide it (anymore?)" -- this was an issue in freerdp, now fixed
+  * update previous changelog entry to include mentions of security fixes
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Tue, 16 Jun 2026 09:02:32 +0300
 
 freerdp3 (3.26.0+dfsg-1) unstable; urgency=medium
 
-  * new upstream release, with 3 High ranking CVE (no numbers assigned yet)
+  * new upstream release, with 3 High ranking vulnerability fixes:
+    CVE-2026-44420 FreeRDP cliprdr server heap-buffer-overflow
+      via undersized capabilitySetLength in CB_CLIP_CAPS
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-mvpx-xj7r-3p3r
+    FreeRDP RDPGFX CacheToSurface heap-buffer-overflow via
+      clamped-rectangle validation bypass
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-p6r2-4hgm-m6ff
+    CVE-2026-45700 Heap-buffer-overflow write in planar bitmap decoder
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-mpxh-8fq3-x8mh
+    Use After Free and Concurrent Execution using Shared Resource with
+      Improper Synchronization ('Race Condition') in FreeRDP
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-3mv2-5q57-2v8h
+    FreeRDP RDPEAR NDR ref-id aliasing causes client-side UAF/double-free
+      and type confusion
+      https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-j9q5-7g8m-jc9v
   * d/copyright: remove Files-Excluded: scripts/android-*
   * d/patches/: remove
   * d/control,d/rules: drop sdl2 support (pkg.freerdp3.sdl2 build profile)
@@ -114,7 +477,7 @@ freerdp3 (3.24.0+dfsg-1) unstable; urgency=medium
     CVE-2026-31885 Out-of-bounds read in ADPCM decoders
       due to missing predictor/step_index bounds checks
       https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-h23r-3988-3wf3
-    CVE-2026-31897 Out-of-bounds read in `freerdp_bitmap_decompress_planar` 
+    CVE-2026-31897 Out-of-bounds read in `freerdp_bitmap_decompress_planar`
       https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-xgv6-r22m-7c9x
   * d/libfreerdp3-3.symbols,d/libwinpr3-3.symbols: add new symbols
   * d/libfreerdp-client3-3.symbols: REMOVE unused symbols

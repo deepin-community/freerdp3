@@ -374,6 +374,21 @@ error:
 	return nullptr;
 }
 
+void nsc_context_planebuffers_free(NSC_CONTEXT_PRIV* priv)
+{
+	if (!priv)
+		return;
+
+	for (size_t i = 0; i < ARRAYSIZE(priv->PlaneBuffers); i++)
+	{
+		BYTE* cur = priv->PlaneBuffers[i];
+		priv->PlaneBuffers[i] = nullptr;
+		winpr_aligned_free(cur);
+	}
+
+	priv->PlaneBuffersLength = 0;
+}
+
 void nsc_context_free(NSC_CONTEXT* context)
 {
 	if (!context)
@@ -381,8 +396,7 @@ void nsc_context_free(NSC_CONTEXT* context)
 
 	if (context->priv)
 	{
-		for (size_t i = 0; i < 5; i++)
-			winpr_aligned_free(context->priv->PlaneBuffers[i]);
+		nsc_context_planebuffers_free(context->priv);
 
 		nsc_profiler_print(context->priv);
 		PROFILER_FREE(context->priv->prof_nsc_rle_decompress_data)
@@ -434,7 +448,9 @@ BOOL nsc_process_message(NSC_CONTEXT* WINPR_RESTRICT context, UINT16 bpp, UINT32
                          BYTE* WINPR_RESTRICT pDstData, UINT32 DstFormat, UINT32 nDstStride,
                          UINT32 nXDst, UINT32 nYDst, UINT32 nWidth, UINT32 nHeight, UINT32 flip)
 {
-	WINPR_ASSERT(context);
+	if (!context)
+		return FALSE;
+
 	WINPR_ASSERT(context->priv);
 
 	wStream sbuffer = WINPR_C_ARRAY_INIT;

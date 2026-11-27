@@ -198,23 +198,29 @@ static void mac_audio_queue_input_cb(void *aqData, AudioQueueRef inAQ, AudioQueu
 static UINT audin_mac_close(IAudinDevice *device)
 {
 	UINT errCode = CHANNEL_RC_OK;
-	char errString[1024];
-	OSStatus devStat;
 	AudinMacDevice *mac = (AudinMacDevice *)device;
 
+	WINPR_ASSERT(mac);
 	if (!mac->isAuthorized)
+	{
+		WLog_ERR(TAG, "not authorized");
 		return ERROR_INTERNAL_ERROR;
+	}
 
 	if (device == nullptr)
+	{
+		WLog_ERR(TAG, "device == nullptr");
 		return ERROR_INVALID_PARAMETER;
+	}
 
 	if (mac->isOpen)
 	{
-		devStat = AudioQueueStop(mac->audioQueue, true);
+		const OSStatus devStat = AudioQueueStop(mac->audioQueue, true);
 
 		if (devStat != 0)
 		{
 			errCode = GetLastError();
+			char errString[1024] = WINPR_C_ARRAY_INIT;
 			WLog_ERR(TAG, "AudioQueueStop failed with %s [%" PRIu32 "]",
 			         winpr_strerror(errCode, errString, sizeof(errString)), errCode);
 		}
@@ -224,11 +230,12 @@ static UINT audin_mac_close(IAudinDevice *device)
 
 	if (mac->audioQueue)
 	{
-		devStat = AudioQueueDispose(mac->audioQueue, true);
+		const OSStatus devStat = AudioQueueDispose(mac->audioQueue, true);
 
 		if (devStat != 0)
 		{
 			errCode = GetLastError();
+			char errString[1024] = WINPR_C_ARRAY_INIT;
 			WLog_ERR(TAG, "AudioQueueDispose failed with %s [%" PRIu32 "]",
 			         winpr_strerror(errCode, errString, sizeof(errString)), errCode);
 		}
@@ -266,8 +273,11 @@ static UINT audin_mac_open(IAudinDevice *device, AudinReceive receive, void *use
 
 	for (size_t index = 0; index < MAC_AUDIO_QUEUE_NUM_BUFFERS; index++)
 	{
-		devStat = AudioQueueAllocateBuffer(mac->audioQueue,
-		                                   mac->FramesPerPacket * 2 * mac->format.nChannels,
+		const UINT64 bytes = 2ull * mac->FramesPerPacket * mac->format.nChannels;
+		if (bytes > UINT32_MAX)
+			goto err_out;
+
+		devStat = AudioQueueAllocateBuffer(mac->audioQueue, WINPR_ASSERTING_INT_CAST(UInt32, bytes),
 		                                   &mac->audioBuffers[index]);
 
 		if (devStat != 0)
@@ -302,7 +312,7 @@ static UINT audin_mac_open(IAudinDevice *device, AudinReceive receive, void *use
 	mac->isOpen = true;
 	return CHANNEL_RC_OK;
 err_out:
-	audin_mac_close(device);
+	(void)audin_mac_close(device);
 	return CHANNEL_RC_INITIALIZATION_ERROR;
 }
 
@@ -314,10 +324,7 @@ static UINT audin_mac_free(IAudinDevice *device)
 	if (device == nullptr)
 		return ERROR_INVALID_PARAMETER;
 
-	if ((error = audin_mac_close(device)))
-	{
-		WLog_ERR(TAG, "audin_oss_close failed with error code %d!", error);
-	}
+	(void)audin_mac_close(device);
 
 	free(mac);
 	return CHANNEL_RC_OK;

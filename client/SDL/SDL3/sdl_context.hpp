@@ -20,7 +20,7 @@
 
 #include <map>
 #include <memory>
-#include <mutex>
+#include <optional>
 #include <sstream>
 #include <vector>
 #include <mutex>
@@ -38,6 +38,7 @@
 #include "sdl_disp.hpp"
 #include "sdl_clip.hpp"
 #include "sdl_input.hpp"
+#include "sdl_rail.hpp"
 
 #include "dialogs/sdl_connection_dialog_wrapper.hpp"
 
@@ -63,6 +64,7 @@ class SdlContext
 
 	void setConnected(bool val);
 	[[nodiscard]] bool isConnected() const;
+	[[nodiscard]] bool abortConnect() const;
 	void cleanup();
 
 	[[nodiscard]] bool resizeable() const;
@@ -99,6 +101,7 @@ class SdlContext
 	[[nodiscard]] std::vector<SDL_Rect> pop();
 
 	void setHasCursor(bool val);
+	[[nodiscard]] std::optional<bool> allowScreenSaver() const;
 	[[nodiscard]] bool hasCursor() const;
 
 	void setMetadata();
@@ -119,6 +122,7 @@ class SdlContext
 
 	[[nodiscard]] const SdlWindow* getWindowForId(SDL_WindowID id) const;
 	[[nodiscard]] SdlWindow* getWindowForId(SDL_WindowID id);
+	[[nodiscard]] bool allWindowsHidden() const;
 	[[nodiscard]] SdlWindow* getFirstWindow();
 
 	[[nodiscard]] bool addDisplayWindow(SDL_DisplayID id);
@@ -130,6 +134,7 @@ class SdlContext
 	[[nodiscard]] sdlDispContext& getDisplayChannelContext();
 	[[nodiscard]] sdlInput& getInputChannelContext();
 	[[nodiscard]] sdlClip& getClipboardChannelContext();
+	[[nodiscard]] SdlRail& getRailChannelContext();
 
 	[[nodiscard]] SdlConnectionDialogWrapper& getDialog();
 
@@ -155,6 +160,9 @@ class SdlContext
 	[[nodiscard]] std::vector<rdpPointer*>& pointers();
 	[[nodiscard]] bool contains(const rdpPointer* ptr) const;
 
+	[[nodiscard]] bool credentialsRead() const;
+	void setCredentialsRead();
+
   private:
 	[[nodiscard]] bool resizeToScale(SdlWindow* window);
 	[[nodiscard]] bool useLocalScale() const;
@@ -163,6 +171,8 @@ class SdlContext
 	[[nodiscard]] static BOOL postConnect(freerdp* instance);
 	static void postDisconnect(freerdp* instance);
 	static void postFinalDisconnect(freerdp* instance);
+	[[nodiscard]] static BOOL getAccessToken(freerdp* instance, AccessTokenType tokenType,
+	                                         char** token, size_t count, ...);
 	[[nodiscard]] static BOOL desktopResize(rdpContext* context);
 	[[nodiscard]] static BOOL playSound(rdpContext* context, const PLAY_SOUND_UPDATE* play_sound);
 	[[nodiscard]] static BOOL beginPaint(rdpContext* context);
@@ -216,6 +226,19 @@ class SdlContext
 	bool _resizeable = false;
 	bool _grabMouse = false;
 	bool _grabKeyboard = false;
+
+	/* RemoteApp pointer state */
+	struct
+	{
+		SDL_WindowID window = 0;
+		SDL_FPoint local = {};
+		SDL_FPoint server = {};
+	} _lastMotion; /* last motion forwarded to the server */
+	struct
+	{
+		SDL_WindowID window = 0;
+		Uint64 time = 0;
+	} _lastRelease;
 	int _exitCode = -1;
 	std::atomic<bool> _rdpThreadRunning = false;
 	SDL_PixelFormat _sdlPixelFormat = SDL_PIXELFORMAT_UNKNOWN;
@@ -230,6 +253,7 @@ class SdlContext
 	sdlDispContext _disp;
 	sdlInput _input;
 	sdlClip _clip;
+	SdlRail _rail;
 
 	SdlConnectionDialogWrapper _dialog;
 
@@ -238,9 +262,12 @@ class SdlContext
 	std::map<SDL_DisplayID, std::pair<SDL_Rect, SDL_Rect>> _offsets;
 
 	uint32_t _windowWidth = 0;
-	uint32_t _windowHeigth = 0;
+	uint32_t _windowHeight = 0;
 	WinPREvent _windowsCreatedEvent;
 	std::thread _thread;
 	std::vector<COMMAND_LINE_ARGUMENT_A> _args;
+	std::optional<bool> _connectionDialog;
+	std::optional<bool> _allowScreenSaver;
 	std::vector<rdpPointer*> _valid_pointers;
+	bool _credentialsRead = false;
 };

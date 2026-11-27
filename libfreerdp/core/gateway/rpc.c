@@ -47,6 +47,7 @@
 
 #include "rpc.h"
 #include "rts.h"
+#include "../utils.h"
 
 #define TAG FREERDP_TAG("core.gateway.rpc")
 
@@ -466,6 +467,9 @@ SSIZE_T rpc_channel_read(RpcChannel* channel, wStream* s, size_t length)
 	if (!channel || (length > INT32_MAX))
 		return -1;
 
+	if (!Stream_EnsureRemainingCapacity(s, length))
+		return -1;
+
 	ERR_clear_error();
 	status = BIO_read(channel->tls->bio, Stream_Pointer(s), (INT32)length);
 
@@ -518,7 +522,7 @@ static int rpc_channel_rpch_init(RpcClient* client, RpcChannel* channel, const c
 
 	settings = client->context->settings;
 	channel->auth = credssp_auth_new(client->context);
-	if (!rts_generate_cookie((BYTE*)&channel->Cookie))
+	if (UuidCreate(&channel->Cookie) != RPC_S_OK)
 		return -1;
 	channel->client = client;
 
@@ -538,14 +542,9 @@ static int rpc_channel_rpch_init(RpcClient* client, RpcChannel* channel, const c
 
 		if (guid)
 		{
-			RPC_CSTR strguid = nullptr;
-			RPC_STATUS rpcStatus = UuidToStringA(guid, &strguid);
-
-			if (rpcStatus != RPC_S_OK)
-				return -1;
-
-			const BOOL rc = http_context_append_pragma(http, "SessionId=%s", strguid);
-			RpcStringFreeA(&strguid);
+			char buffer[64] = WINPR_C_ARRAY_INIT;
+			const BOOL rc = http_context_append_pragma(http, "SessionId=%s",
+			                                           guid2str(guid, buffer, sizeof(buffer)));
 			if (!rc)
 				return -1;
 		}
@@ -556,7 +555,7 @@ static int rpc_channel_rpch_init(RpcClient* client, RpcChannel* channel, const c
 		}
 
 		if (!http_context_set_rdg_correlation_id(http, guid) ||
-		    !http_context_set_rdg_connection_id(http, guid))
+		    !http_context_set_rdg_connection_id(http))
 			return -1;
 	}
 
@@ -690,9 +689,9 @@ static RpcVirtualConnection* rpc_virtual_connection_new(rdpRpc* rpc)
 	if (!connection)
 		return nullptr;
 
-	if (!rts_generate_cookie((BYTE*)&(connection->Cookie)))
+	if (UuidCreate(&connection->Cookie) != RPC_S_OK)
 		goto fail;
-	if (!rts_generate_cookie((BYTE*)&(connection->AssociationGroupId)))
+	if (UuidCreate(&connection->AssociationGroupId) != RPC_S_OK)
 		goto fail;
 	connection->State = VIRTUAL_CONNECTION_STATE_INITIAL;
 

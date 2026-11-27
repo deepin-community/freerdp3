@@ -28,6 +28,8 @@
 #include <freerdp/svc.h>
 #include <freerdp/channels/rdp2tcp.h>
 
+#include <freerdp/utils/warnings.h>
+
 #include <freerdp/log.h>
 #define TAG CLIENT_TAG(RDP2TCP_DVC_CHANNEL_NAME)
 
@@ -38,11 +40,13 @@ typedef struct
 	HANDLE hProcess;
 	HANDLE copyThread;
 	HANDLE writeComplete;
+	HANDLE writeTerminated;
 	DWORD openHandle;
 	void* initHandle;
 	CHANNEL_ENTRY_POINTS_FREERDP_EX channelEntryPoints;
 	char buffer[16 * 1024];
 	char* commandline;
+	UINT32 totalLength;
 } Plugin;
 
 static int init_external_addin(Plugin* plugin)
@@ -159,7 +163,8 @@ static DWORD WINAPI copyThread(void* data)
 		}
 
 		HANDLE handles[] = { plugin->writeComplete,
-			                 freerdp_abort_event(plugin->channelEntryPoints.context) };
+			                 freerdp_abort_event(plugin->channelEntryPoints.context),
+			                 plugin->writeTerminated };
 		status = WaitForMultipleObjects(ARRAYSIZE(handles), handles, FALSE, INFINITE);
 	}
 
@@ -190,6 +195,7 @@ static void dataReceived(Plugin* plugin, void* pData, UINT32 dataLength, UINT32 
 
 	if (dataFlags & CHANNEL_FLAG_FIRST)
 	{
+		plugin->totalLength = totalLength;
 		if (!WriteFile(plugin->hStdInputWrite, &totalLength, sizeof(totalLength), &dwWritten,
 		               nullptr))
 			closeChannel(plugin);
@@ -230,10 +236,18 @@ static void channel_terminated(Plugin* plugin)
 	if (!plugin)
 		return;
 
+	if (plugin->writeTerminated)
+		SetEvent(plugin->writeTerminated);
+
 	if (plugin->copyThread)
+	{
+		(void)WaitForSingleObject(plugin->copyThread, INFINITE);
 		(void)CloseHandle(plugin->copyThread);
+	}
 	if (plugin->writeComplete)
 		(void)CloseHandle(plugin->writeComplete);
+	if (plugin->writeTerminated)
+		(void)CloseHandle(plugin->writeTerminated);
 
 	(void)CloseHandle(plugin->hStdInputWrite);
 	(void)CloseHandle(plugin->hStdOutputRead);
@@ -248,9 +262,15 @@ static void channel_initialized(Plugin* plugin)
 	WINPR_ASSERT(plugin);
 	WINPR_ASSERT(!plugin->writeComplete);
 	plugin->writeComplete = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+	WINPR_ASSERT(plugin->writeComplete);
+
+	WINPR_ASSERT(!plugin->writeTerminated);
+	plugin->writeTerminated = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+	WINPR_ASSERT(plugin->writeTerminated);
 
 	WINPR_ASSERT(!plugin->copyThread);
 	plugin->copyThread = CreateThread(nullptr, 0, copyThread, plugin, 0, nullptr);
+	WINPR_ASSERT(plugin->copyThread);
 }
 
 static VOID VCAPITYPE VirtualChannelInitEventEx(LPVOID lpUserParam, LPVOID pInitHandle, UINT event,
@@ -298,6 +318,8 @@ FREERDP_ENTRY_POINT(BOOL VCAPITYPE VirtualChannelEntryEx(PCHANNEL_ENTRY_POINTS_E
 	WINPR_ASSERT(pEntryPointsEx);
 	WINPR_ASSERT(pEntryPointsEx->cbSize >= sizeof(CHANNEL_ENTRY_POINTS_FREERDP_EX) &&
 	             pEntryPointsEx->MagicNumber == FREERDP_CHANNEL_MAGIC_NUMBER);
+
+	freerdp_warn_unmaintained(WLog_Get(TAG), "CHANNEL_RDP2TCP_CLIENT");
 
 	Plugin* plugin = (Plugin*)calloc(1, sizeof(Plugin));
 

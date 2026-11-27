@@ -20,17 +20,21 @@
 #define FREERDP_SESSION_H
 
 #include <winpr/wtypes.h>
-
-/* Logon Information Types */
-#define INFO_TYPE_LOGON 0x00000000
-#define INFO_TYPE_LOGON_LONG 0x00000001
-#define INFO_TYPE_LOGON_PLAIN_NOTIFY 0x00000002
-#define INFO_TYPE_LOGON_EXTENDED_INF 0x00000003
+#include <freerdp/api.h>
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+
+	/* Logon Information Types */
+	typedef enum WINPR_C23_ENUM_TYPE(uint32_t)
+	{
+		INFO_TYPE_LOGON = 0x00000000,
+		INFO_TYPE_LOGON_LONG = 0x00000001,
+		INFO_TYPE_LOGON_PLAIN_NOTIFY = 0x00000002,
+		INFO_TYPE_LOGON_EXTENDED_INF = 0x00000003
+	} RDP_LOGON_INFO_TYPE;
 
 	struct rdp_logon_info
 	{
@@ -51,6 +55,29 @@ extern "C"
 		UINT32 ErrorNotificationData;
 	};
 	typedef struct rdp_logon_info_ex logon_info_ex;
+
+	/** @brief return a string representation of \ref RDP_LOGON_INFO_TYPE or INFO_TYPE_UNKNOWN
+	 *
+	 *  @param type The type to stringify
+	 *  @return A string representing \ref type
+	 *  @since version 3.30.0
+	 */
+	WINPR_ATTR_NODISCARD
+	FREERDP_API const char* freerdp_session_logon_type_str(uint32_t type);
+
+	/** @brief return a string representation of \ref RDP_LOGON_INFO_TYPE details
+	 *
+	 *  @param type The type of \ref RDP_LOGON_INFO_TYPE extra data to decode
+	 *  @param data The extra data of \ref type
+	 *  @param buffer A string buffer that can hold the result
+	 *  @param length The length of the string buffer in bytes
+	 *
+	 *  @return A string representation of \ref data
+	 *  @since version 3.31.0
+	 */
+	WINPR_ATTR_NODISCARD
+	FREERDP_API const char* freerdp_session_logon_type_data_str(uint32_t type, const void* data,
+	                                                            char* buffer, size_t length);
 
 #ifdef __cplusplus
 }

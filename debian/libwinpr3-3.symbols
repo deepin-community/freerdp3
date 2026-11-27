@@ -204,6 +204,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  DeleteCriticalSection@Base 3.0.0
  DeleteFileA@Base 3.0.0
  DeleteFileW@Base 3.0.0
+ DeleteProcThreadAttributeList@Base 3.31.0
  DeleteTimerQueue@Base 3.0.0
  DeleteTimerQueueEx@Base 3.0.0
  DeleteTimerQueueTimer@Base 3.0.0
@@ -288,6 +289,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  GetFileSize@Base 3.0.0
  GetHandleInformation@Base 3.0.0
  GetKeycodeFromVirtualKeyCode@Base 3.0.0
+ GetKeycodesFromVirtualKeyCode@Base 3.27.0
  GetKnownPath@Base 3.0.0
  GetKnownPathIdString@Base 3.0.0
  GetKnownSubPath@Base 3.0.0
@@ -326,6 +328,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  GetSecurityStatusString@Base 3.0.0
  GetStdHandle@Base 3.0.0
  GetSystemInfo@Base 3.0.0
+ GetSystemPowerStatus@Base 3.32.0
  GetSystemTime@Base 3.0.0
  GetSystemTimeAdjustment@Base 3.0.0
  GetSystemTimeAsFileTime@Base 3.0.0
@@ -344,6 +347,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  GetVirtualKeyCodeFromXkbKeyName@Base 3.0.0
  GetVirtualKeyName@Base 3.0.0
  GetVirtualScanCodeFromVirtualKeyCode@Base 3.0.0
+ GetVirtualScanCodesFromVirtualKeyCode@Base 3.27.0
  HashTable_Clear@Base 3.0.0
  HashTable_Contains@Base 3.0.0
  HashTable_ContainsKey@Base 3.0.0
@@ -390,6 +394,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  InitializeCriticalSectionAndSpinCount@Base 3.0.0
  InitializeCriticalSectionEx@Base 3.0.0
  InitializeListHead@Base 3.0.0
+ InitializeProcThreadAttributeList@Base 3.31.0
  InitializeSListHead@Base 3.0.0
  InitializeSecurityDescriptor@Base 3.0.0
  InsertHeadList@Base 3.0.0
@@ -976,6 +981,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  Stream_Read_UTF16_String_As_UTF8_Buffer@Base 3.0.0
  Stream_Release@Base 3.0.0
  Stream_SafeSeekEx@Base 3.0.0
+ Stream_SafeZeroEx@Base 3.31.0
  Stream_SealLength@Base 3.0.0
  Stream_SetLength@Base 3.0.0
  Stream_SetPosition@Base 3.0.0
@@ -1011,6 +1017,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  UnlockFile@Base 3.0.0
  UnlockFileEx@Base 3.0.0
  UnmapViewOfFile@Base 3.0.0
+ UpdateProcThreadAttribute@Base 3.31.0
  UuidCompare@Base 3.0.0
  UuidCreate@Base 3.0.0
  UuidCreateNil@Base 3.0.0
@@ -1072,6 +1079,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  WLog_Create@Base 3.25.0
  WLog_Discard@Base 3.25.0
  WLog_Get@Base 3.0.0
+ WLog_GetAppenderContext@Base 3.28.0
  WLog_GetLogAppender@Base 3.0.0
  WLog_GetLogLayout@Base 3.0.0
  WLog_GetLogLevel@Base 3.0.0
@@ -1083,6 +1091,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  WLog_PrintMessageVA@Base 3.0.0
  WLog_PrintTextMessage@Base 3.17.0
  WLog_PrintTextMessageVA@Base 3.17.0
+ WLog_SetAppenderContext@Base 3.28.0
  WLog_SetContext@Base 3.0.0
  WLog_SetGlobalContext@Base 3.25.0
  WLog_SetLogAppenderType@Base 3.0.0
@@ -1183,6 +1192,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  WakeByAddressSingle@Base 3.0.0
  Win32ErrorCode2Tag@Base 3.0.0
  WinPR_GetSCardApiFunctionTable@Base 3.0.0
+ WinPR_IsKeyboardTypeSupported@Base 3.33.0
  WinPrAsn1DecGetStream@Base 3.0.0
  WinPrAsn1DecPeekContextualTag@Base 3.0.0
  WinPrAsn1DecPeekTag@Base 3.0.0
@@ -1301,11 +1311,16 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  g_rgSCardT0Pci@Base 3.0.0
  g_rgSCardT1Pci@Base 3.0.0
  memmove_s@Base 3.0.0
+ sspi_AllocSecKerberosSettings@Base 3.31.0
+ sspi_AllocSecNtlmSettings@Base 3.31.0
+ sspi_CloneSecSettingsString@Base 3.31.0
  sspi_CopyAuthIdentity@Base 3.0.0
  sspi_CopyAuthIdentityFieldsA@Base 3.0.0
  sspi_CopyAuthIdentityFieldsW@Base 3.0.0
  sspi_CopyAuthPackageListA@Base 3.0.0
  sspi_FreeAuthIdentity@Base 3.0.0
+ sspi_FreeSecKerberosSettings@Base 3.31.0
+ sspi_FreeSecNtlmSettings@Base 3.31.0
  sspi_GetAuthIdentityFlags@Base 3.0.0
  sspi_GetAuthIdentityPasswordA@Base 3.0.0
  sspi_GetAuthIdentityPasswordW@Base 3.0.0
@@ -1373,6 +1388,7 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  winpr_GetConfigFilePath@Base 3.9.0
  winpr_GetConfigFilePathV@Base 3.23.0
  winpr_GetConfigFilePathVA@Base 3.23.0
+ winpr_GetJSONConfigFile@Base 3.33.0
  winpr_GetTickCount64@Base 3.0.0
  winpr_GetTickCount64NS@Base 3.4.0
  winpr_GetUnixTimeNS@Base 3.4.0
@@ -1447,6 +1463,10 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  winpr_bitmap_write_ex@Base 3.0.0
  winpr_cipher_type_from_string@Base 3.10.2
  winpr_cipher_type_to_string@Base 3.10.2
+ winpr_config_apply_bool@Base 3.33.0
+ winpr_config_apply_string@Base 3.33.0
+ winpr_config_apply_uint32@Base 3.33.0
+ winpr_exportHandleToString@Base 3.32.0
  winpr_fopen@Base 3.0.0
  winpr_getApplicationDetailsProduct@Base 3.23.0
  winpr_getApplicationDetailsVendor@Base 3.23.0
@@ -1455,6 +1475,9 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  winpr_get_build_revision@Base 3.0.0
  winpr_get_version@Base 3.0.0
  winpr_get_version_string@Base 3.0.0
+ winpr_i18n_bind_domain@Base 3.33.0
+ winpr_i18n_dgettext@Base 3.33.0
+ winpr_i18n_enable_translation@Base 3.33.0
  winpr_image_equal@Base 3.3.0
  winpr_image_format_extension@Base 3.3.0
  winpr_image_format_is_supported@Base 3.3.0
@@ -1466,15 +1489,153 @@ libwinpr3.so.3 libwinpr3-3 #MINVER#
  winpr_image_write@Base 3.0.0
  winpr_image_write_buffer@Base 3.3.0
  winpr_image_write_ex@Base 3.3.0
+ winpr_importHandleFromString@Base 3.32.0
  winpr_int_assert@Base 3.11.1
  winpr_log_backtrace@Base 3.0.0
  winpr_log_backtrace_ex@Base 3.0.0
+ winpr_log_build_warn@Base 3.32.0
  winpr_md_type_from_string@Base 3.0.0
  winpr_md_type_to_string@Base 3.0.0
+ winpr_ndr_decoder_bytes_read@Base 3.33.0
+ winpr_ndr_decoder_free@Base 3.33.0
+ winpr_ndr_decoder_new@Base 3.33.0
+ winpr_ndr_decoder_new_fromStream@Base 3.33.0
+ winpr_ndr_decoder_push_deferreds@Base 3.33.0
+ winpr_ndr_decoder_read_align@Base 3.33.0
+ winpr_ndr_decoder_read_fromDescr@Base 3.33.0
+ winpr_ndr_decoder_read_int16@Base 3.33.0
+ winpr_ndr_decoder_read_int16_@Base 3.33.0
+ winpr_ndr_decoder_read_int32@Base 3.33.0
+ winpr_ndr_decoder_read_int32_@Base 3.33.0
+ winpr_ndr_decoder_read_int64@Base 3.33.0
+ winpr_ndr_decoder_read_int64_@Base 3.33.0
+ winpr_ndr_decoder_read_int8@Base 3.33.0
+ winpr_ndr_decoder_read_int8_@Base 3.33.0
+ winpr_ndr_decoder_read_object@Base 3.33.0
+ winpr_ndr_decoder_read_pointedMessageEx@Base 3.33.0
+ winpr_ndr_decoder_read_pointer_ex@Base 3.33.0
+ winpr_ndr_decoder_read_refpointer@Base 3.33.0
+ winpr_ndr_decoder_read_uconformant_array@Base 3.33.0
+ winpr_ndr_decoder_read_uconformant_varying_array@Base 3.33.0
+ winpr_ndr_decoder_read_uint16@Base 3.33.0
+ winpr_ndr_decoder_read_uint16Array@Base 3.33.0
+ winpr_ndr_decoder_read_uint16VaryingArray@Base 3.33.0
+ winpr_ndr_decoder_read_uint16_@Base 3.33.0
+ winpr_ndr_decoder_read_uint32@Base 3.33.0
+ winpr_ndr_decoder_read_uint32_@Base 3.33.0
+ winpr_ndr_decoder_read_uint64@Base 3.33.0
+ winpr_ndr_decoder_read_uint64_@Base 3.33.0
+ winpr_ndr_decoder_read_uint8@Base 3.33.0
+ winpr_ndr_decoder_read_uint8Array@Base 3.33.0
+ winpr_ndr_decoder_read_uint8VaryingArray@Base 3.33.0
+ winpr_ndr_decoder_read_uint8_@Base 3.33.0
+ winpr_ndr_decoder_read_union@Base 3.33.0
+ winpr_ndr_decoder_read_wchar@Base 3.33.0
+ winpr_ndr_decoder_read_wcharArray@Base 3.33.1
+ winpr_ndr_decoder_read_wcharVaryingArray@Base 3.33.1
+ winpr_ndr_decoder_skip_bytes@Base 3.33.0
+ winpr_ndr_decoder_treat_deferreds@Base 3.33.0
+ winpr_ndr_destroy_uint16Array@Base 3.33.0
+ winpr_ndr_destroy_uint8Array@Base 3.33.0
+ winpr_ndr_destroy_wcharArray@Base 3.33.1
+ winpr_ndr_encoder_allocatePtr@Base 3.33.0
+ winpr_ndr_encoder_bytes_written@Base 3.33.0
+ winpr_ndr_encoder_end_object@Base 3.33.0
+ winpr_ndr_encoder_free@Base 3.33.0
+ winpr_ndr_encoder_from_decoder@Base 3.33.0
+ winpr_ndr_encoder_new@Base 3.33.0
+ winpr_ndr_encoder_start_object@Base 3.33.0
+ winpr_ndr_encoder_treat_deferreds@Base 3.33.0
+ winpr_ndr_encoder_write_align@Base 3.33.0
+ winpr_ndr_encoder_write_data@Base 3.33.0
+ winpr_ndr_encoder_write_fromDescr@Base 3.33.0
+ winpr_ndr_encoder_write_header@Base 3.33.0
+ winpr_ndr_encoder_write_int16@Base 3.33.0
+ winpr_ndr_encoder_write_int16_@Base 3.33.0
+ winpr_ndr_encoder_write_int32@Base 3.33.0
+ winpr_ndr_encoder_write_int32_@Base 3.33.0
+ winpr_ndr_encoder_write_int64@Base 3.33.0
+ winpr_ndr_encoder_write_int64_@Base 3.33.0
+ winpr_ndr_encoder_write_int8@Base 3.33.0
+ winpr_ndr_encoder_write_int8_@Base 3.33.0
+ winpr_ndr_encoder_write_toplevel_refid@Base 3.33.0
+ winpr_ndr_encoder_write_uconformant_array@Base 3.33.0
+ winpr_ndr_encoder_write_uconformant_varying_array@Base 3.33.0
+ winpr_ndr_encoder_write_uint16@Base 3.33.0
+ winpr_ndr_encoder_write_uint16Array@Base 3.33.0
+ winpr_ndr_encoder_write_uint16VaryingArray@Base 3.33.0
+ winpr_ndr_encoder_write_uint16_@Base 3.33.0
+ winpr_ndr_encoder_write_uint32@Base 3.33.0
+ winpr_ndr_encoder_write_uint32_@Base 3.33.0
+ winpr_ndr_encoder_write_uint64@Base 3.33.0
+ winpr_ndr_encoder_write_uint64_@Base 3.33.0
+ winpr_ndr_encoder_write_uint8@Base 3.33.0
+ winpr_ndr_encoder_write_uint8Array@Base 3.33.0
+ winpr_ndr_encoder_write_uint8VaryingArray@Base 3.33.0
+ winpr_ndr_encoder_write_uint8_@Base 3.33.0
+ winpr_ndr_encoder_write_union@Base 3.33.0
+ winpr_ndr_encoder_write_wchar@Base 3.33.1
+ winpr_ndr_encoder_write_wcharArray@Base 3.33.1
+ winpr_ndr_encoder_write_wcharVaryingArray@Base 3.33.1
+ winpr_ndr_int16_descr@Base 3.33.0
+ winpr_ndr_int16_descr_s@Base 3.33.0
+ winpr_ndr_int32_descr@Base 3.33.0
+ winpr_ndr_int32_descr_s@Base 3.33.0
+ winpr_ndr_int64_descr@Base 3.33.0
+ winpr_ndr_int64_descr_s@Base 3.33.0
+ winpr_ndr_int8_descr@Base 3.33.0
+ winpr_ndr_int8_descr_s@Base 3.33.0
+ winpr_ndr_pointer_new@Base 3.33.0
+ winpr_ndr_pointer_ref@Base 3.33.0
+ winpr_ndr_pointer_refid@Base 3.33.0
+ winpr_ndr_pointer_release@Base 3.33.0
+ winpr_ndr_pointer_size@Base 3.33.0
+ winpr_ndr_string_conformant_descr@Base 3.33.0
+ winpr_ndr_string_conformant_descr_s@Base 3.33.0
+ winpr_ndr_string_varying_descr@Base 3.33.0
+ winpr_ndr_string_varying_descr_s@Base 3.33.0
+ winpr_ndr_struct_destroy@Base 3.33.0
+ winpr_ndr_struct_dump_fromDescr@Base 3.33.0
+ winpr_ndr_uint16Array_descr@Base 3.33.0
+ winpr_ndr_uint16Array_descr_s@Base 3.33.0
+ winpr_ndr_uint16VaryingArray_descr@Base 3.33.0
+ winpr_ndr_uint16VaryingArray_descr_s@Base 3.33.0
+ winpr_ndr_uint16_descr@Base 3.33.0
+ winpr_ndr_uint16_descr_s@Base 3.33.0
+ winpr_ndr_uint32_descr@Base 3.33.0
+ winpr_ndr_uint32_descr_s@Base 3.33.0
+ winpr_ndr_uint64_descr@Base 3.33.0
+ winpr_ndr_uint64_descr_s@Base 3.33.0
+ winpr_ndr_uint8Array_descr@Base 3.33.0
+ winpr_ndr_uint8Array_descr_s@Base 3.33.0
+ winpr_ndr_uint8VaryingArray_descr@Base 3.33.0
+ winpr_ndr_uint8VaryingArray_descr_s@Base 3.33.0
+ winpr_ndr_uint8_descr@Base 3.33.0
+ winpr_ndr_uint8_descr_s@Base 3.33.0
+ winpr_ndr_union_destroy@Base 3.33.0
+ winpr_ndr_union_switch_value@Base 3.33.0
+ winpr_ndr_wcharArray_descr@Base 3.33.1
+ winpr_ndr_wcharArray_descr_s@Base 3.33.1
+ winpr_ndr_wcharVaryingArray_descr@Base 3.33.1
+ winpr_ndr_wcharVaryingArray_descr_s@Base 3.33.1
+ winpr_ndr_wchar_descr@Base 3.33.1
+ winpr_ndr_wchar_descr_s@Base 3.33.1
+ winpr_ndr_wstring_varying_descr@Base 3.33.0
+ winpr_ndr_wstring_varying_descr_s@Base 3.33.0
  winpr_setApplicationDetails@Base 3.23.0
  winpr_str_append@Base 3.0.0
+ winpr_str_has_newlines@Base 3.29.0
+ winpr_str_is_valid_hostname@Base 3.33.0
+ winpr_str_is_valid_hostnameN@Base 3.33.0
+ winpr_str_is_valid_url@Base 3.29.0
+ winpr_str_is_valid_urlN@Base 3.29.0
  winpr_str_url_decode@Base 3.0.0
  winpr_str_url_encode@Base 3.0.0
  winpr_strerror@Base 3.0.0
+ winpr_strnstr@Base 3.28.0
  winpr_vasprintf@Base 3.0.0
+ winpr_wcsnchr@Base 3.32.0
+ winpr_wcsnrchr@Base 3.32.0
+ winpr_zfree@Base 3.32.0
+ winpr_znfree@Base 3.32.0
  wmemmove_s@Base 3.0.0

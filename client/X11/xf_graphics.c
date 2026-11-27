@@ -186,9 +186,9 @@ static BOOL xf_Pointer_GetCursorForCurrentScale(rdpContext* context, rdpPointer*
 		ci.height = yTargetSize;
 		ci.xhot = (XcursorDim)lround(1.0 * pointer->xPos * xscale);
 		ci.yhot = (XcursorDim)lround(1.0 * pointer->yPos * yscale);
-		const size_t size = 1ull * ci.height * ci.width * FreeRDPGetBytesPerPixel(CursorFormat);
 
-		void* tmp = winpr_aligned_malloc(size, 16);
+		void* tmp = winpr_aligned_calloc(
+		    ci.height, 1ull * ci.width * FreeRDPGetBytesPerPixel(CursorFormat), 16);
 		if (!tmp)
 		{
 			xf_unlock_x11(xfc);
@@ -303,10 +303,8 @@ static BOOL xf_Pointer_New(rdpContext* context, rdpPointer* pointer)
 	xpointer->mCursors = 0;
 
 	{
-		const size_t size =
-		    1ull * pointer->height * pointer->width * FreeRDPGetBytesPerPixel(CursorFormat);
-
-		xpointer->cursorPixels = (XcursorPixel*)winpr_aligned_malloc(size, 16);
+		xpointer->cursorPixels = (XcursorPixel*)winpr_aligned_calloc(
+		    pointer->height, 1ull * pointer->width * FreeRDPGetBytesPerPixel(CursorFormat), 16);
 		if (!xpointer->cursorPixels)
 			goto fail;
 	}
@@ -458,12 +456,9 @@ static BOOL xf_Pointer_SetPosition(rdpContext* context, UINT32 x, UINT32 y)
 
 	xf_lock_x11(xfc);
 
-	rc = XGetWindowAttributes(xfc->display, handle, &current);
-	if (rc == 0)
-	{
-		WLog_WARN(TAG, "XGetWindowAttributes==%d", rc);
+	rc = LogDynAndXGetWindowAttributes(xfc->log, xfc->display, handle, &current);
+	if (rc != 1)
 		goto out;
-	}
 
 	tmp.event_mask = (current.your_event_mask & ~(PointerMotionMask));
 

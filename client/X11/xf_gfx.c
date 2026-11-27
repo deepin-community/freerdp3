@@ -103,7 +103,7 @@ static UINT xf_OutputUpdate(xfContext* xfc, xfGfxSurface* surface)
 			                   WINPR_ASSERTING_INT_CAST(int, nYSrc),
 			                   WINPR_ASSERTING_INT_CAST(int, nXDst),
 			                   WINPR_ASSERTING_INT_CAST(int, nYDst), dwidth, dheight);
-			xf_rail_paint_surface(xfc, surface->gdi.windowId, rect);
+			(void)xf_rail_paint_surface(xfc, surface->gdi.windowId, rect);
 		}
 		else
 #ifdef WITH_XRENDER
@@ -288,6 +288,29 @@ static UINT32 x11_pad_scanline(UINT32 scanline, UINT32 inPad)
 	return scanline;
 }
 
+static void DestroySurface(xfGfxSurface* surface)
+{
+	if (!surface)
+		return;
+
+#ifdef WITH_GFX_H264
+	h264_context_free(surface->gdi.h264);
+#endif
+#if defined(WITH_GFX_AV1)
+	freerdp_av1_context_free(surface->gdi.av1);
+#endif
+	if (surface->image)
+	{
+		surface->image->data = nullptr;
+		XDestroyImage(surface->image);
+	}
+
+	winpr_aligned_free(surface->gdi.data);
+	winpr_aligned_free(surface->stage);
+	region16_uninit(&surface->gdi.invalidRegion);
+	free(surface);
+}
+
 /**
  * Function description
  *
@@ -297,11 +320,13 @@ static UINT xf_CreateSurface(RdpgfxClientContext* context,
                              const RDPGFX_CREATE_SURFACE_PDU* createSurface)
 {
 	UINT ret = CHANNEL_RC_NO_MEMORY;
-	size_t size = 0;
-	xfGfxSurface* surface = nullptr;
+	WINPR_ASSERT(context);
+	WINPR_ASSERT(createSurface);
+
 	rdpGdi* gdi = (rdpGdi*)context->custom;
 	xfContext* xfc = (xfContext*)gdi->context;
-	surface = (xfGfxSurface*)calloc(1, sizeof(xfGfxSurface));
+
+	xfGfxSurface* surface = (xfGfxSurface*)calloc(1, sizeof(xfGfxSurface));
 
 	if (!surface)
 		return CHANNEL_RC_NO_MEMORY;
@@ -311,17 +336,19 @@ static UINT xf_CreateSurface(RdpgfxClientContext* context,
 	if (!surface->gdi.codecs)
 	{
 		WLog_ERR(TAG, "global GDI codecs aren't set");
-		goto out_free;
+		goto fail;
 	}
 
 	surface->gdi.surfaceId = createSurface->surfaceId;
-	surface->gdi.width = x11_pad_scanline(createSurface->width, 0);
-	surface->gdi.height = x11_pad_scanline(createSurface->height, 0);
+	surface->gdi.width = x11_pad_scanline(createSurface->width, 16);
+	surface->gdi.height = x11_pad_scanline(createSurface->height, 16);
 	surface->gdi.mappedWidth = createSurface->width;
 	surface->gdi.mappedHeight = createSurface->height;
 	surface->gdi.outputTargetWidth = createSurface->width;
 	surface->gdi.outputTargetHeight = createSurface->height;
 
+	const BOOL rails =
+	    freerdp_settings_get_bool(gdi->context->settings, FreeRDP_RemoteApplicationMode);
 	switch (createSurface->pixelFormat)
 	{
 		case GFX_PIXEL_FORMAT_ARGB_8888:
@@ -329,28 +356,34 @@ static UINT xf_CreateSurface(RdpgfxClientContext* context,
 			break;
 
 		case GFX_PIXEL_FORMAT_XRGB_8888:
-			surface->gdi.format = PIXEL_FORMAT_BGRX32;
+			surface->gdi.format = rails ? PIXEL_FORMAT_BGRA32 : PIXEL_FORMAT_BGRX32;
 			break;
 
 		default:
 			WLog_ERR(TAG, "unknown pixelFormat 0x%" PRIx32 "", createSurface->pixelFormat);
 			ret = ERROR_INTERNAL_ERROR;
-			goto out_free;
+			goto fail;
 	}
 
+	const UINT32 pad = WINPR_ASSERTING_INT_CAST(uint32_t, xfc->scanline_pad);
+	if (surface->gdi.width > UINT32_MAX / FreeRDPGetBytesPerPixel(surface->gdi.format) - 16 - pad)
+		goto fail;
+
+	/* Align to multiples of 16, but also add additional 16 bytes so SIMD implementations do not
+	 * accidentally read out of bound */
 	surface->gdi.scanline = surface->gdi.width * FreeRDPGetBytesPerPixel(surface->gdi.format);
-	surface->gdi.scanline = x11_pad_scanline(surface->gdi.scanline,
-	                                         WINPR_ASSERTING_INT_CAST(uint32_t, xfc->scanline_pad));
-	size = 1ull * surface->gdi.scanline * surface->gdi.height;
-	surface->gdi.data = (BYTE*)winpr_aligned_malloc(size, 16);
+	surface->gdi.scanline = x11_pad_scanline(surface->gdi.scanline, pad) + 16ul;
+
+	surface->gdi.data = (BYTE*)winpr_aligned_calloc(surface->gdi.scanline, surface->gdi.height, 16);
 
 	if (!surface->gdi.data)
 	{
 		WLog_ERR(TAG, "unable to allocate GDI data");
-		goto out_free;
+		goto fail;
 	}
 
-	ZeroMemory(surface->gdi.data, size);
+	for (UINT64 y = 0; y < surface->gdi.height; y++)
+		memset(&surface->gdi.data[surface->gdi.scanline * y], 0xff, surface->gdi.scanline);
 
 	if (FreeRDPAreColorFormatsEqualNoAlpha(gdi->dstFormat, surface->gdi.format))
 	{
@@ -365,19 +398,26 @@ static UINT xf_CreateSurface(RdpgfxClientContext* context,
 	{
 		UINT32 width = surface->gdi.width;
 		UINT32 bytes = FreeRDPGetBytesPerPixel(gdi->dstFormat);
+		if (width > UINT32_MAX / bytes - 16 - pad)
+			goto fail;
+
+		/* Align to multiples of scanline_pad, but also add additional 16 bytes so SIMD
+		 * implementations do not accidentally read out of bound */
 		surface->stageScanline = width * bytes;
-		surface->stageScanline = x11_pad_scanline(
-		    surface->stageScanline, WINPR_ASSERTING_INT_CAST(uint32_t, xfc->scanline_pad));
-		size = 1ull * surface->stageScanline * surface->gdi.height;
-		surface->stage = (BYTE*)winpr_aligned_malloc(size, 16);
+		surface->stageScanline = x11_pad_scanline(surface->stageScanline, pad) + 16ul;
+
+		surface->stage =
+		    (BYTE*)winpr_aligned_calloc(surface->stageScanline, surface->gdi.height, 16);
 
 		if (!surface->stage)
 		{
 			WLog_ERR(TAG, "unable to allocate stage buffer");
-			goto out_free_gdidata;
+			goto fail;
 		}
 
-		ZeroMemory(surface->stage, size);
+		for (UINT64 y = 0; y < surface->gdi.height; y++)
+			memset(&surface->stage[surface->stageScanline * y], 0xff, surface->stageScanline);
+
 		WINPR_ASSERT(xfc->depth != 0);
 		surface->image = LogDynAndXCreateImage(
 		    xfc->log, xfc->display, xfc->visual, WINPR_ASSERTING_INT_CAST(uint32_t, xfc->depth),
@@ -388,7 +428,7 @@ static UINT xf_CreateSurface(RdpgfxClientContext* context,
 	if (!surface->image)
 	{
 		WLog_ERR(TAG, "an error occurred when creating the XImage");
-		goto error_surface_image;
+		goto fail;
 	}
 
 	surface->image->byte_order = LSBFirst;
@@ -399,20 +439,46 @@ static UINT xf_CreateSurface(RdpgfxClientContext* context,
 	if (context->SetSurfaceData(context, surface->gdi.surfaceId, (void*)surface) != CHANNEL_RC_OK)
 	{
 		WLog_ERR(TAG, "an error occurred during SetSurfaceData");
-		goto error_set_surface_data;
+		goto fail;
 	}
 
 	return CHANNEL_RC_OK;
-error_set_surface_data:
-	surface->image->data = nullptr;
-	XDestroyImage(surface->image);
-error_surface_image:
-	winpr_aligned_free(surface->stage);
-out_free_gdidata:
-	winpr_aligned_free(surface->gdi.data);
-out_free:
-	free(surface);
+fail:
+	DestroySurface(surface);
 	return ret;
+}
+
+/**
+ * Detaches the RemoteApp window showing a surface that is being deleted.
+ *
+ * Called from DeleteSurface with gfx->mux held, before the surface is freed. The server may
+ * already have mapped another surface to the window, which appWindow->surfaceId only picks up on
+ * that surface's first update (see xf_AppUpdateWindowFromSurface()), so only detach the window
+ * if it still shows the deleted surface.
+ */
+static void xf_DetachWindowFromSurface(RdpgfxClientContext* context, const gdiGfxSurface* surface)
+{
+	WINPR_ASSERT(context);
+	WINPR_ASSERT(surface);
+
+	if (!surface->windowMapped)
+		return;
+
+	rdpGdi* gdi = (rdpGdi*)context->custom;
+	WINPR_ASSERT(gdi);
+
+	xfContext* xfc = (xfContext*)gdi->context;
+	WINPR_ASSERT(xfc);
+
+	xfAppWindow* appWindow = xf_rail_get_window(xfc, surface->windowId, FALSE);
+	if (appWindow && (appWindow->surfaceId == surface->surfaceId))
+	{
+		/* With software GDI the window image wraps the surface data */
+		xf_AppWindowDestroyImage(appWindow);
+		appWindow->surfaceId = UINT32_MAX;
+		appWindow->surfaceStale = FALSE;
+	}
+	xf_rail_return_window(appWindow, FALSE);
 }
 
 /**
@@ -432,6 +498,8 @@ static UINT xf_DeleteSurface(RdpgfxClientContext* context,
 
 	if (surface)
 	{
+		xf_DetachWindowFromSurface(context, &surface->gdi);
+
 		if (surface->gdi.windowMapped)
 		{
 			status = IFCALLRESULT(CHANNEL_RC_OK, context->UnmapWindowForSurface, context,
@@ -440,19 +508,8 @@ static UINT xf_DeleteSurface(RdpgfxClientContext* context,
 				goto fail;
 		}
 
-#ifdef WITH_GFX_H264
-		h264_context_free(surface->gdi.h264);
-#endif
-#if defined(WITH_GFX_AV1)
-		freerdp_av1_context_free(surface->gdi.av1);
-#endif
-		surface->image->data = nullptr;
-		XDestroyImage(surface->image);
-		winpr_aligned_free(surface->gdi.data);
-		winpr_aligned_free(surface->stage);
-		region16_uninit(&surface->gdi.invalidRegion);
 		codecs = surface->gdi.codecs;
-		free(surface);
+		DestroySurface(surface);
 	}
 
 	status = context->SetSurfaceData(context, deleteSurface->surfaceId, nullptr);
@@ -465,25 +522,34 @@ fail:
 	return status;
 }
 
-static UINT xf_UnmapWindowForSurface(RdpgfxClientContext* context, UINT64 windowID)
+/**
+ * DeleteSurface with software GDI: detach the RemoteApp window, then let gdi delete the surface
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT xf_DeleteSurfaceSoftwareGdi(RdpgfxClientContext* context,
+                                        const RDPGFX_DELETE_SURFACE_PDU* deleteSurface)
 {
 	WINPR_ASSERT(context);
+	WINPR_ASSERT(deleteSurface);
+
 	rdpGdi* gdi = (rdpGdi*)context->custom;
 	WINPR_ASSERT(gdi);
 
 	xfContext* xfc = (xfContext*)gdi->context;
-	WINPR_ASSERT(gdi->context);
+	WINPR_ASSERT(xfc);
+	WINPR_ASSERT(xfc->gdiDeleteSurface);
 
-	if (freerdp_settings_get_bool(gdi->context->settings, FreeRDP_RemoteApplicationMode))
-	{
-		xfAppWindow* appWindow = xf_rail_get_window(xfc, windowID, FALSE);
-		if (appWindow)
-			xf_AppWindowDestroyImage(appWindow);
-		xf_rail_return_window(appWindow, FALSE);
-	}
+	/* recursive, gdi's DeleteSurface takes it again */
+	EnterCriticalSection(&context->mux);
+	const gdiGfxSurface* surface =
+	    (const gdiGfxSurface*)context->GetSurfaceData(context, deleteSurface->surfaceId);
+	if (surface)
+		xf_DetachWindowFromSurface(context, surface);
 
-	WLog_WARN(TAG, "function not implemented");
-	return CHANNEL_RC_OK;
+	const UINT status = xfc->gdiDeleteSurface(context, deleteSurface);
+	LeaveCriticalSection(&context->mux);
+	return status;
 }
 
 static UINT xf_UpdateWindowFromSurface(RdpgfxClientContext* context, gdiGfxSurface* surface)
@@ -524,9 +590,13 @@ void xf_graphics_pipeline_init(xfContext* xfc, RdpgfxClientContext* gfx)
 		gfx->CreateSurface = xf_CreateSurface;
 		gfx->DeleteSurface = xf_DeleteSurface;
 	}
+	else
+	{
+		xfc->gdiDeleteSurface = gfx->DeleteSurface;
+		gfx->DeleteSurface = xf_DeleteSurfaceSoftwareGdi;
+	}
 
 	gfx->UpdateWindowFromSurface = xf_UpdateWindowFromSurface;
-	gfx->UnmapWindowForSurface = xf_UnmapWindowForSurface;
 }
 
 void xf_graphics_pipeline_uninit(xfContext* xfc, RdpgfxClientContext* gfx)

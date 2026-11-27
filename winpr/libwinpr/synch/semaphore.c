@@ -30,6 +30,7 @@
 #ifndef _WIN32
 
 #include <errno.h>
+#include <fcntl.h>
 #include "../handle/handle.h"
 #include "../log.h"
 #define TAG WINPR_TAG("synch.semaphore")
@@ -100,7 +101,6 @@ BOOL SemaphoreCloseHandle(HANDLE handle)
 	sem_destroy((winpr_sem_t*)semaphore->sem);
 #endif
 #endif
-	free(semaphore);
 	return TRUE;
 }
 
@@ -143,12 +143,28 @@ HANDLE CreateSemaphoreW(WINPR_ATTR_UNUSED LPSECURITY_ATTRIBUTES lpSemaphoreAttri
 	semaphore->common.ops = &ops;
 #ifdef WINPR_PIPE_SEMAPHORE
 
+#ifdef WINPR_HAVE_PIPE2
+	if (pipe2(semaphore->pipe_fd, O_CLOEXEC) < 0)
+#else
 	if (pipe(semaphore->pipe_fd) < 0)
+#endif
 	{
 		WLog_ERR(TAG, "failed to create semaphore");
 		free(semaphore);
 		return nullptr;
 	}
+
+#ifndef WINPR_HAVE_PIPE2
+	if (!winpr_set_cloexec(semaphore->pipe_fd[0], TRUE) ||
+	    !winpr_set_cloexec(semaphore->pipe_fd[1], TRUE))
+	{
+		WLog_ERR(TAG, "failed to set close-on-exec on semaphore pipe");
+		close(semaphore->pipe_fd[0]);
+		close(semaphore->pipe_fd[1]);
+		free(semaphore);
+		return nullptr;
+	}
+#endif
 
 	while (lInitialCount > 0)
 	{

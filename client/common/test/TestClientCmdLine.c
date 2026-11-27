@@ -1,3 +1,5 @@
+#include <freerdp/config.h>
+
 #include <freerdp/client.h>
 #include <freerdp/client/cmdline.h>
 #include <freerdp/settings.h>
@@ -7,6 +9,7 @@
 #include <winpr/collections.h>
 
 typedef BOOL (*validate_settings_pr)(rdpSettings* settings);
+typedef void (*setup_settings_pr)(rdpSettings* settings);
 
 #define printref() printf("%s:%d: in function %-40s:", __FILE__, __LINE__, __func__)
 
@@ -41,7 +44,8 @@ static void print_test_title(int argc, char** argv)
 }
 
 static inline BOOL testcase(const char* name, char** argv, size_t argc, int expected_return,
-                            validate_settings_pr validate_settings)
+                            validate_settings_pr validate_settings,
+                            setup_settings_pr setup_settings)
 {
 	int status = 0;
 	BOOL valid_settings = TRUE;
@@ -56,6 +60,9 @@ static inline BOOL testcase(const char* name, char** argv, size_t argc, int expe
 		TEST_ERROR("Test %s could not allocate settings!\n", name);
 		return FALSE;
 	}
+
+	if (setup_settings)
+		setup_settings(settings);
 
 	status = freerdp_client_settings_parse_command_line(settings, (int)argc, argv, FALSE);
 
@@ -88,6 +95,44 @@ static inline BOOL testcase(const char* name, char** argv, size_t argc, int expe
 #define DRIVE_REDIRECT_PATH "/tmp"
 #endif
 
+static BOOL check_settings_gateway_response_timeout(rdpSettings* settings, UINT32 expected)
+{
+	const UINT32 val = freerdp_settings_get_uint32(settings, FreeRDP_GatewayResponseTimeout);
+
+	if (val != expected)
+	{
+		TEST_FAILURE("Expected GatewayResponseTimeout = %" PRIu32 ", but got %" PRIu32 "!\n",
+		             expected, val);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static BOOL check_settings_gateway_response_timeout_default(rdpSettings* settings)
+{
+	return check_settings_gateway_response_timeout(settings, 15000);
+}
+
+static BOOL check_settings_gateway_response_timeout_custom(rdpSettings* settings)
+{
+	return check_settings_gateway_response_timeout(settings, 120000);
+}
+
+static const char test_aad_user_agent[] = "TestAgent/1.0 (KHTML, like Gecko)";
+
+static BOOL check_settings_aad_user_agent(rdpSettings* settings)
+{
+	const char* ua = freerdp_settings_get_string(settings, FreeRDP_AadAuthUserAgent);
+	if (!ua || (strcmp(ua, test_aad_user_agent) != 0))
+	{
+		TEST_FAILURE("Expected AadAuthUserAgent = \"%s\", but got %s!\n", test_aad_user_agent,
+		             ua ? ua : "(null)");
+		return FALSE;
+	}
+	return TRUE;
+}
+
 static BOOL check_settings_smartcard_no_redirection(rdpSettings* settings)
 {
 	BOOL result = TRUE;
@@ -107,6 +152,251 @@ static BOOL check_settings_smartcard_no_redirection(rdpSettings* settings)
 	return result;
 }
 
+#ifndef TEST_SOURCE_DIR
+#error "TEST_SOURCE_DIR must be defined to the test source directory"
+#endif
+#define DISABLED_DISPLAY_OPTIONS_RDP TEST_SOURCE_DIR "/rdp-cmdline/disabled-display-options.rdp"
+
+static BOOL check_settings_multimon_disabled(rdpSettings* settings)
+{
+	BOOL result = TRUE;
+
+	if (freerdp_settings_get_bool(settings, FreeRDP_UseMultimon))
+	{
+		TEST_FAILURE("Expected UseMultimon = FALSE, but UseMultimon = TRUE!\n");
+		result = FALSE;
+	}
+
+	if (freerdp_settings_get_bool(settings, FreeRDP_ForceMultimon))
+	{
+		TEST_FAILURE("Expected ForceMultimon = FALSE, but ForceMultimon = TRUE!\n");
+		result = FALSE;
+	}
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_SmartSizing))
+	{
+		TEST_FAILURE("Expected SmartSizing = TRUE, but SmartSizing = FALSE!\n");
+		result = FALSE;
+	}
+
+	return result;
+}
+
+static BOOL check_settings_smart_sizing_disabled(rdpSettings* settings)
+{
+	BOOL result = TRUE;
+
+	if (freerdp_settings_get_bool(settings, FreeRDP_SmartSizing))
+	{
+		TEST_FAILURE("Expected SmartSizing = FALSE, but SmartSizing = TRUE!\n");
+		result = FALSE;
+	}
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_DynamicResolutionUpdate))
+	{
+		TEST_FAILURE(
+		    "Expected DynamicResolutionUpdate = TRUE, but DynamicResolutionUpdate = FALSE!\n");
+		result = FALSE;
+	}
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_UseMultimon))
+	{
+		TEST_FAILURE("Expected UseMultimon = TRUE, but UseMultimon = FALSE!\n");
+		result = FALSE;
+	}
+
+	return result;
+}
+
+static BOOL check_settings_multimon_enabled(rdpSettings* settings)
+{
+	BOOL result = TRUE;
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_UseMultimon))
+	{
+		TEST_FAILURE("Expected UseMultimon = TRUE, but UseMultimon = FALSE!\n");
+		result = FALSE;
+	}
+
+	return result;
+}
+
+static void setup_settings_multimon_force(rdpSettings* settings)
+{
+	(void)freerdp_settings_set_bool(settings, FreeRDP_ForceMultimon, TRUE);
+}
+
+static BOOL check_settings_multimon_force(rdpSettings* settings)
+{
+	BOOL result = TRUE;
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_UseMultimon))
+	{
+		TEST_FAILURE("Expected UseMultimon = TRUE, but UseMultimon = FALSE!\n");
+		result = FALSE;
+	}
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_ForceMultimon))
+	{
+		TEST_FAILURE("Expected ForceMultimon = TRUE, but ForceMultimon = FALSE!\n");
+		result = FALSE;
+	}
+
+	return result;
+}
+
+static BOOL check_settings_smart_sizing_size(rdpSettings* settings)
+{
+	BOOL result = TRUE;
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_SmartSizing))
+	{
+		TEST_FAILURE("Expected SmartSizing = TRUE, but SmartSizing = FALSE!\n");
+		result = FALSE;
+	}
+
+	if (freerdp_settings_get_uint32(settings, FreeRDP_SmartSizingWidth) != 1024)
+	{
+		TEST_FAILURE("Expected SmartSizingWidth = 1024, but SmartSizingWidth = %u!\n",
+		             (unsigned)freerdp_settings_get_uint32(settings, FreeRDP_SmartSizingWidth));
+		result = FALSE;
+	}
+
+	if (freerdp_settings_get_uint32(settings, FreeRDP_SmartSizingHeight) != 768)
+	{
+		TEST_FAILURE("Expected SmartSizingHeight = 768, but SmartSizingHeight = %u!\n",
+		             (unsigned)freerdp_settings_get_uint32(settings, FreeRDP_SmartSizingHeight));
+		result = FALSE;
+	}
+
+	return result;
+}
+
+#if defined(WITH_GFX_AV1)
+static BOOL check_settings_gfx_av1(rdpSettings* settings)
+{
+	BOOL result = TRUE;
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_GfxCodecAV1))
+	{
+		TEST_FAILURE("Expected GfxCodecAV1 = TRUE, but GfxCodecAV1 = FALSE!\n");
+		result = FALSE;
+	}
+
+	return result;
+}
+#endif
+
+static BOOL check_settings_gfx_without_h264(rdpSettings* settings)
+{
+	BOOL result = TRUE;
+
+	if (freerdp_settings_get_uint32(settings, FreeRDP_ConnectionType) != CONNECTION_TYPE_AUTODETECT)
+	{
+		TEST_FAILURE("Expected ConnectionType = AUTODETECT, but ConnectionType = %u!\n",
+		             (unsigned)freerdp_settings_get_uint32(settings, FreeRDP_ConnectionType));
+		result = FALSE;
+	}
+
+	if (freerdp_settings_get_bool(settings, FreeRDP_GfxH264) ||
+	    freerdp_settings_get_bool(settings, FreeRDP_GfxAVC444) ||
+	    freerdp_settings_get_bool(settings, FreeRDP_GfxAVC444v2))
+	{
+		TEST_FAILURE(
+		    "Expected the H.264 codecs off as /gfx asked, but /network:auto turned them on!\n");
+		result = FALSE;
+	}
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_GfxProgressive))
+	{
+		TEST_FAILURE("Expected GfxProgressive = TRUE, but GfxProgressive = FALSE!\n");
+		result = FALSE;
+	}
+
+	return result;
+}
+
+static BOOL check_settings_network_auto_h264(rdpSettings* settings)
+{
+	BOOL result = TRUE;
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_GfxH264) ||
+	    !freerdp_settings_get_bool(settings, FreeRDP_GfxAVC444))
+	{
+		TEST_FAILURE("Expected /network:auto alone to turn the H.264 codecs on!\n");
+		result = FALSE;
+	}
+
+	return result;
+}
+
+static BOOL check_settings_modem_with_fonts(rdpSettings* settings)
+{
+	BOOL result = TRUE;
+
+	if (freerdp_settings_get_uint32(settings, FreeRDP_ConnectionType) != CONNECTION_TYPE_MODEM)
+	{
+		TEST_FAILURE("Expected ConnectionType = MODEM, but ConnectionType = %u!\n",
+		             (unsigned)freerdp_settings_get_uint32(settings, FreeRDP_ConnectionType));
+		result = FALSE;
+	}
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_AllowFontSmoothing))
+	{
+		TEST_FAILURE("Expected AllowFontSmoothing = TRUE as +fonts asked, but /network:modem "
+		             "turned it off!\n");
+		result = FALSE;
+	}
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_DisableWallpaper))
+	{
+		TEST_FAILURE("Expected DisableWallpaper = TRUE, the default of /network:modem!\n");
+		result = FALSE;
+	}
+
+	return result;
+}
+
+/* Mirrors the position bits private to parse_floatbar_options() in cmdline.c. */
+#define FLOATBAR_FLAG_POSITION_MASK 0xC0u
+#define FLOATBAR_FLAG_POSITION_LEFT 0x40u
+#define FLOATBAR_FLAG_POSITION_RIGHT 0x80u
+
+WINPR_ATTR_NODISCARD
+static BOOL check_floatbar_position(rdpSettings* settings, UINT32 expected_position_bits)
+{
+	const UINT32 floatbar = freerdp_settings_get_uint32(settings, FreeRDP_Floatbar);
+	const UINT32 actual_position_bits = floatbar & FLOATBAR_FLAG_POSITION_MASK;
+
+	if (actual_position_bits != expected_position_bits)
+	{
+		TEST_FAILURE("Expected Floatbar position bits 0x%02" PRIx32 ", got 0x%02" PRIx32
+		             " (Floatbar=0x%08" PRIx32 ")\n",
+		             expected_position_bits, actual_position_bits, floatbar);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+WINPR_ATTR_NODISCARD
+static BOOL check_settings_floatbar_position_default(rdpSettings* settings)
+{
+	return check_floatbar_position(settings, 0);
+}
+
+WINPR_ATTR_NODISCARD
+static BOOL check_settings_floatbar_position_left(rdpSettings* settings)
+{
+	return check_floatbar_position(settings, FLOATBAR_FLAG_POSITION_LEFT);
+}
+
+WINPR_ATTR_NODISCARD
+static BOOL check_settings_floatbar_position_right(rdpSettings* settings)
+{
+	return check_floatbar_position(settings, FLOATBAR_FLAG_POSITION_RIGHT);
+}
+
 typedef struct
 {
 	int expected_status;
@@ -117,6 +407,7 @@ typedef struct
 		int index;
 		const char* expected_value;
 	} modified_arguments[8];
+	setup_settings_pr setup_settings;
 } test;
 
 // NOLINTBEGIN(bugprone-suspicious-missing-comma)
@@ -205,6 +496,136 @@ static const test tests[] = {
 	  check_settings_smartcard_no_redirection,
 	  { "testfreerdp", "/sound", "/drive:media,/foo/bar/blabla", "/v:test.freerdp.com", nullptr },
 	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_gateway_response_timeout_default,
+	  { "testfreerdp", "/gateway:type:arm,g:gw.contoso.com", "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_gateway_response_timeout_custom,
+	  { "testfreerdp", "/gateway:type:arm,g:gw.contoso.com,timeout:120000", "/v:test.freerdp.com",
+	    nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_gateway_response_timeout_custom,
+	  { "testfreerdp", "/gateway:type:http,g:gw.contoso.com,timeout:120000", "/v:test.freerdp.com",
+	    nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ COMMAND_LINE_ERROR,
+	  check_settings_gateway_response_timeout_default,
+	  { "testfreerdp", "/gateway:type:arm,g:gw.contoso.com,timeout:0", "/v:test.freerdp.com",
+	    nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ COMMAND_LINE_ERROR,
+	  check_settings_gateway_response_timeout_default,
+	  { "testfreerdp", "/gateway:type:arm,g:gw.contoso.com,timeout:abc", "/v:test.freerdp.com",
+	    nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_aad_user_agent,
+	  { "testfreerdp", "/azure:tenantid:common,\"user-agent:TestAgent/1.0 (KHTML, like Gecko)\"",
+	    "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_multimon_disabled,
+	  { "testfreerdp", DISABLED_DISPLAY_OPTIONS_RDP, "/multimon:off", nullptr },
+	  { WINPR_C_ARRAY_INIT },
+	  setup_settings_multimon_force },
+	{ 0,
+	  check_settings_multimon_disabled,
+	  { "testfreerdp", DISABLED_DISPLAY_OPTIONS_RDP, "-multimon", nullptr },
+	  { WINPR_C_ARRAY_INIT },
+	  setup_settings_multimon_force },
+	{ 0,
+	  check_settings_smart_sizing_disabled,
+	  { "testfreerdp", DISABLED_DISPLAY_OPTIONS_RDP, "-smart-sizing", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_smart_sizing_disabled,
+	  { "testfreerdp", DISABLED_DISPLAY_OPTIONS_RDP, "/smart-sizing:off", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_multimon_force,
+	  { "testfreerdp", "--multimon", "force", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_smart_sizing_size,
+	  { "testfreerdp", "--smart-sizing", "1024x768", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ COMMAND_LINE_ERROR_UNEXPECTED_VALUE,
+	  check_settings_smartcard_no_redirection,
+	  { "testfreerdp", "/multimon:garbage", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ COMMAND_LINE_ERROR_UNEXPECTED_VALUE,
+	  check_settings_smartcard_no_redirection,
+	  { "testfreerdp", "/smart-sizing:garbage", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ COMMAND_LINE_ERROR_UNEXPECTED_VALUE,
+	  check_settings_smartcard_no_redirection,
+	  { "testfreerdp", "/multimon:", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ COMMAND_LINE_ERROR_UNEXPECTED_VALUE,
+	  check_settings_smartcard_no_redirection,
+	  { "testfreerdp", "/smart-sizing:", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_multimon_enabled,
+	  { "testfreerdp", "+multimon", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+#if defined(WITH_GFX_H264)
+	{ 0,
+	  check_settings_gfx_without_h264,
+	  { "testfreerdp", "/gfx:progressive,AVC420:off,AVC444:off", "/network:auto",
+	    "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_gfx_without_h264,
+	  { "testfreerdp", "/network:auto", "/gfx:progressive,AVC420:off,AVC444:off",
+	    "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_network_auto_h264,
+	  { "testfreerdp", "/network:auto", "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+#endif
+#if defined(WITH_GFX_AV1)
+	{ 0,
+	  check_settings_gfx_av1,
+	  { "testfreerdp", "/gfx:AV1", "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_gfx_av1,
+	  { "testfreerdp", "/gfx:AV1:on", "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+#endif
+	{ 0,
+	  check_settings_modem_with_fonts,
+	  { "testfreerdp", "+fonts", "/network:modem", "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_floatbar_position_default,
+	  { "testfreerdp", "/floatbar", "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_floatbar_position_left,
+	  { "testfreerdp", "/floatbar:position:left", "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_floatbar_position_right,
+	  { "testfreerdp", "/floatbar:position:right", "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_floatbar_position_default,
+	  { "testfreerdp", "/floatbar:position:center", "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ 0,
+	  check_settings_floatbar_position_left,
+	  { "testfreerdp", "/floatbar:sticky:on,default:visible,show:always,position:left",
+	    "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
+	{ COMMAND_LINE_ERROR_UNEXPECTED_VALUE,
+	  nullptr,
+	  { "testfreerdp", "/floatbar:position:bogus", "/v:test.freerdp.com", nullptr },
+	  { WINPR_C_ARRAY_INIT } },
 };
 // NOLINTEND(bugprone-suspicious-missing-comma)
 
@@ -242,7 +663,8 @@ int TestClientCmdLine(int argc, char* argv[])
 
 		const int len = string_list_length((const char* const*)command_line);
 		if (!testcase(__func__, command_line, WINPR_ASSERTING_INT_CAST(size_t, len),
-		              current->expected_status, current->validate_settings))
+		              current->expected_status, current->validate_settings,
+		              current->setup_settings))
 		{
 			TEST_FAILURE("parsing arguments.\n");
 			failure = 1;

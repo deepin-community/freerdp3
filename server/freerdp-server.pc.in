@@ -6,7 +6,7 @@ libs=-lfreerdp-server@FREERDP_API_VERSION@
 
 Name: FreeRDP server
 Description: FreeRDP: A Remote Desktop Protocol Implementation
-URL: http://www.freerdp.com/
+URL: https://freerdp.com/
 Version: @FREERDP_VERSION@
 Requires: @FREERDP_SERVER_PC_REQUIRES@
 Requires.private: @FREERDP_SERVER_PC_REQUIRES_PRIVATE@

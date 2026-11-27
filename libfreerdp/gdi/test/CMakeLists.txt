@@ -14,6 +14,7 @@ set(${MODULE_PREFIX}_TESTS
     TestGdiCreate.c
     TestGdiEllipse.c
     TestGdiClip.c
+    TestGdiGfx.c
 )
 
 create_test_sourcelist(${MODULE_PREFIX}_SRCS ${${MODULE_PREFIX}_DRIVER} ${${MODULE_PREFIX}_TESTS})
@@ -21,17 +22,17 @@ create_test_sourcelist(${MODULE_PREFIX}_SRCS ${${MODULE_PREFIX}_DRIVER} ${${MODU
 include_directories(..)
 
 add_library(helpers STATIC helpers.c)
-target_link_libraries(helpers freerdp)
+target_link_libraries(helpers PRIVATE freerdp)
 
 add_executable(${MODULE_NAME} ${${MODULE_PREFIX}_SRCS})
 
-target_link_libraries(${MODULE_NAME} winpr freerdp helpers)
+target_link_libraries(${MODULE_NAME} PRIVATE freerdp helpers)
 
 set_target_properties(${MODULE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TESTING_OUTPUT_DIRECTORY}")
 
 foreach(test ${${MODULE_PREFIX}_TESTS})
   get_filename_component(TestName ${test} NAME_WE)
-  add_test(${TestName} ${TESTING_OUTPUT_DIRECTORY}/${MODULE_NAME} ${TestName})
+  add_test(NAME ${TestName} COMMAND ${MODULE_NAME} ${TestName})
 endforeach()
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "FreeRDP/Test")

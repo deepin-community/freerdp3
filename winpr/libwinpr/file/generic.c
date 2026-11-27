@@ -48,10 +48,17 @@
 #include <libgen.h>
 #include <errno.h>
 
+#include <arpa/inet.h>
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
-
+#if defined(WINPR_HAVE_SYS_XATTR_H)
+#include <sys/xattr.h>
+#endif
+#if defined(WINPR_HAVE_LINUX_MSDOS_FS_H)
+#include <linux/msdos_fs.h>
+#include <sys/ioctl.h>
+#endif
 #ifdef WINPR_HAVE_AIO_H
 #undef WINPR_HAVE_AIO_H /* disable for now, incomplete */
 #endif
@@ -69,6 +76,7 @@
 #include "../handle/handle.h"
 
 #include "../pipe/pipe.h"
+#include "../path/path.h"
 
 #include "file.h"
 
@@ -182,9 +190,13 @@ static pthread_once_t HandleCreatorsInitialized = PTHREAD_ONCE_INIT;
 #include "../comm/comm.h"
 #include "namedPipeClient.h"
 
+WINPR_ATTR_NODISCARD
 static DWORD FileAttributesFromStat(const char* path, const struct stat* fileStat);
+
+WINPR_ATTR_NODISCARD
 static BOOL FindDataFromStat(const char* path, const struct stat* fileStat,
                              LPWIN32_FIND_DATAA lpFindFileData);
+static void SetDosAttributesToXAttr(const char* path, DWORD dwFileAttributes);
 
 static void HandleCreatorsInit(void)
 {
@@ -231,6 +243,7 @@ int InstallAioSignalHandler()
 
 #endif /* WINPR_HAVE_AIO_H */
 
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
 HANDLE CreateFileA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
                    LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition,
                    DWORD dwFlagsAndAttributes, HANDLE hTemplateFile)
@@ -238,6 +251,7 @@ HANDLE CreateFileA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
 	return winpr_CreateFile(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
 	                        dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 }
+#endif
 
 HANDLE winpr_CreateFile(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
                         LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition,
@@ -300,10 +314,12 @@ fail:
 	return hdl;
 }
 
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
 BOOL DeleteFileA(LPCSTR lpFileName)
 {
 	return winpr_DeleteFile(lpFileName);
 }
+#endif
 
 BOOL DeleteFileW(LPCWSTR lpFileName)
 {
@@ -522,7 +538,7 @@ BOOL WINAPI GetFileAttributesExW(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS fInf
 DWORD WINAPI GetFileAttributesA(LPCSTR lpFileName)
 {
 	struct stat fileStat = WINPR_C_ARRAY_INIT;
-	if (stat(lpFileName, &fileStat) != 0)
+	if (lstat(lpFileName, &fileStat) != 0)
 		return INVALID_FILE_ATTRIBUTES;
 
 	return FileAttributesFromStat(lpFileName, &fileStat);
@@ -567,10 +583,11 @@ BOOL GetFileInformationByHandle(HANDLE hFile, LPBY_HANDLE_FILE_INFORMATION lpFil
 
 static char* append(char* buffer, size_t size, const char* append)
 {
-	winpr_str_append(append, buffer, size, "|");
+	(void)winpr_str_append(append, buffer, size, "|");
 	return buffer;
 }
 
+WINPR_ATTR_NODISCARD
 static const char* flagsToStr(char* buffer, size_t size, DWORD flags)
 {
 	char strflags[32] = WINPR_C_ARRAY_INIT;
@@ -614,13 +631,16 @@ BOOL SetFileAttributesA(LPCSTR lpFileName, DWORD dwFileAttributes)
 {
 	BOOL rc = FALSE;
 #ifdef WINPR_HAVE_FCNTL_H
-	const uint32_t mask = ~(FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_NORMAL);
+	const uint32_t mask = ~(FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_NORMAL |
+	                        FILE_ATTRIBUTE_ARCHIVE | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
 	if (dwFileAttributes & mask)
 	{
 		char buffer[8192] = WINPR_C_ARRAY_INIT;
 		const char* flags = flagsToStr(buffer, sizeof(buffer), dwFileAttributes & mask);
 		WLog_WARN(TAG, "Unsupported flags %s, ignoring!", flags);
 	}
+
+	SetDosAttributesToXAttr(lpFileName, dwFileAttributes);
 
 	int fd = open(lpFileName, O_RDONLY);
 	if (fd < 0)
@@ -641,6 +661,20 @@ BOOL SetFileAttributesA(LPCSTR lpFileName, DWORD dwFileAttributes)
 
 	if (fchmod(fd, st.st_mode) != 0)
 		goto fail;
+
+#ifdef UF_HIDDEN
+	if (dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)
+	{
+		st.st_flags |= UF_HIDDEN;
+	}
+	else
+	{
+		st.st_flags &= ~UF_HIDDEN;
+	}
+	if (fchflags(fd, st.st_flags) != 0)
+		if (errno != ENOTSUP && errno != EOPNOTSUPP && errno != EINVAL && errno != ENOTTY)
+			goto fail;
+#endif
 
 	rc = TRUE;
 fail:
@@ -935,6 +969,7 @@ fail:
 	return nullptr;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL is_valid_file_search_handle(HANDLE handle)
 {
 	WIN32_FILE_SEARCH* pFileSearch = (WIN32_FILE_SEARCH*)handle;
@@ -947,10 +982,167 @@ static BOOL is_valid_file_search_handle(HANDLE handle)
 	return TRUE;
 }
 
+WINPR_ATTR_NODISCARD
+static DWORD GetDosAttributesFromXAttr(WINPR_ATTR_UNUSED const char* path)
+{
+#if defined(WINPR_HAVE_SYS_XATTR_H) || defined(WINPR_HAVE_LINUX_MSDOS_FS_H)
+	DWORD dwFileAttributes = 0;
+	uint32_t intAttr = 0;
+	ssize_t length = -1;
+	const DWORD supportedMask = FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN |
+	                            FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_DIRECTORY |
+	                            FILE_ATTRIBUTE_ARCHIVE | FILE_ATTRIBUTE_NORMAL;
+
+#if defined(WINPR_HAVE_SYS_XATTR_H)
+	length = getxattr(path, "system.ntfs_attrib_be", &intAttr, sizeof(intAttr));
+	if (length >= 0)
+	{
+		intAttr = ntohl(intAttr);
+		dwFileAttributes = intAttr;
+	}
+#endif
+
+#if defined(WINPR_HAVE_SYS_XATTR_H)
+	if ((dwFileAttributes & supportedMask) == 0)
+	{
+		length = getxattr(path, "user.cifs.dosattrib", &intAttr, sizeof(intAttr));
+		if (length >= 0)
+			dwFileAttributes = intAttr;
+	}
+#endif
+
+	if ((dwFileAttributes & supportedMask) == 0)
+	{
+#if defined(WINPR_HAVE_LINUX_MSDOS_FS_H)
+		int fd = open(path, O_RDONLY | O_CLOEXEC);
+		if (fd != -1)
+		{
+			const int rc = ioctl(fd, FAT_IOCTL_GET_ATTRIBUTES, &intAttr);
+			if (rc < 0)
+			{
+				char buffer[64] = WINPR_C_ARRAY_INIT;
+				WLog_DBG(TAG, "ioctl(%d, FAT_IOCTL_GET_ATTRIBUTES) failed with %s", fd,
+				         winpr_strerror(errno, buffer, sizeof(buffer)));
+			}
+			else
+				dwFileAttributes = intAttr;
+
+			const int crc = close(fd);
+			if (crc < 0)
+			{
+				char buffer[64] = WINPR_C_ARRAY_INIT;
+				WLog_DBG(TAG, "close(%d) failed with %s", fd,
+				         winpr_strerror(errno, buffer, sizeof(buffer)));
+			}
+		}
+#endif
+	}
+
+#if defined(WINPR_HAVE_SYS_XATTR_H)
+	if ((dwFileAttributes & supportedMask) == 0)
+	{
+		// if no xattr is set, default to archive attribute
+		dwFileAttributes = FILE_ATTRIBUTE_ARCHIVE;
+
+		char attrValue[11] = WINPR_C_ARRAY_INIT;
+		length = getxattr(path, "user.DOSATTRIB", attrValue, sizeof(attrValue) - 1);
+		if (length >= 0)
+		{
+			errno = 0;
+			const unsigned long val = strtoul(attrValue, nullptr, 0);
+			if (errno == 0)
+				dwFileAttributes = WINPR_ASSERTING_INT_CAST(DWORD, val);
+		}
+	}
+#else
+	if ((dwFileAttributes & supportedMask) == 0)
+	{
+		/* fallback default when no xattr available */
+		dwFileAttributes = FILE_ATTRIBUTE_ARCHIVE;
+	}
+#endif
+
+	return dwFileAttributes;
+#else
+	return 0;
+#endif
+}
+
+static void SetDosAttributesToXAttr(const char* path, DWORD dwFileAttributes)
+{
+#if defined(WINPR_HAVE_SYS_XATTR_H) || defined(WINPR_HAVE_LINUX_MSDOS_FS_H)
+	uint32_t intAttr =
+	    dwFileAttributes & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN |
+	                        FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_ARCHIVE | FILE_ATTRIBUTE_NORMAL);
+	uint32_t intAttrBE = htonl(intAttr);
+
+#if defined(WINPR_HAVE_SYS_XATTR_H)
+	if (setxattr(path, "system.ntfs_attrib_be", &intAttrBE, sizeof(intAttrBE), 0) >= 0)
+	{
+		WLog_DBG(TAG, "Set NTFS attribute xattr for %s", path);
+		return;
+	}
+
+	/* set cifs.dosattrib xattr if it exists, otherwise set user.DOSATTRIB xattr */
+	ssize_t length = getxattr(path, "user.cifs.dosattrib", nullptr, 0);
+	if (length >= 0)
+	{
+		if (setxattr(path, "user.cifs.dosattrib", &intAttrBE, sizeof(intAttrBE), 0) >= 0)
+		{
+			WLog_DBG(TAG, "Set CIFS DOS attribute xattr for %s", path);
+			return;
+		}
+	}
+#endif
+
+	/* set FAT attributes if other methods fail */
+#if defined(WINPR_HAVE_LINUX_MSDOS_FS_H)
+	int fd = open(path, O_RDONLY | O_CLOEXEC);
+	if (fd != -1)
+	{
+		if (ioctl(fd, FAT_IOCTL_SET_ATTRIBUTES, &intAttr) != -1)
+		{
+			close(fd);
+			WLog_DBG(TAG, "Set FAT attribute for %s", path);
+			return;
+		}
+		close(fd);
+	}
+#endif
+
+#if defined(WINPR_HAVE_SYS_XATTR_H)
+	/* set user.DOSATTRIB xattr */
+
+	/* if only ARCHIVE remove attribute */
+	if (intAttr == FILE_ATTRIBUTE_ARCHIVE)
+	{
+		const int rc = removexattr(path, "user.DOSATTRIB");
+		if (rc != 0)
+		{
+			char buffer[128] = WINPR_C_ARRAY_INIT;
+			WLog_DBG(TAG, "removexattr(%s) failed with %s", path,
+			         winpr_strerror(errno, buffer, sizeof(buffer)));
+		}
+		return;
+	}
+
+	char attrValue[11] = WINPR_C_ARRAY_INIT;
+	const int written = snprintf(attrValue, sizeof(attrValue), "0x%x", intAttr);
+	if (written < 0)
+		return;
+
+	if (setxattr(path, "user.DOSATTRIB", attrValue, strlen(attrValue), 0) < 0)
+		WLog_DBG(TAG, "Failed to set DOS attribute xattr for %s", path);
+
+	WLog_DBG(TAG, "Set DOS attribute xattr for %s", path);
+#endif
+#endif
+}
+
+WINPR_ATTR_NODISCARD
 static DWORD FileAttributesFromStat(const char* path, const struct stat* fileStat)
 {
-	char* lastSep = nullptr;
-	DWORD dwFileAttributes = 0;
+	DWORD dwFileAttributes = GetDosAttributesFromXAttr(path);
 
 	if (S_ISDIR(fileStat->st_mode))
 		dwFileAttributes |= FILE_ATTRIBUTE_DIRECTORY;
@@ -958,7 +1150,7 @@ static DWORD FileAttributesFromStat(const char* path, const struct stat* fileSta
 	if (dwFileAttributes == 0)
 		dwFileAttributes = FILE_ATTRIBUTE_ARCHIVE;
 
-	lastSep = strrchr(path, '/');
+	const char* lastSep = strrchr(path, '/');
 	if (lastSep)
 	{
 		const char* name = lastSep + 1;
@@ -968,12 +1160,21 @@ static DWORD FileAttributesFromStat(const char* path, const struct stat* fileSta
 			dwFileAttributes |= FILE_ATTRIBUTE_HIDDEN;
 	}
 
+#ifdef UF_HIDDEN
+	if (fileStat->st_flags & UF_HIDDEN)
+		dwFileAttributes |= FILE_ATTRIBUTE_HIDDEN;
+#endif
+
 	if (!(fileStat->st_mode & S_IWUSR))
 		dwFileAttributes |= FILE_ATTRIBUTE_READONLY;
+
+	if (S_ISLNK(fileStat->st_mode))
+		dwFileAttributes |= FILE_ATTRIBUTE_REPARSE_POINT;
 
 	return dwFileAttributes;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL FindDataFromStat(const char* path, const struct stat* fileStat,
                              LPWIN32_FIND_DATAA lpFindFileData)
 {
@@ -1033,6 +1234,7 @@ fail:
 	return INVALID_HANDLE_VALUE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL ConvertFindDataAToW(LPWIN32_FIND_DATAA lpFindFileDataA,
                                 LPWIN32_FIND_DATAW lpFindFileDataW)
 {
@@ -1161,10 +1363,16 @@ BOOL FindNextFileA(HANDLE hFindFile, LPWIN32_FIND_DATAA lpFindFileData)
 			memcpy(fullpath + pathlen, pDirent->d_name, namelen);
 			fullpath[pathlen + namelen] = 0;
 
+			char* canonical = winpr_PathCanonicalize(fullpath);
+			free(fullpath);
+
+			if (!canonical)
+				continue;
+
 			struct stat fileStat = WINPR_C_ARRAY_INIT;
-			if (stat(fullpath, &fileStat) != 0)
+			if (stat(canonical, &fileStat) != 0)
 			{
-				free(fullpath);
+				free(canonical);
 				SetLastError(map_posix_err(errno));
 				errno = 0;
 				continue;
@@ -1173,12 +1381,12 @@ BOOL FindNextFileA(HANDLE hFindFile, LPWIN32_FIND_DATAA lpFindFileData)
 			/* Skip FIFO entries. */
 			if (S_ISFIFO(fileStat.st_mode))
 			{
-				free(fullpath);
+				free(canonical);
 				continue;
 			}
 
-			success = FindDataFromStat(fullpath, &fileStat, lpFindFileData);
-			free(fullpath);
+			success = FindDataFromStat(canonical, &fileStat, lpFindFileData);
+			free(canonical);
 			return success;
 		}
 	}
@@ -1264,10 +1472,12 @@ fail:
 	return ret;
 }
 
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
 BOOL RemoveDirectoryA(LPCSTR lpPathName)
 {
 	return winpr_RemoveDirectory(lpPathName);
 }
+#endif
 
 BOOL RemoveDirectoryW(LPCWSTR lpPathName)
 {
@@ -1288,10 +1498,12 @@ fail:
 	return ret;
 }
 
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
 BOOL MoveFileExA(LPCSTR lpExistingFileName, LPCSTR lpNewFileName, DWORD dwFlags)
 {
 	return winpr_MoveFileEx(lpExistingFileName, lpNewFileName, dwFlags);
 }
+#endif
 
 BOOL MoveFileExW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, DWORD dwFlags)
 {
@@ -1315,10 +1527,12 @@ fail:
 	return ret;
 }
 
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
 BOOL MoveFileA(LPCSTR lpExistingFileName, LPCSTR lpNewFileName)
 {
 	return winpr_MoveFileEx(lpExistingFileName, lpNewFileName, 0);
 }
+#endif
 
 BOOL MoveFileW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName)
 {

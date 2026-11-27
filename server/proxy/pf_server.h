@@ -28,6 +28,8 @@
 #include <freerdp/listener.h>
 
 #include <freerdp/server/proxy/proxy_config.h>
+#include <freerdp/server/proxy/proxy_context.h>
+#include <freerdp/private/proxy_server.h>
 #include "proxy_modules.h"
 
 struct proxy_server

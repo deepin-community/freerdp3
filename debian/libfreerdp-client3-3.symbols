@@ -1,5 +1,10 @@
 libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
 * Build-Depends-Package: freerdp-dev
+ aad_auth_helper_get_access_token@Base 3.32.0
+ aad_auth_helper_get_access_token_v@Base 3.32.0
+ aad_auth_helper_is_running@Base 3.33.0
+ aad_auth_helper_start@Base 3.32.0
+ aad_auth_helper_stop@Base 3.32.0
  channel_client_create_handler@Base 3.0.0
  client_auto_reconnect@Base 3.0.0
  client_auto_reconnect_ex@Base 3.0.0
@@ -12,11 +17,15 @@ libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
  client_cli_verify_changed_certificate_ex@Base 3.0.0
  client_common_get_access_token@Base 3.0.0
  client_common_retry_dialog@Base 3.0.0
+ client_common_save_session_info@Base 3.31.0
+ client_failsafe_get_access_token@Base 3.32.0
+ client_helper_get_access_token@Base 3.32.0
  client_rail_server_start_cmd@Base 3.0.0
  cliprdr_file_context_clear@Base 3.0.0
  cliprdr_file_context_current_flags@Base 3.0.0
  cliprdr_file_context_free@Base 3.0.0
  cliprdr_file_context_get_context@Base 3.0.0
+ cliprdr_file_context_get_local_uri_list@Base 3.33.0
  cliprdr_file_context_has_local_support@Base 3.0.0
  cliprdr_file_context_init@Base 3.0.0
  cliprdr_file_context_new@Base 3.0.0
@@ -24,6 +33,7 @@ libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
  cliprdr_file_context_notify_new_server_format_list@Base 3.0.0
  cliprdr_file_context_remote_get_flags@Base 3.0.0
  cliprdr_file_context_remote_set_flags@Base 3.0.0
+ cliprdr_file_context_set_local_clipboard_data@Base 3.33.0
  cliprdr_file_context_set_locally_available@Base 3.0.0
  cliprdr_file_context_uninit@Base 3.0.0
  cliprdr_file_context_update_client_data@Base 3.0.0
@@ -42,8 +52,10 @@ libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
  freerdp_client_context_new@Base 3.0.0
  freerdp_client_del_dynamic_channel@Base 3.0.0
  freerdp_client_del_static_channel@Base 3.0.0
+ freerdp_client_enable_translation@Base 3.33.0
  freerdp_client_encomsp_set_control@Base 3.0.0
  freerdp_client_encomsp_toggle_control@Base 3.0.0
+ freerdp_client_extract_aad_code@Base 3.32.0
  freerdp_client_get_aad_url@Base 3.16.0
  freerdp_client_get_instance@Base 3.0.0
  freerdp_client_get_thread@Base 3.0.0
@@ -76,6 +88,7 @@ libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
  freerdp_client_rdp_file_set_string_option@Base 3.0.0
  freerdp_client_send_button_event@Base 3.0.0
  freerdp_client_send_extended_button_event@Base 3.0.0
+ freerdp_client_send_key_as_unicode@Base 3.33.0
  freerdp_client_send_wheel_event@Base 3.0.0
  freerdp_client_settings_command_line_status_print@Base 3.0.0
  freerdp_client_settings_command_line_status_print_ex@Base 3.0.0
@@ -97,6 +110,7 @@ libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
  freerdp_client_write_rdp_file@Base 3.0.0
  freerdp_client_write_rdp_file_buffer@Base 3.0.0
  freerdp_generic_DVCPluginEntry@Base 3.0.0
+ freerdp_generic_DVCPluginEntryWithOptions@Base 3.33.0
  freerdp_parse_hostname@Base 3.0.0
  freerdp_parse_username@Base 3.0.0
  freerdp_rdpsnd_get_context@Base 3.0.0
@@ -106,3 +120,6 @@ libfreerdp-client3.so.3 libfreerdp-client3-3 #MINVER#
  mappedGeometryUnref@Base 3.0.0
  rail_handshake_ex_flags_to_string@Base 3.5.0
  rdpgfx_client_context_free@Base 3.0.0
+ rdpgfx_stats_max_index@Base 3.27.0
+ rdpgfx_stats_name_for_index@Base 3.27.0
+ rdpgfx_stats_value_for_index@Base 3.27.0

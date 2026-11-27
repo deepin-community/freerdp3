@@ -19,6 +19,7 @@
  */
 
 #include <freerdp/config.h>
+#include "xf_reconnect.h"
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -173,7 +174,7 @@ static BOOL xf_action_script_append(xfContext* xfc, const char* buffer, size_t s
 	WINPR_UNUSED(what);
 	WINPR_UNUSED(arg);
 
-	if (buffer || (size == 0))
+	if (!buffer || (size == 0))
 		return TRUE;
 
 	if (!ArrayList_Append(xfc->xevents, buffer))
@@ -505,7 +506,11 @@ BOOL xf_generic_ButtonEvent_(xfContext* xfc, int x, int y, int button, Window wi
 		if (flags & (PTR_FLAGS_WHEEL | PTR_FLAGS_HWHEEL))
 		{
 			if (down)
+			{
+				if (!xf_keyboard_flush_deferred_alt(xfc))
+					return FALSE;
 				freerdp_client_send_wheel_event(&xfc->common, flags);
+			}
 		}
 		else
 		{
@@ -539,6 +544,8 @@ BOOL xf_generic_ButtonEvent_(xfContext* xfc, int x, int y, int button, Window wi
 
 			xf_event_adjust_coordinates(xfc, &x, &y);
 
+			if (!xf_keyboard_flush_deferred_alt(xfc))
+				return FALSE;
 			if (extended)
 				freerdp_client_send_extended_button_event(&xfc->common, FALSE, flags, x, y);
 			else
@@ -679,8 +686,15 @@ static BOOL xf_event_FocusIn(xfContext* xfc, const XFocusInEvent* event, BOOL ap
 		xf_keyboard_release_all_keypress(xfc);
 	else
 	{
-		if (!xf_rail_send_activate(xfc, event->window, TRUE))
-			return FALSE;
+		/* Do not send TS_RAIL_ORDER_ACTIVATE to the server.
+		 *
+		 * In a RemoteApp session the server treats "this window became active"
+		 * as "the previously active window became inactive". A drop-down menu
+		 * is a separate top level window, so opening it deactivates the owner
+		 * window and Windows closes the menu again: the menu only flashes.
+		 * Skipping the notification keeps drop-down/context menus usable.
+		 *
+		 * See issues #4660, #1528 and #7460. */
 	}
 
 	xf_pointer_update_scale(xfc);
@@ -710,9 +724,17 @@ static BOOL xf_event_FocusOut(xfContext* xfc, const XFocusOutEvent* event, BOOL 
 	if (event->mode == NotifyWhileGrabbed)
 		XUngrabKeyboard(xfc->display, CurrentTime);
 
+	/* NotifyGrab matters even when the WM consumes Tab without changing focus. */
 	xf_keyboard_release_all_keypress(xfc);
 	if (app)
-		return xf_rail_send_activate(xfc, event->window, FALSE);
+	{
+		/* A pointer grab belongs to the previously focused RemoteApp window.
+		 * Keeping it would route clicks on local foreground windows back to it. */
+		xf_ungrab(xfc);
+		/* Same as in xf_event_FocusIn(): reporting the deactivation would close
+		 * a popup menu that has just been opened. */
+		return TRUE;
+	}
 
 	return TRUE;
 }
@@ -939,6 +961,13 @@ static BOOL xf_event_MapNotify(xfContext* xfc, const XMapEvent* event, BOOL app)
 			 */
 			// xf_rail_send_client_system_command(xfc, appWindow->windowId, SC_RESTORE);
 			appWindow->is_mapped = TRUE;
+			if (appWindow->surfaceStale)
+			{
+				const UINT64 windowId = appWindow->windowId;
+				const UINT32 surfaceId = appWindow->surfaceId;
+				xf_rail_return_window(appWindow, FALSE);
+				return xf_AppWindowRepaintFromSurface(xfc, windowId, surfaceId);
+			}
 		}
 		xf_rail_return_window(appWindow, FALSE);
 	}
@@ -974,6 +1003,14 @@ static BOOL xf_event_PropertyNotify(xfContext* xfc, const XPropertyEvent* event,
 	WINPR_ASSERT(xfc);
 	WINPR_ASSERT(event);
 
+	const Window root = DefaultRootWindow(xfc->display);
+	if ((event->window == root) &&
+	    ((event->atom == xfc->NET_WORKAREA) || (event->atom == xfc->NET_CURRENT_DESKTOP)))
+	{
+		if (xfc->remote_app && xfc->rail)
+			return xf_rail_schedule_workarea(xfc);
+	}
+
 	/*
 	 * This section handles sending the appropriate commands to the rail server
 	 * when the window has been minimized, maximized, restored locally
@@ -985,6 +1022,7 @@ static BOOL xf_event_PropertyNotify(xfContext* xfc, const XPropertyEvent* event,
 		BOOL status = FALSE;
 		BOOL minimized = FALSE;
 		BOOL minimizedChanged = FALSE;
+		BOOL fullscreen = FALSE;
 		unsigned long nitems = 0;
 		unsigned long bytes = 0;
 		unsigned char* prop = nullptr;
@@ -1012,7 +1050,10 @@ static BOOL xf_event_PropertyNotify(xfContext* xfc, const XPropertyEvent* event,
 				}
 				for (unsigned long i = 0; i < nitems; i++)
 				{
-					if ((Atom)((UINT16**)prop)[i] ==
+					if ((Atom)WINPR_PACKED_ALIGN_CAST(UINT16**, prop)[i] ==
+					    xfc->NET_WM_STATE_FULLSCREEN)
+						fullscreen = TRUE;
+					if ((Atom)(WINPR_PACKED_ALIGN_CAST(UINT16**, prop))[i] ==
 					    Logging_XInternAtom(xfc->log, xfc->display, "_NET_WM_STATE_MAXIMIZED_VERT",
 					                        False))
 					{
@@ -1020,7 +1061,7 @@ static BOOL xf_event_PropertyNotify(xfContext* xfc, const XPropertyEvent* event,
 							appWindow->maxVert = TRUE;
 					}
 
-					if ((Atom)((UINT16**)prop)[i] ==
+					if ((Atom)(WINPR_PACKED_ALIGN_CAST(UINT16**, prop)[i]) ==
 					    Logging_XInternAtom(xfc->log, xfc->display, "_NET_WM_STATE_MAXIMIZED_HORZ",
 					                        False))
 					{
@@ -1030,6 +1071,50 @@ static BOOL xf_event_PropertyNotify(xfContext* xfc, const XPropertyEvent* event,
 				}
 
 				XFree(prop);
+
+				if (appWindow && appWindow->rail_fullscreen_normalizing)
+				{
+					if (!fullscreen && appWindow->maxVert && appWindow->maxHorz)
+					{
+						/* Normal maximized state has been restored. */
+						appWindow->rail_fullscreen_normalizing = FALSE;
+					}
+					else
+					{
+						/* Ignore all transient WM states produced while Cinnamon
+						 * transitions from legacy fullscreen back to maximized. */
+						if (fullscreen)
+							xf_SendClientEvent(xfc, appWindow->handle, xfc->NET_WM_STATE, 4,
+							                   NET_WM_STATE_REMOVE, xfc->NET_WM_STATE_FULLSCREEN, 0,
+							                   0);
+
+						if (!appWindow->maxVert || !appWindow->maxHorz)
+							xf_SendClientEvent(xfc, appWindow->handle, xfc->NET_WM_STATE, 4,
+							                   NET_WM_STATE_ADD, xfc->NET_WM_STATE_MAXIMIZED_VERT,
+							                   xfc->NET_WM_STATE_MAXIMIZED_HORZ, 0);
+
+						goto fail;
+					}
+				}
+				else if (appWindow && fullscreen &&
+				         (appWindow->rail_state == WINDOW_SHOW_MAXIMIZED))
+				{
+					/* Cinnamon/Muffin incorrectly turns the server-driven RAIL
+					 * maximize resize into fullscreen. Normalize this over the
+					 * following PropertyNotify events without feeding transient
+					 * states back to the RAIL server. */
+					appWindow->rail_fullscreen_normalizing = TRUE;
+
+					xf_SendClientEvent(xfc, appWindow->handle, xfc->NET_WM_STATE, 4,
+					                   NET_WM_STATE_REMOVE, xfc->NET_WM_STATE_FULLSCREEN, 0, 0);
+
+					if (!appWindow->maxVert || !appWindow->maxHorz)
+						xf_SendClientEvent(xfc, appWindow->handle, xfc->NET_WM_STATE, 4,
+						                   NET_WM_STATE_ADD, xfc->NET_WM_STATE_MAXIMIZED_VERT,
+						                   xfc->NET_WM_STATE_MAXIMIZED_HORZ, 0);
+
+					goto fail;
+				}
 			}
 		}
 
@@ -1197,6 +1282,8 @@ BOOL xf_event_process(freerdp* instance, const XEvent* event)
 
 	xfContext* xfc = (xfContext*)instance->context;
 	WINPR_ASSERT(xfc);
+	if (!xf_reconnect_event(xfc, event))
+		return FALSE;
 
 	rdpSettings* settings = xfc->common.context.settings;
 	WINPR_ASSERT(settings);
@@ -1385,7 +1472,11 @@ BOOL xf_generic_RawButtonEvent_(xfContext* xfc, int button, BOOL app, BOOL down,
 		if (flags & (PTR_FLAGS_WHEEL | PTR_FLAGS_HWHEEL))
 		{
 			if (down)
+			{
+				if (!xf_keyboard_flush_deferred_alt(xfc))
+					return FALSE;
 				freerdp_client_send_wheel_event(&xfc->common, flags);
+			}
 		}
 		else
 		{
@@ -1404,6 +1495,8 @@ BOOL xf_generic_RawButtonEvent_(xfContext* xfc, int button, BOOL app, BOOL down,
 					flags |= PTR_FLAGS_DOWN;
 			}
 
+			if (!xf_keyboard_flush_deferred_alt(xfc))
+				return FALSE;
 			if (extended)
 				freerdp_client_send_extended_button_event(&xfc->common, TRUE, flags, 0, 0);
 			else
@@ -1440,11 +1533,20 @@ BOOL xf_event_update_screen(freerdp* instance)
 	}
 	else
 	{
+		BOOL redraw = FALSE;
+		UINT32 surfaceId = 0;
+		UINT64 windowId = 0;
 		xfAppWindow* appWindow = xf_AppWindowFromX11Window(xfc, xfc->exposedWindow);
 		if (appWindow)
-			xf_UpdateWindowArea(xfc, appWindow, xfc->exposedArea.x, xfc->exposedArea.y,
-			                    xfc->exposedArea.w, xfc->exposedArea.h);
+		{
+			redraw = xf_UpdateWindowArea(xfc, appWindow, xfc->exposedArea.x, xfc->exposedArea.y,
+			                             xfc->exposedArea.w, xfc->exposedArea.h);
+			surfaceId = appWindow->surfaceId;
+			windowId = appWindow->windowId;
+		}
 		xf_rail_return_window(appWindow, FALSE);
+		if (redraw)
+			xf_AppWindowRepaintFromSurface(xfc, windowId, surfaceId);
 	}
 	return TRUE;
 }

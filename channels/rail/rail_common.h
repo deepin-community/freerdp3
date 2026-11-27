@@ -26,7 +26,10 @@
 
 #include <freerdp/rail.h>
 
-#define RAIL_PDU_HEADER_LENGTH 4
+#define RAIL_PDU_HEADER_LENGTH 4u
+
+/**< Maximum expected length of any rail PDU */
+#define RAIL_PDU_MAX_LENGTH 65535ull
 
 /* Fixed length of PDUs, excluding variable lengths */
 #define RAIL_HANDSHAKE_ORDER_LENGTH 4             /* fixed */
@@ -75,12 +78,6 @@ WINPR_ATTR_NODISCARD FREERDP_LOCAL UINT rail_read_pdu_header(wStream* s, UINT16*
 WINPR_ATTR_NODISCARD
 FREERDP_LOCAL
 BOOL rail_write_pdu_header(wStream* s, UINT16 orderType, UINT16 orderLength);
-
-WINPR_ATTR_NODISCARD FREERDP_LOCAL UINT
-rail_write_unicode_string(wStream* s, const RAIL_UNICODE_STRING* unicode_string);
-
-WINPR_ATTR_NODISCARD FREERDP_LOCAL UINT
-rail_write_unicode_string_value(wStream* s, const RAIL_UNICODE_STRING* unicode_string);
 
 WINPR_ATTR_NODISCARD FREERDP_LOCAL UINT rail_read_sysparam_order(wStream* s,
                                                                  RAIL_SYSPARAM_ORDER* sysparam,

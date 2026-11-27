@@ -20,6 +20,8 @@
 #ifndef FREERDP_LIB_CORE_CLIENT_H
 #define FREERDP_LIB_CORE_CLIENT_H
 
+#include <freerdp/config.h>
+
 #include <winpr/crt.h>
 #include <winpr/stream.h>
 #include <winpr/wtsapi.h>
@@ -52,8 +54,7 @@ typedef struct
 
 typedef struct
 {
-	char name[CHANNEL_NAME_LEN + 1];
-	uint32_t OpenHandle;
+	StaticClientChannelStat stats;
 	ULONG options;
 	int flags;
 	void* pInterface;
@@ -61,6 +62,11 @@ typedef struct
 	void* lpUserParam;
 	PCHANNEL_OPEN_EVENT_FN pChannelOpenEventProc;
 	PCHANNEL_OPEN_EVENT_EX_FN pChannelOpenEventProcEx;
+#if defined(WITH_RDPEUDP)
+	/* The dynamic channel the data is sent on instead, see freerdp_channels_set_static_bridge.
+	 * Set under channels->channelsLock. */
+	struct rdp_channel_bridge* bridge;
+#endif
 } CHANNEL_OPEN_DATA;
 
 typedef struct
@@ -114,7 +120,6 @@ struct rdp_channels
 FREERDP_LOCAL void freerdp_channels_free(rdpChannels* channels);
 
 WINPR_ATTR_MALLOC(freerdp_channels_free, 1)
-WINPR_ATTR_NODISCARD
 FREERDP_LOCAL rdpChannels* freerdp_channels_new(freerdp* instance);
 
 FREERDP_LOCAL UINT freerdp_channels_disconnect(rdpChannels* channels, freerdp* instance);

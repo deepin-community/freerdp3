@@ -58,6 +58,20 @@ BOOL sdl_log_error_ex(Sint32 res, wLog* log, const char* what, const char* file,
 	return TRUE;
 }
 
+[[nodiscard]] static Uint32 SDLCALL sdl_push_update_cb(WINPR_ATTR_UNUSED void* userdata,
+                                                       WINPR_ATTR_UNUSED SDL_TimerID timerID,
+                                                       WINPR_ATTR_UNUSED Uint32 interval)
+{
+	if (!sdl_push_user_event(SDL_EVENT_USER_UPDATE))
+		WLog_WARN(CLIENT_TAG("sdl.utils"), "sdl_push_user_event failed");
+	return 0;
+}
+
+bool sdl_push_update_after(Uint32 ms)
+{
+	return SDL_AddTimer(ms, sdl_push_update_cb, nullptr) != 0;
+}
+
 bool sdl_push_user_event(Uint32 type, ...)
 {
 	SDL_Event ev = {};
@@ -135,6 +149,10 @@ bool sdl_push_user_event(Uint32 type, ...)
 		case SDL_EVENT_USER_WINDOW_RESIZEABLE:
 			event->data1 = va_arg(ap, void*);
 			event->code = va_arg(ap, int);
+			break;
+		case SDL_EVENT_USER_RAIL_MOVE:
+			event->data1 = reinterpret_cast<void*>(static_cast<uintptr_t>(va_arg(ap, UINT32)));
+			event->code = va_arg(ap, int); /* RAIL_WMSZ_* move/resize type */
 			break;
 		case SDL_EVENT_USER_WINDOW_MINIMIZE:
 		case SDL_EVENT_USER_QUIT:
@@ -266,6 +284,20 @@ namespace sdl::utils
 			EV_CASE_STR(SDL_EVENT_DISPLAY_REMOVED);
 			EV_CASE_STR(SDL_EVENT_DISPLAY_MOVED);
 			EV_CASE_STR(SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED);
+#if SDL_VERSION_ATLEAST(3, 4, 0)
+			EV_CASE_STR(SDL_EVENT_DISPLAY_USABLE_BOUNDS_CHANGED);
+			EV_CASE_STR(SDL_EVENT_SCREEN_KEYBOARD_SHOWN);
+			EV_CASE_STR(SDL_EVENT_SCREEN_KEYBOARD_HIDDEN);
+			EV_CASE_STR(SDL_EVENT_PINCH_BEGIN);
+			EV_CASE_STR(SDL_EVENT_PINCH_UPDATE);
+			EV_CASE_STR(SDL_EVENT_PINCH_END);
+#endif
+#if SDL_VERSION_ATLEAST(3, 4, 22)
+			EV_CASE_STR(SDL_EVENT_WINDOW_SETTINGS_CHANGED);
+			EV_CASE_STR(SDL_EVENT_GAMEPAD_CAPSENSE_TOUCH);
+			EV_CASE_STR(SDL_EVENT_GAMEPAD_CAPSENSE_RELEASE);
+			EV_CASE_STR(SDL_EVENT_NOTIFICATION_ACTION_INVOKED);
+#endif
 			EV_CASE_STR(SDL_EVENT_WINDOW_SHOWN);
 			EV_CASE_STR(SDL_EVENT_WINDOW_HIDDEN);
 			EV_CASE_STR(SDL_EVENT_WINDOW_EXPOSED);
@@ -380,6 +412,7 @@ namespace sdl::utils
 			EV_CASE_STR(SDL_EVENT_USER_POINTER_DEFAULT);
 			EV_CASE_STR(SDL_EVENT_USER_POINTER_POSITION);
 			EV_CASE_STR(SDL_EVENT_USER_POINTER_SET);
+			EV_CASE_STR(SDL_EVENT_USER_RAIL_MOVE);
 			EV_CASE_STR(SDL_EVENT_USER_QUIT);
 
 			EV_CASE_STR(SDL_EVENT_LAST);
@@ -447,6 +480,27 @@ namespace sdl::utils
 				return SCALE_MODE_WAYLAND;
 		}
 		return SCALE_MODE_INVALID;
+	}
+
+	static bool isVideoDriver(const char* name)
+	{
+		const auto driver = SDL_GetCurrentVideoDriver();
+		return driver && name && (strcmp(driver, name) == 0);
+	}
+
+	bool isWaylandDriver()
+	{
+		return isVideoDriver("wayland");
+	}
+
+	bool isX11Driver()
+	{
+		return isVideoDriver("x11");
+	}
+
+	bool isWindowsDriver()
+	{
+		return isVideoDriver("windows");
 	}
 
 	std::string windowTitle(const rdpSettings* settings)
@@ -535,6 +589,7 @@ namespace sdl::error
 		ENTRY(FREERDP_ERROR_SECURITY_NEGO_CONNECT_FAILED, NEGO_FAILURE),
 		ENTRY(FREERDP_ERROR_CONNECT_LOGON_FAILURE, LOGON_FAILURE),
 		ENTRY(FREERDP_ERROR_CONNECT_TARGET_BOOTING, CONNECT_TARGET_BOOTING),
+		ENTRY(FREERDP_ERROR_CONNECT_HYBRID_REQUIRED_BY_SERVER, CONNECT_HYBRID_REQUIRED_BY_SERVER),
 		ENTRY(FREERDP_ERROR_CONNECT_ACCOUNT_LOCKED_OUT, ACCOUNT_LOCKED_OUT),
 		ENTRY(FREERDP_ERROR_PRE_CONNECT_FAILED, PRE_CONNECT_FAILED),
 		ENTRY(FREERDP_ERROR_CONNECT_UNDEFINED, CONNECT_UNDEFINED),

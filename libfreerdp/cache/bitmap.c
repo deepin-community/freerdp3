@@ -81,6 +81,7 @@ static BOOL update_gdi_mem3blt(rdpContext* context, MEM3BLT_ORDER* mem3blt)
 		return TRUE;
 
 	const BYTE style = WINPR_ASSERTING_INT_CAST(UINT8, brush->style);
+	BYTE* data = brush->data;
 
 	if (brush->style & CACHED_BRUSH)
 	{
@@ -95,6 +96,7 @@ static BOOL update_gdi_mem3blt(rdpContext* context, MEM3BLT_ORDER* mem3blt)
 	mem3blt->bitmap = bitmap;
 	IFCALLRET(cache->bitmap->Mem3Blt, ret, context, mem3blt);
 	brush->style = style;
+	brush->data = data;
 	return ret;
 }
 
@@ -123,7 +125,9 @@ static BOOL update_gdi_cache_bitmap(rdpContext* context, const CACHE_BITMAP_ORDE
 
 	prevBitmap = bitmap_cache_get(cache->bitmap, cacheBitmap->cacheId, cacheBitmap->cacheIndex);
 	Bitmap_Free(context, prevBitmap);
-	return bitmap_cache_put(cache->bitmap, cacheBitmap->cacheId, cacheBitmap->cacheIndex, bitmap);
+	if (!bitmap_cache_put(cache->bitmap, cacheBitmap->cacheId, cacheBitmap->cacheIndex, bitmap))
+		goto fail;
+	return TRUE;
 
 fail:
 	Bitmap_Free(context, bitmap);
@@ -166,8 +170,9 @@ static BOOL update_gdi_cache_bitmap_v2(rdpContext* context, CACHE_BITMAP_V2_ORDE
 		goto fail;
 
 	Bitmap_Free(context, prevBitmap);
-	return bitmap_cache_put(cache->bitmap, cacheBitmapV2->cacheId, cacheBitmapV2->cacheIndex,
-	                        bitmap);
+	if (!bitmap_cache_put(cache->bitmap, cacheBitmapV2->cacheId, cacheBitmapV2->cacheIndex, bitmap))
+		goto fail;
+	return TRUE;
 
 fail:
 	Bitmap_Free(context, bitmap);
@@ -209,8 +214,9 @@ static BOOL update_gdi_cache_bitmap_v3(rdpContext* context, CACHE_BITMAP_V3_ORDE
 
 	prevBitmap = bitmap_cache_get(cache->bitmap, cacheBitmapV3->cacheId, cacheBitmapV3->cacheIndex);
 	Bitmap_Free(context, prevBitmap);
-	return bitmap_cache_put(cache->bitmap, cacheBitmapV3->cacheId, cacheBitmapV3->cacheIndex,
-	                        bitmap);
+	if (!bitmap_cache_put(cache->bitmap, cacheBitmapV3->cacheId, cacheBitmapV3->cacheIndex, bitmap))
+		goto fail;
+	return TRUE;
 
 fail:
 	Bitmap_Free(context, bitmap);
@@ -243,6 +249,7 @@ rdpBitmap* bitmap_cache_get(rdpBitmapCache* bitmapCache, UINT32 id, UINT32 index
 
 BOOL bitmap_cache_put(rdpBitmapCache* bitmapCache, UINT32 id, UINT32 index, rdpBitmap* bitmap)
 {
+	WINPR_ASSERT(bitmapCache);
 	if (id > bitmapCache->maxCells)
 	{
 		WLog_ERR(TAG, "put invalid bitmap cell id: %" PRIu32 "", id);
@@ -289,6 +296,8 @@ void bitmap_cache_register_callbacks(rdpUpdate* update)
 
 static int bitmap_cache_save_persistent(rdpBitmapCache* bitmapCache)
 {
+	WINPR_ASSERT(bitmapCache);
+
 	rdpContext* context = bitmapCache->context;
 	rdpSettings* settings = context->settings;
 
@@ -355,44 +364,76 @@ end:
 	return status;
 }
 
-rdpBitmapCache* bitmap_cache_new(rdpContext* context)
+static void bitmap_cache_cell_free(rdpBitmapCache* bitmapCache)
 {
-	rdpSettings* settings = nullptr;
-	rdpBitmapCache* bitmapCache = nullptr;
+	WINPR_ASSERT(bitmapCache);
+	if (!bitmapCache->cells)
+		return;
 
+	/* iterate through maxCells + 1 to also free the overallocated extra slot */
+	for (UINT32 i = 0; i <= bitmapCache->maxCells; i++)
+	{
+		UINT32 j = 0;
+		BITMAP_V2_CELL* cell = &bitmapCache->cells[i];
+
+		if (!cell->entries)
+			continue;
+
+		for (j = 0; j < cell->number + 1; j++)
+		{
+			rdpBitmap* bitmap = cell->entries[j];
+			Bitmap_Free(bitmapCache->context, bitmap);
+		}
+
+		free((void*)cell->entries);
+	}
+
+	free(bitmapCache->cells);
+
+	bitmapCache->cells = nullptr;
+}
+
+BOOL bitmap_cache_resize(rdpBitmapCache* bitmapCache)
+{
+	if (!bitmapCache)
+		return FALSE;
+
+	rdpContext* context = bitmapCache->context;
 	WINPR_ASSERT(context);
 
-	settings = context->settings;
+	rdpSettings* settings = context->settings;
 	WINPR_ASSERT(settings);
-
-	bitmapCache = (rdpBitmapCache*)calloc(1, sizeof(rdpBitmapCache));
-
-	if (!bitmapCache)
-		return nullptr;
 
 	const UINT32 BitmapCacheV2NumCells =
 	    freerdp_settings_get_uint32(settings, FreeRDP_BitmapCacheV2NumCells);
-	bitmapCache->context = context;
+
+	if (BitmapCacheV2NumCells == bitmapCache->maxCells)
+		return TRUE;
+
+	bitmap_cache_cell_free(bitmapCache);
 
 	/* overallocate by 1. older RDP servers do send a off by 1 cache index. */
 	bitmapCache->cells =
 	    (BITMAP_V2_CELL*)calloc(BitmapCacheV2NumCells + 1ull, sizeof(BITMAP_V2_CELL));
 
 	if (!bitmapCache->cells)
-		goto fail;
+		return FALSE;
 	bitmapCache->maxCells = BitmapCacheV2NumCells;
 
 	for (UINT32 i = 0; i < bitmapCache->maxCells; i++)
 	{
 		const BITMAP_CACHE_V2_CELL_INFO* info =
 		    freerdp_settings_get_pointer_array(settings, FreeRDP_BitmapCacheV2CellInfo, i);
+		if (!info)
+			return FALSE;
+
 		BITMAP_V2_CELL* cell = &bitmapCache->cells[i];
 		UINT32 nr = info->numEntries;
 		/* allocate an extra entry for BITMAP_CACHE_WAITING_LIST_INDEX */
 		cell->entries = (rdpBitmap**)calloc((nr + 1), sizeof(rdpBitmap*));
 
 		if (!cell->entries)
-			goto fail;
+			return FALSE;
 		cell->number = nr;
 	}
 
@@ -405,9 +446,26 @@ rdpBitmapCache* bitmap_cache_new(rdpContext* context)
 		extra->entries = (rdpBitmap**)calloc(1, sizeof(rdpBitmap*));
 
 		if (!extra->entries)
-			goto fail;
+			return FALSE;
 		extra->number = 0;
 	}
+
+	return TRUE;
+}
+
+rdpBitmapCache* bitmap_cache_new(rdpContext* context)
+{
+	WINPR_ASSERT(context);
+
+	rdpBitmapCache* bitmapCache = (rdpBitmapCache*)calloc(1, sizeof(rdpBitmapCache));
+
+	if (!bitmapCache)
+		return nullptr;
+
+	bitmapCache->context = context;
+
+	if (!bitmap_cache_resize(bitmapCache))
+		goto fail;
 
 	return bitmapCache;
 fail:
@@ -425,28 +483,7 @@ void bitmap_cache_free(rdpBitmapCache* bitmapCache)
 
 	bitmap_cache_save_persistent(bitmapCache);
 
-	if (bitmapCache->cells)
-	{
-		/* iterate through maxCells + 1 to also free the overallocated extra slot */
-		for (UINT32 i = 0; i <= bitmapCache->maxCells; i++)
-		{
-			UINT32 j = 0;
-			BITMAP_V2_CELL* cell = &bitmapCache->cells[i];
-
-			if (!cell->entries)
-				continue;
-
-			for (j = 0; j < cell->number + 1; j++)
-			{
-				rdpBitmap* bitmap = cell->entries[j];
-				Bitmap_Free(bitmapCache->context, bitmap);
-			}
-
-			free((void*)cell->entries);
-		}
-
-		free(bitmapCache->cells);
-	}
+	bitmap_cache_cell_free(bitmapCache);
 
 	persistent_cache_free(bitmapCache->persistent);
 

@@ -24,6 +24,7 @@
 #include <winpr/spec.h>
 #include <winpr/smartcard.h>
 #include <winpr/asn1.h>
+#include <winpr/crt.h>
 
 #include "../log.h"
 #include "ncrypt.h"
@@ -120,7 +121,9 @@ static const BYTE APDU_PIV_GET_CHUID[] = { 0x00, 0xCB, 0x3F, 0xFF, 0x05, 0x5C,
 	                                       0x03, 0x5F, 0xC1, 0x02, 0x00 };
 static const BYTE APDU_PIV_GET_MSCMAP[] = { 0x00, 0xCB, 0x3F, 0xFF, 0x05, 0x5C,
 	                                        0x03, 0x5F, 0xFF, 0x10, 0x00 };
+/* currently not used
 static const BYTE APDU_GET_RESPONSE[] = { 0x00, 0xC0, 0x00, 0x00, 0x00 };
+*/
 
 #define PIV_CONTAINER_NAME_LEN 36
 #define MAX_CONTAINER_NAME_LEN 39
@@ -168,8 +171,10 @@ static CK_ATTRIBUTE public_key_filter[] = { { CKA_CLASS, &object_class_public_ke
 	                                          sizeof(object_class_public_key) },
 	                                        { CKA_VERIFY, &object_verify, sizeof(object_verify) } };
 
+WINPR_ATTR_NODISCARD
 static const char* CK_RV_error_string(CK_RV rv);
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS NCryptP11StorageProvider_dtor(NCRYPT_HANDLE handle)
 {
 	NCryptP11ProviderHandle* provider = (NCryptP11ProviderHandle*)handle;
@@ -206,6 +211,7 @@ static void fix_padded_string(char* str, size_t maxlen)
 	}
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL attributes_have_unallocated_buffers(CK_ATTRIBUTE_PTR attributes, CK_ULONG count)
 {
 	for (CK_ULONG i = 0; i < count; i++)
@@ -217,6 +223,7 @@ static BOOL attributes_have_unallocated_buffers(CK_ATTRIBUTE_PTR attributes, CK_
 	return FALSE;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL attribute_allocate_attribute_array(CK_ATTRIBUTE_PTR attribute)
 {
 	WINPR_ASSERT(attribute);
@@ -224,18 +231,21 @@ static BOOL attribute_allocate_attribute_array(CK_ATTRIBUTE_PTR attribute)
 	return !!attribute->pValue;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL attribute_allocate_ulong_array(CK_ATTRIBUTE_PTR attribute)
 {
 	attribute->pValue = calloc(attribute->ulValueLen, sizeof(CK_ULONG));
 	return !!attribute->pValue;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL attribute_allocate_buffer(CK_ATTRIBUTE_PTR attribute)
 {
 	attribute->pValue = calloc(attribute->ulValueLen, 1);
 	return !!attribute->pValue;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL attributes_allocate_buffers(CK_ATTRIBUTE_PTR attributes, CK_ULONG count)
 {
 	BOOL ret = TRUE;
@@ -265,6 +275,7 @@ static BOOL attributes_allocate_buffers(CK_ATTRIBUTE_PTR attributes, CK_ULONG co
 	return ret;
 }
 
+WINPR_ATTR_NODISCARD
 static CK_RV object_load_attributes(NCryptP11ProviderHandle* provider, CK_SESSION_HANDLE session,
                                     CK_OBJECT_HANDLE object, CK_ATTRIBUTE_PTR attributes,
                                     CK_ULONG count)
@@ -315,6 +326,7 @@ static CK_RV object_load_attributes(NCryptP11ProviderHandle* provider, CK_SESSIO
 	return rv;
 }
 
+WINPR_ATTR_NODISCARD
 static const char* CK_RV_error_string(CK_RV rv)
 {
 	static char generic_buffer[200];
@@ -432,6 +444,7 @@ static void log_(const char* tag, const char* msg, CK_RV rv, CK_ULONG index, CK_
 	                      "%s for slot #%lu(%lu), rv=%s", msg, index, slot, CK_RV_error_string(rv));
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS collect_keys(NCryptP11ProviderHandle* provider, P11EnumKeysState* state)
 {
 	CK_OBJECT_HANDLE slotObjects[MAX_KEYS_PER_SLOT] = WINPR_C_ARRAY_INIT;
@@ -443,7 +456,7 @@ static SECURITY_STATUS collect_keys(NCryptP11ProviderHandle* provider, P11EnumKe
 
 	WLog_DBG(TAG, "checking %lx slots for valid keys...", state->nslots);
 	state->nKeys = 0;
-	for (CK_ULONG i = 0; i < state->nslots; i++)
+	for (CK_ULONG i = 0; (i < state->nslots) && (state->nKeys < ARRAYSIZE(state->keys)); i++)
 	{
 		CK_SESSION_HANDLE session = 0;
 		CK_SLOT_INFO slotInfo = WINPR_C_ARRAY_INIT;
@@ -510,7 +523,7 @@ static SECURITY_STATUS collect_keys(NCryptP11ProviderHandle* provider, P11EnumKe
 			}
 
 			WLog_DBG(TAG, "slot has %lu objects", nslotObjects);
-			for (CK_ULONG j = 0; j < nslotObjects; j++)
+			for (CK_ULONG j = 0; (j < nslotObjects) && (state->nKeys < ARRAYSIZE(state->keys)); j++)
 			{
 				NCryptKeyEnum* key = &state->keys[state->nKeys];
 				CK_OBJECT_CLASS dataClass = CKO_PUBLIC_KEY;
@@ -530,6 +543,30 @@ static SECURITY_STATUS collect_keys(NCryptP11ProviderHandle* provider, P11EnumKe
 				}
 
 				key->idLen = key_or_certAttrs[0].ulValueLen;
+				if (key->idLen > sizeof(key->id))
+				{
+					WLog_ERR(TAG, "error getting attributes, idLen %lu > %" PRIuz, key->idLen,
+					         sizeof(key->id));
+					continue;
+				}
+				if (key_or_certAttrs[1].ulValueLen > sizeof(dataClass))
+				{
+					WLog_ERR(TAG, "error getting attributes, sizeof(CK_OBJECT_CLASS) %lu > %" PRIuz,
+					         key_or_certAttrs[1].ulValueLen, sizeof(dataClass));
+					continue;
+				}
+				if (key_or_certAttrs[2].ulValueLen > sizeof(key->keyLabel))
+				{
+					WLog_ERR(TAG, "error getting attributes, sizeof(key->keylabel) %lu > %" PRIuz,
+					         key_or_certAttrs[2].ulValueLen, sizeof(key->keyLabel));
+					continue;
+				}
+				if (key_or_certAttrs[3].ulValueLen > sizeof(key->keyType))
+				{
+					WLog_ERR(TAG, "error getting attributes, sizeof(CK_OBJECT_CLASS) %lu > %" PRIuz,
+					         key_or_certAttrs[3].ulValueLen, sizeof(key->keyType));
+					continue;
+				}
 				key->slotId = state->slots[i];
 				key->slotInfo = slotInfo;
 				state->nKeys++;
@@ -551,6 +588,7 @@ static SECURITY_STATUS collect_keys(NCryptP11ProviderHandle* provider, P11EnumKe
 	return ERROR_SUCCESS;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL convertKeyType(CK_KEY_TYPE k, LPWSTR dest, DWORD len, DWORD* outlen)
 {
 	const WCHAR* r = nullptr;
@@ -620,29 +658,39 @@ static BOOL convertKeyType(CK_KEY_TYPE k, LPWSTR dest, DWORD len, DWORD* outlen)
 	return TRUE;
 }
 
-static void wprintKeyName(LPWSTR str, CK_SLOT_ID slotId, CK_BYTE* id, CK_ULONG idLen)
+WINPR_ATTR_NODISCARD
+static BOOL wprintKeyName(LPWSTR str, size_t strByteLen, CK_SLOT_ID slotId, CK_BYTE* id,
+                          CK_ULONG idLen)
 {
-	char asciiName[128] = WINPR_C_ARRAY_INIT;
+	if (strByteLen < sizeof(slotId) + 2ull)
+		return FALSE;
+	if ((strByteLen - (sizeof(slotId) * 2ull) / 2ull) < idLen)
+		return FALSE;
+
+	char* asciiName = calloc(strByteLen, 2);
+	if (!asciiName)
+		return FALSE;
+
 	char* ptr = asciiName;
-	const CK_BYTE* bytePtr = nullptr;
 
-	*ptr = '\\';
-	ptr++;
+	*ptr++ = '\\';
 
-	bytePtr = ((CK_BYTE*)&slotId);
+	const CK_BYTE* bytePtr = ((const CK_BYTE*)&slotId);
 	for (CK_ULONG i = 0; i < sizeof(slotId); i++, bytePtr++, ptr += 2)
 		(void)snprintf(ptr, 3, "%.2x", *bytePtr);
 
-	*ptr = '\\';
-	ptr++;
+	*ptr++ = '\\';
 
 	for (CK_ULONG i = 0; i < idLen; i++, id++, ptr += 2)
 		(void)snprintf(ptr, 3, "%.2x", *id);
 
-	(void)ConvertUtf8NToWChar(asciiName, ARRAYSIZE(asciiName), str,
-	                          strnlen(asciiName, ARRAYSIZE(asciiName)) + 1);
+	const SSIZE_T rc =
+	    ConvertUtf8NToWChar(asciiName, strByteLen, str, strnlen(asciiName, strByteLen) + 1);
+	winpr_zfree(asciiName);
+	return rc > 0;
 }
 
+WINPR_ATTR_NODISCARD
 static size_t parseHex(const char* str, const char* end, CK_BYTE* target)
 {
 	size_t ret = 0;
@@ -694,6 +742,7 @@ static size_t parseHex(const char* str, const char* end, CK_BYTE* target)
 	return ret;
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS parseKeyName(LPCWSTR pszKeyName, CK_SLOT_ID* slotId, CK_BYTE* id,
                                     CK_ULONG* idLen)
 {
@@ -724,6 +773,7 @@ static SECURITY_STATUS parseKeyName(LPCWSTR pszKeyName, CK_SLOT_ID* slotId, CK_B
 	return ERROR_SUCCESS;
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR pszScope,
                                          NCryptKeyName** ppKeyName, PVOID* ppEnumState,
                                          WINPR_ATTR_UNUSED DWORD dwFlags)
@@ -818,6 +868,13 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 	{
 		NCryptKeyName* keyName = nullptr;
 		NCryptKeyEnum* key = &state->keys[state->keyIndex];
+		if (key->idLen > sizeof(key->id))
+		{
+			WLog_ERR(TAG, "NCryptKeyEnum::idLen %lu > %" PRIuz "(slotId: %lu", key->idLen,
+			         sizeof(key->id), key->slotId);
+			continue;
+		}
+
 		CK_OBJECT_CLASS oclass = CKO_CERTIFICATE;
 		CK_CERTIFICATE_TYPE ctype = CKC_X_509;
 		CK_ATTRIBUTE certificateFilter[] = { { CKA_CLASS, &oclass, sizeof(oclass) },
@@ -884,10 +941,12 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 			                     (key->idLen * 2ull) + 1ull) *
 			                    sizeof(WCHAR);
 
-			convertKeyType(key->keyType, nullptr, 0, &algoSz);
+			if (!convertKeyType(key->keyType, nullptr, 0, &algoSz))
+				goto cleanup_FindObjects;
+
 			KEYNAME_SZ += (1ULL + algoSz) * sizeof(WCHAR);
 
-			keyName = calloc(1, sizeof(*keyName) + KEYNAME_SZ);
+			keyName = calloc(1, sizeof(NCryptKeyName) + KEYNAME_SZ);
 			if (!keyName)
 			{
 				WLog_ERR(TAG, "unable to allocate keyName");
@@ -896,10 +955,12 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 			keyName->dwLegacyKeySpec = AT_KEYEXCHANGE | AT_SIGNATURE;
 			keyName->dwFlags = NCRYPT_MACHINE_KEY_FLAG;
 			keyName->pszName = (LPWSTR)(keyName + 1);
-			wprintKeyName(keyName->pszName, key->slotId, key->id, key->idLen);
+			if (!wprintKeyName(keyName->pszName, KEYNAME_SZ, key->slotId, key->id, key->idLen))
+				goto cleanup_FindObjects;
 
 			keyName->pszAlgid = keyName->pszName + _wcslen(keyName->pszName) + 1;
-			convertKeyType(key->keyType, keyName->pszAlgid, algoSz + 1, nullptr);
+			if (!convertKeyType(key->keyType, keyName->pszAlgid, algoSz + 1, nullptr))
+				goto cleanup_FindObjects;
 		}
 
 	cleanup_FindObjects:
@@ -920,17 +981,20 @@ static SECURITY_STATUS NCryptP11EnumKeys(NCRYPT_PROV_HANDLE hProvider, LPCWSTR p
 	return NTE_NO_MORE_ITEMS;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL piv_check_sw(DWORD buf_len, const BYTE* buf, size_t bufsize, BYTE expected_sw1)
 {
 	return (buf_len >= 2) && (buf_len <= bufsize) && (buf[buf_len - 2] == expected_sw1);
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL piv_check_sw_success(DWORD buf_len, const BYTE* buf, size_t bufsize)
 {
 	return (buf_len >= 2) && (buf_len <= bufsize) && (buf[buf_len - 2] == 0x90) &&
 	       (buf[buf_len - 1] == 0x00);
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS get_piv_container_name_from_mscmap(SCARDHANDLE card,
                                                           const SCARD_IO_REQUEST* pci,
                                                           const BYTE* piv_tag, BYTE* output,
@@ -1033,6 +1097,7 @@ static SECURITY_STATUS get_piv_container_name_from_mscmap(SCARDHANDLE card,
 	return NTE_NOT_FOUND;
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS get_piv_container_name_from_chuid(SCARDHANDLE card,
                                                          const SCARD_IO_REQUEST* pci,
                                                          const BYTE* piv_tag, BYTE* output,
@@ -1082,6 +1147,7 @@ static SECURITY_STATUS get_piv_container_name_from_chuid(SCARDHANDLE card,
 	return NTE_BAD_KEY;
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS get_piv_container_name(NCryptP11KeyHandle* key, const BYTE* piv_tag,
                                               BYTE* output, size_t output_len)
 {
@@ -1145,6 +1211,7 @@ out:
 	return ret;
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS check_for_piv_container_name(NCryptP11KeyHandle* key, BYTE* pbOutput,
                                                     DWORD cbOutput, DWORD* pcbResult, char* label,
                                                     size_t label_len)
@@ -1166,6 +1233,7 @@ static SECURITY_STATUS check_for_piv_container_name(NCryptP11KeyHandle* key, BYT
 	return NTE_NOT_FOUND;
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS NCryptP11KeyGetProperties(NCryptP11KeyHandle* keyHandle,
                                                  NCryptKeyGetPropertyEnum property, PBYTE pbOutput,
                                                  DWORD cbOutput, DWORD* pcbResult,
@@ -1233,7 +1301,7 @@ static SECURITY_STATUS NCryptP11KeyGetProperties(NCryptP11KeyHandle* keyHandle,
 			*pcbResult = 4;
 			if (pbOutput)
 			{
-				UINT32* ptr = (UINT32*)pbOutput;
+				UINT32* ptr = WINPR_PACKED_ALIGN_CAST(UINT32*, pbOutput);
 
 				if (cbOutput < 4)
 					return NTE_NO_MEMORY;
@@ -1375,6 +1443,7 @@ out:
 	return ret;
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS NCryptP11GetProperty(NCRYPT_HANDLE hObject, NCryptKeyGetPropertyEnum prop,
                                             PBYTE pbOutput, DWORD cbOutput, DWORD* pcbResult,
                                             DWORD dwFlags)
@@ -1395,6 +1464,7 @@ static SECURITY_STATUS NCryptP11GetProperty(NCRYPT_HANDLE hObject, NCryptKeyGetP
 	return ERROR_SUCCESS;
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS NCryptP11OpenKey(NCRYPT_PROV_HANDLE hProvider, NCRYPT_KEY_HANDLE* phKey,
                                         LPCWSTR pszKeyName, WINPR_ATTR_UNUSED DWORD dwLegacyKeySpec,
                                         WINPR_ATTR_UNUSED DWORD dwFlags)
@@ -1422,6 +1492,7 @@ static SECURITY_STATUS NCryptP11OpenKey(NCRYPT_PROV_HANDLE hProvider, NCRYPT_KEY
 	return ERROR_SUCCESS;
 }
 
+WINPR_ATTR_NODISCARD
 static SECURITY_STATUS initialize_pkcs11(HANDLE handle,
                                          CK_RV (*c_get_function_list)(CK_FUNCTION_LIST_PTR_PTR),
                                          NCRYPT_PROV_HANDLE* phProvider)

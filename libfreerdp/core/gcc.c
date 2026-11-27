@@ -228,6 +228,10 @@ static DWORD rdp_version_common(wLog* log, DWORD serverVersion, DWORD clientVers
 		case RDP_VERSION_10_10:
 		case RDP_VERSION_10_11:
 		case RDP_VERSION_10_12:
+			WLog_Print(log, WLOG_DEBUG, "Using RDP version %s, Server %s, client %s",
+			           freerdp_rdp_version_string(version),
+			           freerdp_rdp_version_string(serverVersion),
+			           freerdp_rdp_version_string(clientVersion));
 			return version;
 
 		default:
@@ -955,7 +959,7 @@ BOOL gcc_write_user_data_header(wStream* s, UINT16 type, UINT16 length)
 {
 
 	WINPR_ASSERT(s);
-	if (!Stream_EnsureRemainingCapacity(s, 4 + length))
+	if (!Stream_EnsureRemainingCapacity(s, 4ull + length))
 		return FALSE;
 	Stream_Write_UINT16(s, type);   /* type */
 	Stream_Write_UINT16(s, length); /* length */
@@ -1165,13 +1169,10 @@ BOOL gcc_read_client_core_data(wStream* s, rdpMcs* mcs)
 {
 	char buffer[2048] = WINPR_C_ARRAY_INIT;
 	char strbuffer[130] = WINPR_C_ARRAY_INIT;
-	UINT32 version = 0;
 	BYTE connectionType = 0;
 	UINT32 clientColorDepth = 0;
-	UINT16 colorDepth = 0;
 	UINT16 postBeta2ColorDepth = 0;
 	UINT16 highColorDepth = 0;
-	UINT32 serverSelectedProtocol = 0;
 	rdpSettings* settings = mcs_get_settings(mcs);
 
 	WINPR_ASSERT(s);
@@ -1181,11 +1182,21 @@ BOOL gcc_read_client_core_data(wStream* s, rdpMcs* mcs)
 	if (!Stream_CheckAndLogRequiredLengthWLog(mcs->log, s, 128))
 		return FALSE;
 
-	Stream_Read_UINT32(s, version); /* version (4 bytes) */
+	const UINT32 version = Stream_Get_UINT32(s); /* version (4 bytes) */
 	settings->RdpVersion = rdp_version_common(mcs->log, version, settings->RdpVersion);
 	Stream_Read_UINT16(s, settings->DesktopWidth);  /* DesktopWidth (2 bytes) */
+	if (settings->DesktopWidth == 0)
+	{
+		WLog_Print(mcs->log, WLOG_ERROR, "Invalid DesktopWidth=0");
+		return FALSE;
+	}
 	Stream_Read_UINT16(s, settings->DesktopHeight); /* DesktopHeight (2 bytes) */
-	Stream_Read_UINT16(s, colorDepth);              /* ColorDepth (2 bytes) */
+	if (settings->DesktopHeight == 0)
+	{
+		WLog_Print(mcs->log, WLOG_ERROR, "Invalid DesktopHeight=0");
+		return FALSE;
+	}
+	const UINT16 colorDepth = Stream_Get_UINT16(s); /* ColorDepth (2 bytes) */
 	Stream_Seek_UINT16(s); /* SASSequence (Secure Access Sequence) (2 bytes) */
 	Stream_Read_UINT32(s, settings->KeyboardLayout); /* KeyboardLayout (4 bytes) */
 	Stream_Read_UINT32(s, settings->ClientBuild);    /* ClientBuild (4 bytes) */
@@ -1204,6 +1215,7 @@ BOOL gcc_read_client_core_data(wStream* s, rdpMcs* mcs)
 	Stream_Read_UINT32(s, settings->KeyboardType);        /* KeyboardType (4 bytes) */
 	Stream_Read_UINT32(s, settings->KeyboardSubType);     /* KeyboardSubType (4 bytes) */
 	Stream_Read_UINT32(s, settings->KeyboardFunctionKey); /* KeyboardFunctionKey (4 bytes) */
+	freerdp_settings_sanitize_keyboard_type(mcs->log, settings, "TS_UD_CS_CORE");
 	Stream_Seek(s, 64);                                   /* imeFileName (64 bytes) */
 
 	/**
@@ -1218,7 +1230,7 @@ BOOL gcc_read_client_core_data(wStream* s, rdpMcs* mcs)
 		if (!Stream_CheckAndLogRequiredLengthWLog(mcs->log, s, 2))
 			break;
 
-		Stream_Read_UINT16(s, postBeta2ColorDepth); /* postBeta2ColorDepth (2 bytes) */
+		postBeta2ColorDepth = Stream_Get_UINT16(s); /* postBeta2ColorDepth (2 bytes) */
 
 		if (!Stream_CheckAndLogRequiredLengthWLog(mcs->log, s, 2))
 			break;
@@ -1255,7 +1267,7 @@ BOOL gcc_read_client_core_data(wStream* s, rdpMcs* mcs)
 		if (!Stream_CheckAndLogRequiredLengthWLog(mcs->log, s, 2))
 			break;
 
-		Stream_Read_UINT16(s, highColorDepth); /* highColorDepth (2 bytes) */
+		highColorDepth = Stream_Get_UINT16(s); /* highColorDepth (2 bytes) */
 
 		if (!Stream_CheckAndLogRequiredLengthWLog(mcs->log, s, 2))
 			break;
@@ -1284,7 +1296,7 @@ BOOL gcc_read_client_core_data(wStream* s, rdpMcs* mcs)
 		if (!Stream_CheckAndLogRequiredLengthWLog(mcs->log, s, 1))
 			break;
 
-		Stream_Read_UINT8(s, connectionType); /* connectionType (1 byte) */
+		connectionType = Stream_Get_UINT8(s); /* connectionType (1 byte) */
 
 		if (!Stream_CheckAndLogRequiredLengthWLog(mcs->log, s, 1))
 			break;
@@ -1294,7 +1306,8 @@ BOOL gcc_read_client_core_data(wStream* s, rdpMcs* mcs)
 		if (!Stream_CheckAndLogRequiredLengthWLog(mcs->log, s, 4))
 			break;
 
-		Stream_Read_UINT32(s, serverSelectedProtocol); /* serverSelectedProtocol (4 bytes) */
+		const UINT32 serverSelectedProtocol =
+		    Stream_Get_UINT32(s); /* serverSelectedProtocol (4 bytes) */
 
 		if (!Stream_CheckAndLogRequiredLengthWLog(mcs->log, s, 4))
 			break;
@@ -1671,7 +1684,8 @@ BOOL gcc_read_server_security_data(wStream* s, rdpMcs* mcs)
 			return FALSE;
 	}
 
-	if (settings->UseRdpSecurityLayer && !(settings->EncryptionMethods & EncryptionMethod))
+	if (settings->UseRdpSecurityLayer && (EncryptionMethod != ENCRYPTION_METHOD_NONE) &&
+	    !(settings->EncryptionMethods & EncryptionMethod))
 	{
 		WLog_Print(mcs->log, WLOG_WARN,
 		           "Server uses non-advertised encryption method 0x%08" PRIX32 "",
@@ -1899,6 +1913,20 @@ BOOL gcc_read_client_network_data(wStream* s, rdpMcs* mcs)
 			    mcs->log, WLOG_ERROR,
 			    "protocol violation: received a static channel name with missing null-termination");
 			return FALSE;
+		}
+
+		/* The name must uniquely identify the channel: the server side looks static channels up
+		 * by name (case insensitive, see wts_get_joined_channel_by_name) */
+		for (UINT32 j = 0; j < i; j++)
+		{
+			const rdpMcsChannel* other = &mcs->channels[j];
+			if (_strnicmp(other->Name, channel->Name, CHANNEL_NAME_LEN + 1) == 0)
+			{
+				WLog_Print(mcs->log, WLOG_ERROR,
+				           "protocol violation: received duplicate static channel name '%s'",
+				           channel->Name);
+				return FALSE;
+			}
 		}
 
 		Stream_Read_UINT32(s, channel->options); /* options (4 bytes) */
@@ -2275,8 +2303,8 @@ BOOL gcc_read_client_monitor_extended_data(wStream* s, rdpMcs* mcs)
 		return FALSE;
 	}
 
-	if (!Stream_CheckAndLogRequiredCapacityOfSizeWLog(mcs->log, s, monitorCount,
-	                                                  monitorAttributeSize))
+	if (!Stream_CheckAndLogRequiredLengthOfSizeWLog(mcs->log, s, monitorCount,
+	                                                monitorAttributeSize))
 		return FALSE;
 
 	if (settings->MonitorCount != monitorCount)

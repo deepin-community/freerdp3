@@ -365,23 +365,23 @@ static inline RFX_PROGRESSIVE_TILE* progressive_tile_new(void)
 
 	{
 		const size_t dataLen = 1ull * tile->stride * tile->height;
-		tile->data = (BYTE*)winpr_aligned_malloc(dataLen, 16);
+		tile->data = (BYTE*)winpr_aligned_calloc(tile->stride, tile->height, 16);
 		if (!tile->data)
 			goto fail;
 		memset(tile->data, 0xFF, dataLen);
 	}
 
 	{
-		const size_t signLen = (8192ULL + 32ULL) * 3ULL;
-		tile->sign = (BYTE*)winpr_aligned_malloc(signLen, 16);
+		const size_t signLen = (8192ULL + 32ULL);
+		tile->sign = (BYTE*)winpr_aligned_calloc(3, signLen, 16);
 	}
 
 	if (!tile->sign)
 		goto fail;
 
 	{
-		const size_t currentLen = (8192ULL + 32ULL) * 3ULL;
-		tile->current = (BYTE*)winpr_aligned_malloc(currentLen, 16);
+		const size_t currentLen = (8192ULL + 32ULL);
+		tile->current = (BYTE*)winpr_aligned_calloc(3, currentLen, 16);
 	}
 	if (!tile->current)
 		goto fail;
@@ -401,18 +401,23 @@ progressive_allocate_tile_cache(PROGRESSIVE_SURFACE_CONTEXT* WINPR_RESTRICT surf
 	WINPR_ASSERT(surface);
 	WINPR_ASSERT(surface->gridSize > 0);
 
+	UINT32 gridSize = surface->gridSize;
 	if (surface->tiles)
 	{
-		oldIndex = surface->gridSize;
-		while (surface->gridSize < min)
-			surface->gridSize += 1024;
+		oldIndex = gridSize;
+		while (gridSize < min)
+		{
+			if (gridSize > UINT32_MAX - 1024)
+				return FALSE;
+			gridSize += 1024;
+		}
 	}
 
-	void* tmp = winpr_aligned_recalloc((void*)surface->tiles, surface->gridSize,
-	                                   sizeof(RFX_PROGRESSIVE_TILE*), 32);
+	void* tmp =
+	    winpr_aligned_recalloc((void*)surface->tiles, gridSize, sizeof(RFX_PROGRESSIVE_TILE*), 32);
 	if (!tmp)
 		return FALSE;
-	surface->tilesSize = surface->gridSize;
+	surface->tilesSize = gridSize;
 	surface->tiles = (RFX_PROGRESSIVE_TILE**)tmp;
 
 	for (size_t x = oldIndex; x < surface->tilesSize; x++)
@@ -422,11 +427,11 @@ progressive_allocate_tile_cache(PROGRESSIVE_SURFACE_CONTEXT* WINPR_RESTRICT surf
 			return FALSE;
 	}
 
-	tmp =
-	    winpr_aligned_recalloc(surface->updatedTileIndices, surface->gridSize, sizeof(UINT32), 32);
+	tmp = winpr_aligned_recalloc(surface->updatedTileIndices, gridSize, sizeof(UINT32), 32);
 	if (!tmp)
 		return FALSE;
 
+	surface->gridSize = gridSize;
 	surface->updatedTileIndices = tmp;
 
 	return TRUE;
@@ -876,7 +881,8 @@ progressive_rfx_decode_component(PROGRESSIVE_CONTEXT* WINPR_RESTRICT progressive
 	CopyMemory(sign, buffer, 4096ULL * 2ULL);
 	if (!extrapolate)
 	{
-		rfx_differential_decode(buffer + 4032, 64);
+		if (!rfx_differential_decode(buffer + 4032, 64))
+			return -1;
 		if (!progressive_rfx_decode_block(prims, &buffer[0], 1024, shift->HL1)) /* HL1 */
 			return -1;
 		if (!progressive_rfx_decode_block(prims, &buffer[1024], 1024, shift->LH1)) /* LH1 */
@@ -918,7 +924,8 @@ progressive_rfx_decode_component(PROGRESSIVE_CONTEXT* WINPR_RESTRICT progressive
 			return -1;
 		if (!progressive_rfx_decode_block(prims, &buffer[3951], 64, shift->HH3)) /* HH3 */
 			return -1;
-		rfx_differential_decode(&buffer[4015], 81);                           /* LL3 */
+		if (!rfx_differential_decode(&buffer[4015], 81)) /* LL3 */
+			return -1;
 		if (!progressive_rfx_decode_block(prims, &buffer[4015], 81, shift->LL3)) /* LL3 */
 			return -1;
 	}
@@ -1034,18 +1041,27 @@ progressive_decompress_tile_first(PROGRESSIVE_CONTEXT* WINPR_RESTRICT progressiv
 	if (!progressive_rfx_quant_lsub(&shiftCr, 1)) /* -6 + 5 = -1 */
 		goto fail;
 
-	pSign[0] = (INT16*)((&tile->sign[((8192 + 32) * 0) + 16])); /* Y/R buffer */
-	pSign[1] = (INT16*)((&tile->sign[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
-	pSign[2] = (INT16*)((&tile->sign[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
+	pSign[0] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->sign[((8192 + 32) * 0) + 16])); /* Y/R buffer */
+	pSign[1] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->sign[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
+	pSign[2] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->sign[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
 
-	pCurrent[0] = (INT16*)((&tile->current[((8192 + 32) * 0) + 16])); /* Y/R buffer */
-	pCurrent[1] = (INT16*)((&tile->current[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
-	pCurrent[2] = (INT16*)((&tile->current[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
+	pCurrent[0] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->current[((8192 + 32) * 0) + 16])); /* Y/R buffer */
+	pCurrent[1] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->current[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
+	pCurrent[2] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->current[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
 
 	pBuffer = (BYTE*)BufferPool_Take(progressive->bufferPool, -1);
-	pSrcDst[0] = (INT16*)((&pBuffer[((8192 + 32) * 0) + 16])); /* Y/R buffer */
-	pSrcDst[1] = (INT16*)((&pBuffer[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
-	pSrcDst[2] = (INT16*)((&pBuffer[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
+	pSrcDst[0] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&pBuffer[((8192 + 32) * 0) + 16])); /* Y/R buffer */
+	pSrcDst[1] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&pBuffer[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
+	pSrcDst[2] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&pBuffer[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
 
 	rc = progressive_rfx_decode_component(progressive, &shiftY, tile->yData, tile->yLen, pSrcDst[0],
 	                                      pCurrent[0], pSign[0], diff, sub, extrapolate); /* Y */
@@ -1147,6 +1163,15 @@ static inline INT16 progressive_rfx_srl_read(RFX_PROGRESSIVE_UPGRADE_STATE* WINP
 
 	while (mag < max)
 	{
+		/* Past its end the stream only yields '0' bits, the unary code would never terminate.
+		 * Compare position and length directly, earlier unchecked reads may already have moved
+		 * position past length and BitStream_GetRemainingLength would wrap. */
+		if (bs->position >= bs->length)
+		{
+			mag = max;
+			break;
+		}
+
 		const UINT32 bit = (bs->accumulator & 0x80000000) ? 1 : 0;
 		BitStream_Shift(bs, 1);
 
@@ -1465,18 +1490,27 @@ progressive_decompress_tile_upgrade(PROGRESSIVE_CONTEXT* WINPR_RESTRICT progress
 	tile->cbProgQuant = *quantProgCb;
 	tile->crProgQuant = *quantProgCr;
 
-	pSign[0] = (INT16*)((&tile->sign[((8192 + 32) * 0) + 16])); /* Y/R buffer */
-	pSign[1] = (INT16*)((&tile->sign[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
-	pSign[2] = (INT16*)((&tile->sign[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
+	pSign[0] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->sign[((8192 + 32) * 0) + 16])); /* Y/R buffer */
+	pSign[1] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->sign[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
+	pSign[2] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->sign[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
 
-	pCurrent[0] = (INT16*)((&tile->current[((8192 + 32) * 0) + 16])); /* Y/R buffer */
-	pCurrent[1] = (INT16*)((&tile->current[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
-	pCurrent[2] = (INT16*)((&tile->current[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
+	pCurrent[0] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->current[((8192 + 32) * 0) + 16])); /* Y/R buffer */
+	pCurrent[1] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->current[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
+	pCurrent[2] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&tile->current[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
 
 	pBuffer = (BYTE*)BufferPool_Take(progressive->bufferPool, -1);
-	pSrcDst[0] = (INT16*)((&pBuffer[((8192 + 32) * 0) + 16])); /* Y/R buffer */
-	pSrcDst[1] = (INT16*)((&pBuffer[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
-	pSrcDst[2] = (INT16*)((&pBuffer[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
+	pSrcDst[0] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&pBuffer[((8192 + 32) * 0) + 16])); /* Y/R buffer */
+	pSrcDst[1] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&pBuffer[((8192 + 32) * 1) + 16])); /* Cb/G buffer */
+	pSrcDst[2] =
+	    WINPR_PACKED_ALIGN_CAST(INT16*, (&pBuffer[((8192 + 32) * 2) + 16])); /* Cr/B buffer */
 
 	status = progressive_rfx_upgrade_component(progressive, &shiftY, quantProgY, &yNumBits,
 	                                           pSrcDst[0], pCurrent[0], pSign[0], tile->ySrlData,
@@ -2316,6 +2350,7 @@ static inline SSIZE_T progressive_parse_block(PROGRESSIVE_CONTEXT* WINPR_RESTRIC
 	return rc;
 }
 
+WINPR_ATTR_NODISCARD
 static inline BOOL update_tiles(PROGRESSIVE_CONTEXT* WINPR_RESTRICT progressive,
                                 PROGRESSIVE_SURFACE_CONTEXT* WINPR_RESTRICT surface,
                                 BYTE* WINPR_RESTRICT pDstData, UINT32 DstFormat, UINT32 nDstStep,
@@ -2323,24 +2358,35 @@ static inline BOOL update_tiles(PROGRESSIVE_CONTEXT* WINPR_RESTRICT progressive,
                                 PROGRESSIVE_BLOCK_REGION* WINPR_RESTRICT region,
                                 REGION16* WINPR_RESTRICT invalidRegion)
 {
-	BOOL rc = TRUE;
+	BOOL rc = FALSE;
+
+	if ((nXDst > UINT16_MAX) || (nYDst > UINT16_MAX))
+		return FALSE;
+
 	REGION16 clippingRects = WINPR_C_ARRAY_INIT;
 	region16_init(&clippingRects);
-
 	for (UINT32 i = 0; i < region->numRects; i++)
 	{
 		RECTANGLE_16 clippingRect = WINPR_C_ARRAY_INIT;
 		const RFX_RECT* rect = &(region->rects[i]);
 
-		clippingRect.left = (UINT16)nXDst + rect->x;
-		clippingRect.top = (UINT16)nYDst + rect->y;
-		clippingRect.right = clippingRect.left + rect->width;
-		clippingRect.bottom = clippingRect.top + rect->height;
+		const UINT32 cx = nXDst + rect->x;
+		const UINT32 cy = nYDst + rect->y;
+		if ((cx > UINT16_MAX) || (cy > UINT16_MAX))
+			goto fail;
+
+		clippingRect.left = (UINT16)cx;
+		clippingRect.top = (UINT16)cy;
+
+		const UINT32 cr = 1u * clippingRect.left + rect->width;
+		const UINT32 cb = 1u * clippingRect.top + rect->height;
+		if ((cr > UINT16_MAX) || (cb > UINT16_MAX))
+			goto fail;
+
+		clippingRect.right = (UINT16)cr;
+		clippingRect.bottom = (UINT16)cb;
 		if (!region16_union_rect(&clippingRects, &clippingRects, &clippingRect))
-		{
-			region16_uninit(&clippingRects);
-			return FALSE;
-		}
+			goto fail;
 	}
 
 	for (UINT32 i = 0; i < surface->numUpdatedTiles; i++)
@@ -2357,58 +2403,62 @@ static inline BOOL update_tiles(PROGRESSIVE_CONTEXT* WINPR_RESTRICT progressive,
 		WINPR_ASSERT(tile);
 
 		const UINT32 dl = nXDst + tile->x;
+		if (dl > UINT16_MAX - 64)
+			goto fail;
 		updateRect.left = WINPR_ASSERTING_INT_CAST(UINT16, dl);
 
 		const UINT32 dt = nYDst + tile->y;
+		if (dt > UINT16_MAX - 64)
+			goto fail;
 		updateRect.top = WINPR_ASSERTING_INT_CAST(UINT16, dt);
 		updateRect.right = updateRect.left + 64;
 		updateRect.bottom = updateRect.top + 64;
 
 		REGION16 updateRegion = WINPR_C_ARRAY_INIT;
 		region16_init(&updateRegion);
+		BOOL success = FALSE;
 		if (!region16_intersect_rect(&updateRegion, &clippingRects, &updateRect))
-		{
-			region16_uninit(&updateRegion);
-			goto fail;
-		}
+			goto loop_end;
+
 		updateRects = region16_rects(&updateRegion, &nbUpdateRects);
 
 		for (UINT32 j = 0; j < nbUpdateRects; j++)
 		{
-			rc = FALSE;
 			const RECTANGLE_16* rect = &updateRects[j];
 			if (rect->left < updateRect.left)
-				break;
+				goto loop_end;
 			const UINT32 nXSrc = rect->left - updateRect.left;
 			const UINT32 nYSrc = rect->top - updateRect.top;
 			const UINT32 width = rect->right - rect->left;
 			const UINT32 height = rect->bottom - rect->top;
 
 			if (rect->left + width > surface->width)
-				break;
+				goto loop_end;
 			if (rect->top + height > surface->height)
-				break;
-			rc = freerdp_image_copy_no_overlap(
+				goto loop_end;
+			const BOOL res = freerdp_image_copy_no_overlap(
 			    pDstData, DstFormat, nDstStep, rect->left, rect->top, width, height, tile->data,
 			    progressive->format, tile->stride, nXSrc, nYSrc, nullptr, FREERDP_KEEP_DST_ALPHA);
-			if (!rc)
-				break;
+			if (!res)
+				goto loop_end;
 
 			if (invalidRegion)
 			{
 				if (!region16_union_rect(invalidRegion, invalidRegion, rect))
-				{
-					region16_uninit(&updateRegion);
-					goto fail;
-				}
+					goto loop_end;
 			}
 		}
 
-		region16_uninit(&updateRegion);
-		if (!rc)
-			goto fail;
 		tile->dirty = FALSE;
+		success = TRUE;
+
+	loop_end:
+		region16_uninit(&updateRegion);
+		if (!success)
+			goto fail;
 	}
+
+	rc = TRUE;
 
 fail:
 	region16_uninit(&clippingRects);
@@ -2421,7 +2471,7 @@ INT32 progressive_decompress(PROGRESSIVE_CONTEXT* WINPR_RESTRICT progressive,
                              UINT32 nXDst, UINT32 nYDst, REGION16* WINPR_RESTRICT invalidRegion,
                              UINT16 surfaceId, UINT32 frameId)
 {
-	INT32 rc = 1;
+	INT32 rc = -1;
 
 	WINPR_ASSERT(progressive);
 	PROGRESSIVE_SURFACE_CONTEXT* surface = progressive_get_surface_data(progressive, surfaceId);
@@ -2482,6 +2532,8 @@ INT32 progressive_decompress(PROGRESSIVE_CONTEXT* WINPR_RESTRICT progressive,
 	if (!update_tiles(progressive, surface, pDstData, DstFormat, nDstStep, nXDst, nYDst, region,
 	                  invalidRegion))
 		return -2002;
+
+	rc = 1;
 fail:
 	return rc;
 }

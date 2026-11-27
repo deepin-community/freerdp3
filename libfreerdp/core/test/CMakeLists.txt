@@ -10,10 +10,28 @@ set(DRIVER ${MODULE_NAME}.c)
 set(TESTS TestVersion.c TestSettings.c TestUtils.c)
 
 if(BUILD_TESTING_INTERNAL)
-  list(APPEND TESTS TestStreamDump.c)
+  list(
+    APPEND
+    TESTS
+    TestStreamDump.c
+    TestRdstls.c
+    TestServerChannels.c
+    TestDisconnect.c
+    TestMcs.c
+    TestUpdateBitmap.c
+    TestRdpPacketLengths.c
+  )
+  if(WITH_RDPEUDP)
+    list(APPEND TESTS TestRdpUdp.c)
+  endif()
 endif()
 
-set(FUZZERS TestFuzzCoreClient.c TestFuzzCoreServer.c TestFuzzCryptoCertificateDataSetPEM.c)
+set(FUZZERS TestFuzzCoreClient.c TestFuzzCoreServer.c TestFuzzCoreGateway.c TestFuzzCryptoCertificateDataSetPEM.c)
+
+# TestFuzzServer generates a live cert via winpr-tools (makecert).
+if(NOT WIN32 AND WITH_WINPR_TOOLS)
+  list(APPEND FUZZERS TestFuzzServer.c)
+endif()
 
 # Test not compatible with package tests, disable
 if(WITH_SAMPLE AND WITH_SERVER AND NOT WIN32 AND BUILD_TESTING_INTERNAL)
@@ -40,16 +58,33 @@ endif()
 add_compile_definitions(TESTING_OUTPUT_DIRECTORY="${PROJECT_BINARY_DIR}")
 add_compile_definitions(TESTING_SRC_DIRECTORY="${PROJECT_SOURCE_DIR}")
 
-target_link_libraries(${MODULE_NAME} freerdp winpr freerdp-client)
+# TestCore does not call winpr-tools APIs. The link was added with
+# TestFuzzServer's on-the-fly cert generation and broke -DWITH_WINPR_TOOLS=OFF.
+target_link_libraries(${MODULE_NAME} PRIVATE freerdp-client)
+set(CORE_FUZZER_LIBS freerdp-client ${OPENSSL_LIBRARIES})
+if(WITH_WINPR_TOOLS)
+  list(APPEND CORE_FUZZER_LIBS winpr-tools)
+endif()
 
 include(AddFuzzerTest)
-add_fuzzer_test("${FUZZERS}" "freerdp-client freerdp winpr")
+add_fuzzer_test("${FUZZERS}" "${CORE_FUZZER_LIBS}")
+
+# Seed corpus generator for the test TestFuzzServer, used to
+# (re)generate the seed corpus. Requires the client library,
+# POSIX sockets, and winpr-tools (makecert).
+if(NOT WIN32 AND WITH_WINPR_TOOLS AND (WITH_CLIENT_COMMON OR WITH_CLIENT))
+  find_package(Threads REQUIRED)
+  add_executable(TestFuzzServerSeedGen TestFuzzServerSeedGen.c)
+  target_link_libraries(TestFuzzServerSeedGen freerdp-client winpr-tools Threads::Threads)
+  set_target_properties(TestFuzzServerSeedGen PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TESTING_OUTPUT_DIRECTORY}")
+  set_property(TARGET TestFuzzServerSeedGen PROPERTY FOLDER "FreeRDP/Core/Test")
+endif()
 
 set_target_properties(${MODULE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TESTING_OUTPUT_DIRECTORY}")
 
 foreach(test ${TESTS})
   get_filename_component(TestName ${test} NAME_WE)
-  add_test(${TestName} ${TESTING_OUTPUT_DIRECTORY}/${MODULE_NAME} ${TestName})
+  add_test(NAME ${TestName} COMMAND ${MODULE_NAME} ${TestName})
 endforeach()
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "FreeRDP/Core/Test")

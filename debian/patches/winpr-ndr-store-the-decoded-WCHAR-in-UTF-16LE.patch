@@ -1,0 +1,270 @@
+From 6eda6d8243e196fb438d11fa8e2f359cad32f9fc Mon Sep 17 00:00:00 2001
+From: David Fort <contact@hardening-consulting.com>
+Date: Thu, 5 Nov 2026 18:29:52 +0100
+Subject: [PATCH] [winpr,ndr] store the decoded WCHAR in UTF-16LE
+
+WinPR WCHAR strings are UTF-16LE in memory whatever the byte order of the
+host, but the NDR decoder stored the characters as host UINT16: on big
+endian hosts the strings decoded by rdpear (client name, realm) were byte
+swapped, which made TestNdrEar and TestRdpearMessages fail on s390x.
+
+* winpr_ndr_decoder_read_wchar() stores the character in UTF-16LE, the new
+  winpr_ndr_encoder_write_wchar() does the reverse;
+* add the wchar message type and its conformant / varying arrays, to use
+  for strings instead of the uint16 arrays;
+* the [string] wchar_t* codec uses them;
+* RPC_UNICODE_STRING.Buffer is read as a wchar varying array.
+
+TestNdrBasic checks the in-memory bytes of the decoded WCHAR for both
+data representations.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ channels/rdpear/common/rdpear_common.c |  2 +-
+ winpr/include/winpr/ndr.h              | 33 +++++++++++
+ winpr/libwinpr/ndr/ndr.c               | 52 +++++++++++++++--
+ winpr/libwinpr/ndr/test/TestNdrBasic.c | 78 ++++++++++++++++++++++++++
+ 4 files changed, 158 insertions(+), 7 deletions(-)
+
+diff --git a/channels/rdpear/common/rdpear_common.c b/channels/rdpear/common/rdpear_common.c
+index 3deef962b..8e5d78af6 100644
+--- a/channels/rdpear/common/rdpear_common.c
++++ b/channels/rdpear/common/rdpear_common.c
+@@ -191,7 +191,7 @@ BOOL ndr_decoder_read_RPC_UNICODE_STRING(WinPrNdrDecoder* context, wStream* s, c
+ 		                                 &res->lenHints,
+ 		                                 (void*)&res->Buffer,
+ 		                                 TRUE,
+-		                                 winpr_ndr_uint16VaryingArray_descr() };
++		                                 winpr_ndr_wcharVaryingArray_descr() };
+ 	UINT16 Length = 0;
+ 	UINT16 MaximumLength = 0;
+ 
+diff --git a/winpr/include/winpr/ndr.h b/winpr/include/winpr/ndr.h
+index 6f38c4730..26d738aa4 100644
+--- a/winpr/include/winpr/ndr.h
++++ b/winpr/include/winpr/ndr.h
+@@ -837,6 +837,9 @@ extern "C"
+ 	WINPR_API BOOL winpr_ndr_decoder_read_align(WinPrNdrDecoder* context, wStream* s, size_t sz);
+ 
+ 	/** @brief reads a WCHAR, aligned on 2 bytes
++	 *
++	 *  The character is stored in UTF-16LE like all the WinPR WCHAR strings, whatever the byte
++	 *  order of the host.
+ 	 *
+ 	 *  @param context the decoder
+ 	 *  @param s the stream to read from
+@@ -847,6 +850,36 @@ extern "C"
+ 	WINPR_ATTR_NODISCARD
+ 	WINPR_API BOOL winpr_ndr_decoder_read_wchar(WinPrNdrDecoder* context, wStream* s, WCHAR* ptr);
+ 
++	/** @brief writes a WCHAR stored in UTF-16LE, aligned on 2 bytes
++	 *
++	 *  @param context the encoder
++	 *  @param s the stream to write to
++	 *  @param ptr the character
++	 *  @return \b TRUE on success, \b FALSE otherwise
++	 *  @since version 3.34.0
++	 */
++	WINPR_ATTR_NODISCARD
++	WINPR_API BOOL winpr_ndr_encoder_write_wchar(WinPrNdrEncoder* context, wStream* s,
++	                                             const WCHAR* ptr);
++
++	/** @brief a WCHAR, stored in UTF-16LE in memory
++	 *  @since version 3.34.0
++	 */
++	WINPR_API extern const WinPrNdrMessageDescr winpr_ndr_wchar_descr_s;
++
++	/** @brief the message type of winpr_ndr_wchar_descr_s
++	 *  @return the message type
++	 *  @since version 3.34.0
++	 */
++	WINPR_ATTR_NODISCARD
++	WINPR_API WinPrNdrMessageType winpr_ndr_wchar_descr(void);
++
++	/** @brief the arrays of WCHAR, stored in UTF-16LE in memory: use them for strings
++	 *  instead of the uint16 arrays, which store the items in host byte order
++	 *  @since version 3.34.0
++	 */
++	WINPR_NDR_ARRAY_OF_TYPE_DECL(winpr_ndr, wchar, WCHAR);
++
+ 	/** @brief reads the referent of a unique pointer
+ 	 *
+ 	 *  The referent is allocated with winpr_ndr_pointer_new() (or by the reader of a self
+diff --git a/winpr/libwinpr/ndr/ndr.c b/winpr/libwinpr/ndr/ndr.c
+index f71ec6700..4f583ed50 100644
+--- a/winpr/libwinpr/ndr/ndr.c
++++ b/winpr/libwinpr/ndr/ndr.c
+@@ -626,8 +626,53 @@ SIMPLE_TYPE_IMPL(winpr_ndr, INT64, int64)
+ 		return &winpr_ndr_##TYPE##VaryingArray_descr_s;                                          \
+ 	}
+ 
++/* WinPR WCHAR strings are UTF-16LE whatever the byte order of the host, the characters are
++ * stored that way and not as host UINT16 */
++BOOL winpr_ndr_decoder_read_wchar(WinPrNdrDecoder* context, wStream* s, WCHAR* ptr)
++{
++	WINPR_ASSERT(ptr);
++
++	UINT16 v = 0;
++	if (!winpr_ndr_decoder_read_uint16(context, s, &v))
++		return FALSE;
++
++	winpr_Data_Write_UINT16(ptr, v);
++	return TRUE;
++}
++
++BOOL winpr_ndr_encoder_write_wchar(WinPrNdrEncoder* context, wStream* s, const WCHAR* ptr)
++{
++	WINPR_ASSERT(ptr);
++	return winpr_ndr_encoder_write_uint16(context, s, winpr_Data_Get_UINT16(ptr));
++}
++
++static BOOL ndr_decoder_read_wchar_(WinPrNdrDecoder* context, wStream* s, const void* hints,
++                                    void* v)
++{
++	WINPR_UNUSED(hints);
++	return winpr_ndr_decoder_read_wchar(context, s, (WCHAR*)v);
++}
++
++static BOOL ndr_encoder_write_wchar_(WinPrNdrEncoder* context, wStream* s, const void* hints,
++                                     const void* v)
++{
++	WINPR_UNUSED(hints);
++	return winpr_ndr_encoder_write_wchar(context, s, (const WCHAR*)v);
++}
++
++const WinPrNdrMessageDescr winpr_ndr_wchar_descr_s = {
++	WINPR_NDR_ARITY_SIMPLE,   sizeof(WCHAR), ndr_decoder_read_wchar_,
++	ndr_encoder_write_wchar_, nullptr,       nullptr
++};
++
++WinPrNdrMessageType winpr_ndr_wchar_descr(void)
++{
++	return &winpr_ndr_wchar_descr_s;
++}
++
+ ARRAY_OF_TYPE_IMPL(uint8, BYTE)
+ ARRAY_OF_TYPE_IMPL(uint16, UINT16)
++ARRAY_OF_TYPE_IMPL(wchar, WCHAR)
+ 
+ static BOOL winpr_ndr_decoder_read_string_conformant(WinPrNdrDecoder* context, wStream* s,
+                                                      const void* hints, void* v)
+@@ -839,7 +884,7 @@ static BOOL ndr_encoder_write_wstring_varying(WinPrNdrEncoder* context, wStream*
+ 
+ 	for (size_t i = 0; i < l; i++)
+ 	{
+-		if (!winpr_ndr_encoder_write_uint16(context, s, str[i]))
++		if (!winpr_ndr_encoder_write_wchar(context, s, &str[i]))
+ 			return FALSE;
+ 	}
+ 	return TRUE;
+@@ -1214,11 +1259,6 @@ BOOL winpr_ndr_decoder_read_int8_(WinPrNdrDecoder* context, wStream* s, const vo
+ 	return winpr_ndr_decoder_read_int8(context, s, (INT8*)v);
+ }
+ 
+-BOOL winpr_ndr_decoder_read_wchar(WinPrNdrDecoder* context, wStream* s, WCHAR* ptr)
+-{
+-	return winpr_ndr_decoder_read_uint16(context, s, (UINT16*)ptr);
+-}
+-
+ /** @brief reads the items of an array, their deferred pointers are treated after the array */
+ static BOOL ndr_decoder_read_items(WinPrNdrDecoder* context, wStream* s, UINT32 count,
+                                    WinPrNdrMessageType itemType, BYTE* target)
+diff --git a/winpr/libwinpr/ndr/test/TestNdrBasic.c b/winpr/libwinpr/ndr/test/TestNdrBasic.c
+index 893e203f8..fdbaed9c9 100644
+--- a/winpr/libwinpr/ndr/test/TestNdrBasic.c
++++ b/winpr/libwinpr/ndr/test/TestNdrBasic.c
+@@ -459,6 +459,83 @@ static int TestNdrSignedTypes(void)
+ 	return 0;
+ }
+ 
++/* ===================================== WCHAR ============================================= */
++
++/* WinPR WCHAR strings are UTF-16LE in memory whatever the host byte order, "a€" */
++static const BYTE wcharMemory[] = { 'a', 0x00, 0xac, 0x20 };
++
++static const BYTE wcharArrayLE[] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++	                                 0x02, 0x00, 0x00, 0x00, 'a',  0x00, 0xac, 0x20 };
++static const BYTE wcharArrayBE[] = { 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
++	                                 0x00, 0x00, 0x00, 0x02, 0x00, 'a',  0x20, 0xac };
++
++static int TestNdrWchar(void)
++{
++	for (int bigEndian = 0; bigEndian < 2; bigEndian++)
++	{
++		const BYTE* expected = bigEndian ? wcharArrayBE : wcharArrayLE;
++		WCHAR str[ARRAYSIZE(wcharMemory) / sizeof(WCHAR) + 1] = WINPR_C_ARRAY_INIT;
++		WCHAR* decodedStr = nullptr;
++		WCHAR decoded[ARRAYSIZE(str)] = WINPR_C_ARRAY_INIT;
++		memcpy(str, wcharMemory, sizeof(wcharMemory));
++
++		int retCode = -2;
++		WinPrNdrDecoder* decoder = nullptr;
++		WinPrNdrEncoder* encoder = winpr_ndr_encoder_new(bigEndian != 0, 1);
++		wStream* s = Stream_New(nullptr, 64);
++		if (!encoder || !s)
++			goto out;
++
++		/* the encoder hints are item counts */
++		retCode = -3;
++		const WinPrNdrVaryingArrayHints countHints = { 2, 2 };
++		if (!winpr_ndr_wcharVaryingArray_descr()->writeFn(encoder, s, &countHints, str) ||
++		    (Stream_GetPosition(s) != sizeof(wcharArrayLE)) ||
++		    (memcmp(Stream_Buffer(s), expected, sizeof(wcharArrayLE)) != 0))
++			goto out;
++
++		/* the decoder hints are byte lengths, like the ones of a RPC_UNICODE_STRING */
++		retCode = -4;
++		Stream_SealLength(s);
++		Stream_SetPosition(s, 0);
++		decoder = winpr_ndr_decoder_new(bigEndian != 0, 1);
++		const WinPrNdrVaryingArrayHints byteHints = { sizeof(wcharMemory), sizeof(wcharMemory) };
++		if (!decoder ||
++		    !winpr_ndr_wcharVaryingArray_descr()->readFn(decoder, s, &byteHints, decoded) ||
++		    (Stream_GetRemainingLength(s) != 0) ||
++		    (memcmp(decoded, wcharMemory, sizeof(wcharMemory)) != 0))
++			goto out;
++
++		/* [string] wchar_t*: the same characters and a terminating null */
++		retCode = -5;
++		const WCHAR* pstr = str;
++		Stream_SetPosition(s, 0);
++		if (!winpr_ndr_wstring_varying_descr()->writeFn(encoder, s, nullptr, (const void*)&pstr))
++			goto out;
++
++		retCode = -6;
++		Stream_SealLength(s);
++		Stream_SetPosition(s, 0);
++		winpr_ndr_decoder_destroy(&decoder);
++		decoder = winpr_ndr_decoder_new(bigEndian != 0, 1);
++		if (!decoder ||
++		    !winpr_ndr_wstring_varying_descr()->readFn(decoder, s, nullptr, (void*)&decodedStr) ||
++		    !decodedStr || (memcmp(decodedStr, wcharMemory, sizeof(wcharMemory)) != 0) ||
++		    (decodedStr[ARRAYSIZE(str) - 1] != 0))
++			goto out;
++
++		retCode = 0;
++	out:
++		winpr_ndr_pointer_release(decodedStr);
++		winpr_ndr_decoder_destroy(&decoder);
++		winpr_ndr_encoder_destroy(&encoder);
++		Stream_Free(s, TRUE);
++		if (retCode)
++			return retCode - (bigEndian * 10);
++	}
++	return 0;
++}
++
+ /* ================================== full pointers ======================================== */
+ 
+ static BOOL decode_payload(const WinPrNdrStructDescr* descr, const BYTE* payload, size_t len,
+@@ -760,6 +837,7 @@ int TestNdrBasic(int argc, char* argv[])
+ 		                           TestNdrDeferredOrderRead,
+ 		                           TestNdrObject,
+ 		                           TestNdrSignedTypes,
++		                           TestNdrWchar,
+ 		                           TestNdrFullPointerAlias,
+ 		                           TestNdrFullPointerConfusion,
+ 		                           TestNdrUnionWrite,
+-- 
+2.47.3
+

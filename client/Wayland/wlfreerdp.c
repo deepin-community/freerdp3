@@ -34,6 +34,7 @@
 #include <freerdp/client.h>
 #include <freerdp/utils/signal.h>
 #include <freerdp/locale/keyboard.h>
+#include <freerdp/client/aad_helper.h>
 
 #include <linux/input.h>
 
@@ -365,6 +366,12 @@ static BOOL handle_uwac_events(freerdp* instance, UwacDisplay* display)
 
 				break;
 
+			case UWAC_EVENT_POINTER_LEAVE:
+				if (!wlf_handle_pointer_leave(instance, &event.mouse_enter_leave))
+					return FALSE;
+
+				break;
+
 			case UWAC_EVENT_POINTER_MOTION:
 				if (!wlf_handle_pointer_motion(instance, &event.mouse_motion))
 					return FALSE;
@@ -616,6 +623,7 @@ static BOOL wlf_client_new(freerdp* instance, rdpContext* context)
 	instance->PostConnect = wl_post_connect;
 	instance->PostDisconnect = wl_post_disconnect;
 	instance->LogonErrorInfo = wlf_logon_error_info;
+	instance->GetAccessToken = client_failsafe_get_access_token;
 	wfl->log = WLog_Get(TAG);
 	wfl->display = UwacOpenDisplay(nullptr, &status);
 
@@ -761,7 +769,13 @@ BOOL wlf_scale_coordinates(rdpContext* context, UINT32* px, UINT32* py, BOOL fro
 
 	rdpGdi* gdi = context->gdi;
 
-	if (UwacWindowGetDrawingBufferGeometry(wlf->window, &geometry, nullptr) != UWAC_SUCCESS)
+	/* Serialize with buffer submission in wl_update_buffer: selecting the next
+	 * drawing buffer temporarily invalidates its index. This critical section
+	 * is recursive, as wl_update_buffer also calls this function while holding it. */
+	EnterCriticalSection(&wlf->critical);
+	const UwacReturnCode rc = UwacWindowGetDrawingBufferGeometry(wlf->window, &geometry, nullptr);
+	LeaveCriticalSection(&wlf->critical);
+	if (rc != UWAC_SUCCESS)
 		return FALSE;
 
 	const double sx = 1.0 * geometry.width / (double)gdi->width;

@@ -47,6 +47,9 @@
 #include <freerdp/constants.h>
 #include <freerdp/server/rdpsnd.h>
 #include <freerdp/settings.h>
+#include <freerdp/build-config.h>
+#include <freerdp/version.h>
+#include <freerdp/utils/helpers.h>
 
 #include "sf_ainput.h"
 #include "sf_audin.h"
@@ -1157,14 +1160,20 @@ static DWORD WINAPI test_peer_mainloop(LPVOID arg)
 	{
 		rdpPrivateKey* key = freerdp_key_new_from_file_enc(info->key, nullptr);
 		if (!key)
+		{
+			WLog_ERR(TAG, "Failed to load private key '%s'", info->key);
 			goto fail;
+		}
 		if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerRsaKey, key, 1))
 			goto fail;
 	}
 	{
 		rdpCertificate* cert = freerdp_certificate_new_from_file(info->cert);
 		if (!cert)
+		{
+			WLog_ERR(TAG, "Failed to load public cert '%s'", info->cert);
 			goto fail;
+		}
 		if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerCertificate, cert, 1))
 			goto fail;
 	}
@@ -1174,6 +1183,8 @@ static DWORD WINAPI test_peer_mainloop(LPVOID arg)
 	if (!freerdp_settings_set_bool(settings, FreeRDP_TlsSecurity, TRUE))
 		goto fail;
 	if (!freerdp_settings_set_bool(settings, FreeRDP_NlaSecurity, FALSE))
+		goto fail;
+	if (!freerdp_settings_set_bool(settings, FreeRDP_ExtSecurity, FALSE))
 		goto fail;
 	if (!freerdp_settings_set_uint32(settings, FreeRDP_EncryptionLevel,
 	                                 ENCRYPTION_LEVEL_CLIENT_COMPATIBLE))
@@ -1439,6 +1450,20 @@ int main(int argc, char* argv[])
 	const char* app = argv[0];
 
 	info.test_dump_rfx_realtime = TRUE;
+
+	/*
+	 * Set custom application details at first thing in main.
+	 * This will initialize a new namespace within FreeRDP and WinPR.
+	 * As a result all configuration files will be searched in different locations.
+	 *
+	 * The location is <prefix>/<vendor>/<product> or <prefix>/<vendor>/<product><version> for
+	 * config file search directories. An example for a system wide configuration file would be
+	 * /etc/FreeRDP/TFreeRDP3/ or ~/.config//FreeRDP/TFreeRDP3/ for user config files.
+	 *
+	 * Consult \ref GetKnownPath for <prefix> locations on different operating systems
+	 */
+	if (!freerdp_setApplicationDetails(FREERDP_VENDOR_STRING, "TFreeRDP", FREERDP_VERSION_MAJOR))
+		return -1;
 
 	errno = 0;
 

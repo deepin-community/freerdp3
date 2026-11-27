@@ -593,7 +593,7 @@ static int x11_shadow_query_cursor(x11ShadowSubsystem* subsystem, BOOL getImage)
 		subsystem->cursorHeight = ci->height;
 		subsystem->cursorId = ci->cursor_serial;
 		n = ci->width * ci->height;
-		pDstPixel = (UINT32*)subsystem->cursorPixels;
+		pDstPixel = WINPR_PACKED_ALIGN_CAST(UINT32*, subsystem->cursorPixels);
 
 		for (int k = 0; k < n; k++)
 		{
@@ -1490,7 +1490,7 @@ static int x11_shadow_subsystem_init(rdpShadowSubsystem* sub)
 	subsystem->cursorMaxWidth = 256;
 	subsystem->cursorMaxHeight = 256;
 	subsystem->cursorPixels =
-	    winpr_aligned_malloc(4ULL * subsystem->cursorMaxWidth * subsystem->cursorMaxHeight, 16);
+	    winpr_aligned_calloc(4ULL * subsystem->cursorMaxWidth, subsystem->cursorMaxHeight, 16);
 
 	if (!subsystem->cursorPixels)
 		return -1;

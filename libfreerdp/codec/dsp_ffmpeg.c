@@ -195,6 +195,7 @@ static void ffmpeg_close_context(FREERDP_DSP_CONTEXT* WINPR_RESTRICT context)
 
 		if (context->buffered)
 			av_frame_free(&context->buffered);
+		context->bufferedSamples = 0;
 
 		if (context->packet)
 			av_packet_free(&context->packet);
@@ -466,7 +467,7 @@ static BOOL ffmpeg_encode_frame(AVCodecContext* WINPR_RESTRICT context, AVFrame*
 
 		for (int y = 0; y < nr_channels; y++)
 		{
-			float* data = (float*)pp[y];
+			float* data = WINPR_PACKED_ALIGN_CAST(float*, pp[y]);
 			for (int x = 0; x < in->nb_samples; x++)
 			{
 				const float val1 = data[x];

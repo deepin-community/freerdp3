@@ -43,40 +43,34 @@
 
 #include <urbdrc_helpers.h>
 
+/* Must be called with loading_lock held.
+ *
+ * Do not look the control channel up with FindChannelById here: that takes the lock of the dynamic
+ * channel table while loading_lock is held, and drdynvc closes channels (urbdrc_on_close, which
+ * takes loading_lock) with the table lock held. A hotplug event during a disconnect then deadlocks
+ * the libusb event thread against the drdynvc thread and the client never exits. */
+WINPR_ATTR_NODISCARD
 static IWTSVirtualChannel* get_channel(IUDEVMAN* idevman)
 {
-	IWTSVirtualChannelManager* channel_mgr = nullptr;
-	URBDRC_PLUGIN* urbdrc = nullptr;
-
 	if (!idevman)
 		return nullptr;
 
-	urbdrc = (URBDRC_PLUGIN*)idevman->plugin;
-
-	if (!urbdrc || !urbdrc->listener_callback)
-		return nullptr;
-
-	channel_mgr = urbdrc->listener_callback->channel_mgr;
-
-	if (!channel_mgr)
-		return nullptr;
-
-	return channel_mgr->FindChannelById(channel_mgr, idevman->controlChannelId);
+	return idevman->controlChannel;
 }
 
 static int func_container_id_generate(IUDEVICE* pdev, char* strContainerId)
 {
-	char* p = nullptr;
-	char* path = nullptr;
+	const char* p = nullptr;
 	UINT8 containerId[17] = WINPR_C_ARRAY_INIT;
 	UINT16 idVendor = 0;
 	UINT16 idProduct = 0;
 	idVendor = (UINT16)pdev->query_device_descriptor(pdev, ID_VENDOR);
 	idProduct = (UINT16)pdev->query_device_descriptor(pdev, ID_PRODUCT);
-	path = pdev->getPath(pdev);
+	const char* path = pdev->getPath(pdev);
 
-	if (strlen(path) > 8)
-		p = (path + strlen(path)) - 8;
+	const size_t plen = strlen(path);
+	if (plen > 8)
+		p = &path[plen - 8];
 	else
 		p = path;
 
@@ -242,7 +236,10 @@ static BOOL write_string_block(wStream* s, size_t count, const char** strings, c
 	size_t len = 0;
 	for (size_t x = 0; x < count; x++)
 	{
-		len += length[x] + 1ULL;
+		const SSIZE_T wlen = ConvertUtf8NToWChar(strings[x], length[x], nullptr, 0);
+		if (wlen < 0)
+			return FALSE;
+		len += WINPR_ASSERTING_INT_CAST(size_t, wlen) + 1ULL;
 	}
 
 	if (isMultiSZ)
@@ -252,16 +249,20 @@ static BOOL write_string_block(wStream* s, size_t count, const char** strings, c
 		return FALSE;
 
 	/* Write number of characters (including '\0') of all strings */
-	Stream_Write_UINT32(s, (UINT32)len); /* cchHwIds */
-	                                     /* HardwareIds 1 */
+	Stream_Write_UINT32(s, WINPR_ASSERTING_INT_CAST(UINT32, len)); /* cchHwIds */
+	                                                               /* HardwareIds 1 */
 
 	for (size_t x = 0; x < count; x++)
 	{
 		size_t clength = length[x];
 		const char* str = strings[x];
+		const SSIZE_T wlen = ConvertUtf8NToWChar(str, clength, nullptr, 0);
+		if (wlen < 0)
+			return FALSE;
+		const size_t wlength = WINPR_ASSERTING_INT_CAST(size_t, wlen);
 
-		const SSIZE_T w = Stream_Write_UTF16_String_From_UTF8(s, clength, str, clength, TRUE);
-		if ((w < 0) || ((size_t)w != clength))
+		const SSIZE_T w = Stream_Write_UTF16_String_From_UTF8(s, wlength, str, clength, TRUE);
+		if ((w < 0) || ((size_t)w != wlength))
 			return FALSE;
 		Stream_Write_UINT16(s, 0);
 	}
@@ -273,10 +274,10 @@ static BOOL write_string_block(wStream* s, size_t count, const char** strings, c
 
 /* [MS-RDPEUSB] 2.2.4.2 Add Device Message (ADD_DEVICE) */
 static UINT urbdrc_send_add_device(GENERIC_CHANNEL_CALLBACK* callback, UINT32 UsbDevice,
-                                   UINT32 bcdUSB, const char* strInstanceId, size_t InstanceIdLen,
-                                   size_t nrHwIds, const char* HardwareIds[],
-                                   const size_t HardwareIdsLen[], size_t nrCompatIds,
-                                   const char* CompatibilityIds[],
+                                   UINT32 bcdUSB, enum device_speed deviceSpeed,
+                                   const char* strInstanceId, size_t InstanceIdLen, size_t nrHwIds,
+                                   const char* HardwareIds[], const size_t HardwareIdsLen[],
+                                   size_t nrCompatIds, const char* CompatibilityIds[],
                                    const size_t CompatibilityIdsLen[], const char* strContainerId,
                                    size_t ContainerIdLen)
 {
@@ -317,10 +318,29 @@ static UINT urbdrc_send_add_device(GENERIC_CHANNEL_CALLBACK* callback, UINT32 Us
 	Stream_Write_UINT32(out, bcdUSB);
 	Stream_Write_UINT32(out, 0x00000000); /* HcdCapabilities, MUST always be zero */
 
-	if (bcdUSB < 0x200)
-		Stream_Write_UINT32(out, 0x00000000); /* DeviceIsHighSpeed */
-	else
-		Stream_Write_UINT32(out, 0x00000001); /* DeviceIsHighSpeed */
+	/* [MS-RDPEUSB] 2.2.11 distinguishes only full from high speed, so every
+	 * faster device is reported as high speed. */
+	UINT32 DeviceIsHighSpeed = 0;
+	switch (deviceSpeed)
+	{
+		case DEVICE_SPEED_LOW:
+		case DEVICE_SPEED_FULL:
+			DeviceIsHighSpeed = 0x00000000;
+			break;
+
+		case DEVICE_SPEED_UNKNOWN:
+			/* The negotiated speed is unavailable or not recognised, so fall
+			 * back to the USB version the device claims. It only bounds the
+			 * speed, which is why it is not used when the bus can be asked. */
+			DeviceIsHighSpeed = (bcdUSB < 0x200) ? 0x00000000 : 0x00000001;
+			break;
+
+		default:
+			DeviceIsHighSpeed = 0x00000001;
+			break;
+	}
+
+	Stream_Write_UINT32(out, DeviceIsHighSpeed); /* DeviceIsHighSpeed */
 
 	Stream_Write_UINT32(out, 0x50); /* NoAckIsochWriteJitterBufferSizeInMs, >=10 or <=512 */
 	return stream_write_and_free(callback->plugin, callback->channel, out);
@@ -409,8 +429,9 @@ static UINT urdbrc_send_usb_device_add(GENERIC_CHANNEL_CALLBACK* callback, IUDEV
 	const UINT32 UsbDevice = pdev->get_UsbDevice(pdev);
 	const UINT32 bcdUSB =
 	    WINPR_ASSERTING_INT_CAST(uint32_t, pdev->query_device_descriptor(pdev, BCD_USB));
-	return urbdrc_send_add_device(callback, UsbDevice, bcdUSB, strInstanceId, InstanceIdLen,
-	                              nrHwIds, CHardwareIds, HardwareIdsLen, nrCompatIds,
+	const enum device_speed deviceSpeed = pdev->query_device_speed(pdev);
+	return urbdrc_send_add_device(callback, UsbDevice, bcdUSB, deviceSpeed, strInstanceId,
+	                              InstanceIdLen, nrHwIds, CHardwareIds, HardwareIdsLen, nrCompatIds,
 	                              CCompatibilityIds, CompatibilityIdLen, strContainerId,
 	                              ContainerIdLen);
 }
@@ -477,10 +498,16 @@ static BOOL urbdrc_announce_devices(IUDEVMAN* udevman)
 
 		if (!pdev->isAlreadySend(pdev))
 		{
+			UINT cerror = ERROR_SUCCESS;
 			const UINT32 deviceId = pdev->get_UsbDevice(pdev);
-			UINT cerror =
-			    urdbrc_send_virtual_channel_add(udevman->plugin, get_channel(udevman), deviceId);
-
+			udevman->loading_lock(udevman);
+			if (!pdev->isChannelClosed(pdev))
+			{
+				IWTSVirtualChannel* channel = get_channel(udevman);
+				if (channel)
+					cerror = urdbrc_send_virtual_channel_add(udevman->plugin, channel, deviceId);
+			}
+			udevman->loading_unlock(udevman);
 			if (cerror != ERROR_SUCCESS)
 				break;
 		}
@@ -510,6 +537,10 @@ static UINT urbdrc_device_control_channel(GENERIC_CHANNEL_CALLBACK* callback,
 			if (!udevman->initialize(udevman, channelId))
 				goto fail;
 
+			udevman->loading_lock(udevman);
+			udevman->controlChannel = channel;
+			udevman->loading_unlock(udevman);
+
 			if (!urbdrc_announce_devices(udevman))
 				goto fail;
 
@@ -533,6 +564,7 @@ static UINT urbdrc_device_control_channel(GENERIC_CHANNEL_CALLBACK* callback,
 					pdev->setAlreadySend(pdev);
 					pdev->set_channelManager(pdev, callback->channel_mgr);
 					pdev->set_channelID(pdev, channelID);
+					pdev->set_channelCallback(pdev, callback);
 					break;
 				}
 			}
@@ -658,6 +690,28 @@ static UINT urbdrc_on_data_received(IWTSVirtualChannelCallback* pChannelCallback
 	return error;
 }
 
+/* Must be called with loading_lock held.
+ *
+ * Pending transfers of a device keep the GENERIC_CHANNEL_CALLBACK of the channel the device is
+ * bound to. Before that callback is freed every such device has to go: markChannelClosed cancels
+ * the transfers and waits for them to complete. Do that for every device bound to the channel,
+ * not just the first one, and no matter what was closed before (the control channel may already
+ * be gone). */
+static void urbdrc_close_devices(IUDEVMAN* udevman, UINT32 channelId)
+{
+	udevman->rewind(udevman);
+
+	while (udevman->has_next(udevman))
+	{
+		IUDEVICE* pdev = udevman->get_next(udevman);
+
+		/* Need to notify the local backend the device is gone.
+		 * This unregisters the device and leaves the iterator at its successor. */
+		if (pdev->isAlreadySend(pdev) && (pdev->get_channelID(pdev) == channelId))
+			pdev->markChannelClosed(pdev);
+	}
+}
+
 /**
  * Function description
  *
@@ -674,15 +728,16 @@ static UINT urbdrc_on_close(IWTSVirtualChannelCallback* pChannelCallback)
 			IUDEVMAN* udevman = urbdrc->udevman;
 			if (udevman && callback->channel_mgr)
 			{
-				UINT32 control = callback->channel_mgr->GetChannelId(callback->channel);
-				if (udevman->controlChannelId == control)
+				udevman->loading_lock(udevman);
+				if (udevman->controlChannel == callback->channel)
+				{
+					udevman->controlChannel = nullptr;
 					udevman->status |= URBDRC_DEVICE_CHANNEL_CLOSED;
-				else
-				{ /* Need to notify the local backend the device is gone */
-					IUDEVICE* pdev = udevman->get_udevice_by_ChannelID(udevman, control);
-					if (pdev)
-						pdev->markChannelClosed(pdev);
+					udevman->controlChannelId = 0;
 				}
+				urbdrc_close_devices(udevman,
+				                     callback->channel_mgr->GetChannelId(callback->channel));
+				udevman->loading_unlock(udevman);
 			}
 		}
 	}

@@ -31,8 +31,11 @@
 #include <winpr/file.h>
 #include <winpr/path.h>
 #include <winpr/sysinfo.h>
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 #include <winpr/registry.h>
+#endif
 #include <winpr/wtsapi.h>
+#include <winpr/input.h>
 
 #include <freerdp/version.h>
 #include <freerdp/settings.h>
@@ -54,11 +57,13 @@
 
 static const char client_dll[] = "C:\\Windows\\System32\\mstscax.dll";
 
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 #define SERVER_KEY "Software\\%s\\Server"
 #define CLIENT_KEY "Software\\%s\\Client"
 #define BITMAP_CACHE_KEY CLIENT_KEY "\\BitmapCacheV2"
 #define GLYPH_CACHE_KEY CLIENT_KEY "\\GlyphCache"
 #define POINTER_CACHE_KEY CLIENT_KEY "\\PointerCache"
+#endif
 
 struct bounds_t
 {
@@ -126,6 +131,7 @@ static BOOL align_rects(const struct bounds_t* r1, const struct bounds_t* r2)
 	return (left == right) || (top == bottom);
 }
 
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 static BOOL settings_reg_query_dword_val(HKEY hKey, const TCHAR* sub, DWORD* value)
 {
 	DWORD dwType = 0;
@@ -185,9 +191,25 @@ static BOOL settings_reg_query_bool(rdpSettings* settings, FreeRDP_Settings_Keys
 
 	return freerdp_settings_set_bool(settings, id, (dwValue != 0));
 }
+#endif
+
+static void settings_load_config(rdpSettings* settings, const char* config)
+{
+	WINPR_JSON* json = freerdp_GetJSONConfigFile(TRUE, config);
+	if (!json)
+		return;
+
+	if (!freerdp_settings_apply_from_json(settings, json))
+	{
+		WLog_DBG(TAG, "%s could not be applied. File does not exist or is not valid", config);
+	}
+	WINPR_JSON_Delete(json);
+}
 
 static void settings_client_load_hkey_local_machine(rdpSettings* settings)
 {
+	const char config[] = "settings-defaults-client.json";
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 	{
 		char* key = freerdp_getApplicatonDetailsRegKey(CLIENT_KEY);
 		if (key)
@@ -199,6 +221,9 @@ static void settings_client_load_hkey_local_machine(rdpSettings* settings)
 
 			if (status == ERROR_SUCCESS)
 			{
+				WLog_WARN(TAG, "HKLM.reg is deprecated since 3.33.0. ATTENTION Use %s instead",
+				          config);
+
 				settings_reg_query_dword(settings, FreeRDP_DesktopWidth, hKey, _T("DesktopWidth"));
 				settings_reg_query_dword(settings, FreeRDP_DesktopHeight, hKey,
 				                         _T("DesktopHeight"));
@@ -253,8 +278,10 @@ static void settings_client_load_hkey_local_machine(rdpSettings* settings)
 					(void)_sntprintf(numentries, ARRAYSIZE(numentries), _T("Cell%uNumEntries"), x);
 					(void)_sntprintf(persist, ARRAYSIZE(persist), _T("Cell%uPersistent"), x);
 					if (!settings_reg_query_dword_val(hKey, numentries, &val) ||
-					    !settings_reg_query_bool_val(hKey, persist, &cache.persistent) ||
-					    !freerdp_settings_set_pointer_array(settings, FreeRDP_BitmapCacheV2CellInfo,
+					    !settings_reg_query_bool_val(hKey, persist, &cache.persistent))
+						continue;
+
+					if (!freerdp_settings_set_pointer_array(settings, FreeRDP_BitmapCacheV2CellInfo,
 					                                        x, &cache))
 						WLog_WARN(TAG, "Failed to load registry keys to settings!");
 					cache.numEntries = val;
@@ -334,38 +361,60 @@ static void settings_client_load_hkey_local_machine(rdpSettings* settings)
 			}
 		}
 	}
+#endif
+	settings_load_config(settings, config);
 }
 
 static void settings_server_load_hkey_local_machine(rdpSettings* settings)
 {
-	HKEY hKey = nullptr;
+	const char config[] = "settings-defaults-server.json";
 
-	char* key = freerdp_getApplicatonDetailsRegKey(SERVER_KEY);
-	if (!key)
-		return;
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
+	{
+		HKEY hKey = nullptr;
 
-	const LONG status =
-	    RegOpenKeyExA(HKEY_LOCAL_MACHINE, key, 0, KEY_READ | KEY_WOW64_64KEY, &hKey);
-	free(key);
+		char* key = freerdp_getApplicatonDetailsRegKey(SERVER_KEY);
+		if (!key)
+			return;
 
-	if (status != ERROR_SUCCESS)
-		return;
+		const LONG status =
+		    RegOpenKeyExA(HKEY_LOCAL_MACHINE, key, 0, KEY_READ | KEY_WOW64_64KEY, &hKey);
+		free(key);
 
-	settings_reg_query_bool(settings, FreeRDP_ExtSecurity, hKey, _T("ExtSecurity"));
-	settings_reg_query_bool(settings, FreeRDP_NlaSecurity, hKey, _T("NlaSecurity"));
-	settings_reg_query_bool(settings, FreeRDP_TlsSecurity, hKey, _T("TlsSecurity"));
-	settings_reg_query_dword(settings, FreeRDP_TlsSecLevel, hKey, _T("TlsSecLevel"));
-	settings_reg_query_bool(settings, FreeRDP_RdpSecurity, hKey, _T("RdpSecurity"));
+		if (status != ERROR_SUCCESS)
+			return;
 
-	RegCloseKey(hKey);
+		WLog_WARN(TAG, "HKLM.reg is deprecated since 3.33.0. ATTENTION Use %s instead", config);
+
+		settings_reg_query_bool(settings, FreeRDP_ExtSecurity, hKey, _T("ExtSecurity"));
+		settings_reg_query_bool(settings, FreeRDP_NlaSecurity, hKey, _T("NlaSecurity"));
+		settings_reg_query_bool(settings, FreeRDP_TlsSecurity, hKey, _T("TlsSecurity"));
+		settings_reg_query_dword(settings, FreeRDP_TlsSecLevel, hKey, _T("TlsSecLevel"));
+		settings_reg_query_bool(settings, FreeRDP_RdpSecurity, hKey, _T("RdpSecurity"));
+
+		RegCloseKey(hKey);
+	}
+#endif
+
+	settings_load_config(settings, config);
 }
 
-static void settings_load_hkey_local_machine(rdpSettings* settings)
+WINPR_ATTR_NODISCARD
+static BOOL settings_load_hkey_local_machine(rdpSettings* settings)
 {
-	if (freerdp_settings_get_bool(settings, FreeRDP_ServerMode))
+	const BOOL server = freerdp_settings_get_bool(settings, FreeRDP_ServerMode);
+	if (server)
 		settings_server_load_hkey_local_machine(settings);
 	else
 		settings_client_load_hkey_local_machine(settings);
+
+	const BOOL fail = server != freerdp_settings_get_bool(settings, FreeRDP_ServerMode);
+	if (fail)
+	{
+		WLog_ERR(TAG,
+		         "default configuration changed FreeRDP_ServerMode! This is not allowed, aborting");
+	}
+	return !fail;
 }
 
 static BOOL settings_init_computer_name(rdpSettings* settings)
@@ -474,8 +523,8 @@ static UINT32** alloc_array(size_t count)
 {
 	// NOLINTNEXTLINE(clang-analyzer-unix.MallocSizeof)
 	BYTE* array = calloc(count * sizeof(uintptr_t), count * sizeof(UINT32));
-	UINT32** dst = (UINT32**)array;
-	UINT32* val = (UINT32*)(array + count * sizeof(uintptr_t));
+	UINT32** dst = WINPR_PACKED_ALIGN_CAST(UINT32**, array);
+	UINT32* val = WINPR_PACKED_ALIGN_CAST(UINT32*, (array + count * sizeof(uintptr_t)));
 	for (size_t x = 0; x < count; x++)
 		dst[x] = &val[x];
 
@@ -759,6 +808,29 @@ BOOL freerdp_settings_check_client_after_preconnect(const rdpSettings* settings)
 		    log, level,
 		    "Provide at least the following log lines detailing your monitor configuration:");
 		log_monitor_configuration(settings, log, level);
+		rc = FALSE;
+	}
+
+	if (freerdp_settings_get_bool(settings, FreeRDP_GatewayEnabled))
+	{
+		const char* host = freerdp_settings_get_string(settings, FreeRDP_GatewayHostname);
+		if (!host)
+		{
+			WLog_Print(log, WLOG_ERROR,
+			           "Inconsistent settings: Gateway support enabled, but no gateway provided.");
+			rc = FALSE;
+		}
+	}
+
+	if (freerdp_settings_get_bool(settings, FreeRDP_RemoteApplicationMode))
+	{
+		if (freerdp_settings_get_bool(settings, FreeRDP_SpanMonitors))
+		{
+			WLog_Print(
+			    log, WLOG_ERROR,
+			    "Inconsistent settings: RemoteApplicationMode and SpanMonitors are incompatible.");
+			rc = FALSE;
+		}
 	}
 
 	return rc;
@@ -845,6 +917,8 @@ rdpSettings* freerdp_settings_new(DWORD flags)
 		if (!res)
 			goto out_fail;
 	}
+	if (!freerdp_settings_set_uint32(settings, FreeRDP_RdstlsEnabledModes, UINT32_MAX))
+		goto out_fail;
 	if (!server && !remote)
 	{
 		if (!freerdp_settings_set_string(settings, FreeRDP_GatewayHttpUserAgent,
@@ -931,6 +1005,15 @@ rdpSettings* freerdp_settings_new(DWORD flags)
 	                                     RNS_UD_16BPP_SUPPORT | RNS_UD_15BPP_SUPPORT))
 		goto out_fail;
 
+	const UINT32 railflags = TS_RAIL_CLIENTSTATUS_ALLOWLOCALMOVESIZE |
+	                         TS_RAIL_CLIENTSTATUS_ZORDER_SYNC |
+	                         TS_RAIL_CLIENTSTATUS_WINDOW_RESIZE_MARGIN_SUPPORTED |
+	                         TS_RAIL_CLIENTSTATUS_APPBAR_REMOTING_SUPPORTED |
+	                         TS_RAIL_CLIENTSTATUS_POWER_DISPLAY_REQUEST_SUPPORTED |
+	                         TS_RAIL_CLIENTSTATUS_BIDIRECTIONAL_CLOAK_SUPPORTED;
+	if (!freerdp_settings_set_uint32(settings, FreeRDP_RemoteAppFeatureFlags, railflags))
+		goto out_fail;
+
 	if (!freerdp_settings_set_bool(settings, FreeRDP_UnicodeInput, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_HasHorizontalWheel, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_HasExtendedMouseEvent, TRUE) ||
@@ -961,7 +1044,7 @@ rdpSettings* freerdp_settings_new(DWORD flags)
 	    !freerdp_settings_set_uint32(settings, FreeRDP_RdpVersion, RDP_VERSION_10_12) ||
 	    !freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_AadSecurity, FALSE) ||
-	    !freerdp_settings_set_bool(settings, FreeRDP_ExtSecurity, FALSE) ||
+	    !freerdp_settings_set_bool(settings, FreeRDP_ExtSecurity, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_NlaSecurity, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_TlsSecurity, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, TRUE) ||
@@ -1042,7 +1125,12 @@ rdpSettings* freerdp_settings_new(DWORD flags)
 	if (!freerdp_settings_set_uint32(settings, FreeRDP_MultitransportFlags,
 	                                 TRANSPORT_TYPE_UDP_FECR))
 		goto out_fail;
+	/* REDIRECTION_VERSION6 needs multitransport advertised. A client uses UDP only when
+	 * SupportMultitransportUdp is set (/multitransport:udp) and otherwise declines the server's
+	 * Initiate Multitransport Requests, as a client built without UDP does. */
 	if (!freerdp_settings_set_bool(settings, FreeRDP_SupportMultitransport, TRUE))
+		goto out_fail;
+	if (!freerdp_settings_set_bool(settings, FreeRDP_SupportMultitransportUdp, TRUE))
 		goto out_fail;
 
 	if (!settings_init_computer_name(settings))
@@ -1092,31 +1180,16 @@ rdpSettings* freerdp_settings_new(DWORD flags)
 	    !freerdp_settings_set_bool(settings, FreeRDP_DrawAllowDynamicColorFidelity, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_FrameMarkerCommandEnabled, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_SurfaceFrameMarkerEnabled, TRUE) ||
-	    !freerdp_settings_set_bool(settings, FreeRDP_AllowCacheWaitingList, TRUE) ||
-	    !freerdp_settings_set_uint32(settings, FreeRDP_BitmapCacheV2NumCells, 5))
-		goto out_fail;
-	settings->BitmapCacheV2CellInfo =
-	    (BITMAP_CACHE_V2_CELL_INFO*)calloc(6, sizeof(BITMAP_CACHE_V2_CELL_INFO));
-
-	if (!settings->BitmapCacheV2CellInfo)
+	    !freerdp_settings_set_bool(settings, FreeRDP_AllowCacheWaitingList, TRUE))
 		goto out_fail;
 
-	{
-		BITMAP_CACHE_V2_CELL_INFO cache = WINPR_C_ARRAY_INIT;
-		cache.numEntries = 600;
-		if (!freerdp_settings_set_pointer_array(settings, FreeRDP_BitmapCacheV2CellInfo, 0,
-		                                        &cache) ||
-		    !freerdp_settings_set_pointer_array(settings, FreeRDP_BitmapCacheV2CellInfo, 1, &cache))
-			goto out_fail;
-		cache.numEntries = 2048;
-		if (!freerdp_settings_set_pointer_array(settings, FreeRDP_BitmapCacheV2CellInfo, 2,
-		                                        &cache) ||
-		    !freerdp_settings_set_pointer_array(settings, FreeRDP_BitmapCacheV2CellInfo, 4, &cache))
-			goto out_fail;
-		cache.numEntries = 4096;
-		if (!freerdp_settings_set_pointer_array(settings, FreeRDP_BitmapCacheV2CellInfo, 3, &cache))
-			goto out_fail;
-	}
+	const BITMAP_CACHE_V2_CELL_INFO CellInfo[5] = {
+		{ 600, FALSE }, { 600, FALSE }, { 65536, FALSE }, { 4096, FALSE }, { 2048, FALSE }
+	};
+	if (!freerdp_settings_set_pointer_len(settings, FreeRDP_BitmapCacheV2CellInfo, CellInfo,
+	                                      ARRAYSIZE(CellInfo)))
+		goto out_fail;
+
 	if (!freerdp_settings_set_bool(settings, FreeRDP_NoBitmapCompressionHeader, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_RefreshRect, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_SuppressOutput, TRUE) ||
@@ -1272,6 +1345,11 @@ rdpSettings* freerdp_settings_new(DWORD flags)
 	    !freerdp_settings_set_uint32(settings, FreeRDP_TcpConnectTimeout, 15000))
 		goto out_fail;
 
+	/* Bound for waiting on a gateway HTTP response (status/header phase and body phase each),
+	 * separate from FreeRDP_TcpConnectTimeout, which only bounds TCP connection establishment. */
+	if (!freerdp_settings_set_uint32(settings, FreeRDP_GatewayResponseTimeout, 15000))
+		goto out_fail;
+
 	if (!freerdp_settings_get_bool(settings, FreeRDP_ServerMode))
 	{
 		BOOL rc = FALSE;
@@ -1300,15 +1378,13 @@ rdpSettings* freerdp_settings_new(DWORD flags)
 			goto out_fail;
 	}
 
-	settings_load_hkey_local_machine(settings);
-
 	if (!freerdp_settings_set_bool(settings, FreeRDP_SmartcardLogon, FALSE))
 		goto out_fail;
-	if (!freerdp_settings_set_uint32(settings, FreeRDP_TlsSecLevel, 1))
+	if (!freerdp_settings_set_uint32(settings, FreeRDP_TlsSecLevel, FREERDP_TLS_SECLEVEL_112BIT))
 		goto out_fail;
 	settings->OrderSupport = calloc(1, 32);
 
-	if (!freerdp_settings_set_uint16(settings, FreeRDP_TLSMinVersion, TLS1_VERSION))
+	if (!freerdp_settings_set_uint16(settings, FreeRDP_TLSMinVersion, TLS1_2_VERSION))
 		goto out_fail;
 	if (!freerdp_settings_set_uint16(settings, FreeRDP_TLSMaxVersion, 0))
 		goto out_fail;
@@ -1338,6 +1414,18 @@ rdpSettings* freerdp_settings_new(DWORD flags)
 	if (!freerdp_settings_set_bool(settings, FreeRDP_SupportDynamicTimeZone, TRUE))
 		goto out_fail;
 	if (!freerdp_settings_set_bool(settings, FreeRDP_SupportSkipChannelJoin, TRUE))
+		goto out_fail;
+
+	UUID corrId = WINPR_C_ARRAY_INIT;
+	if (UuidCreate(&corrId) != RPC_S_OK)
+		goto out_fail;
+
+	char buffer[64] = WINPR_C_ARRAY_INIT;
+	if (!freerdp_settings_set_string(settings, FreeRDP_CorrelationId,
+	                                 guid2str(&corrId, buffer, sizeof(buffer))))
+		goto out_fail;
+
+	if (!settings_load_hkey_local_machine(settings))
 		goto out_fail;
 
 	return settings;
@@ -1638,13 +1726,6 @@ out_fail:
 #pragma warning(pop)
 #endif
 
-static void zfree(WCHAR* str, size_t len)
-{
-	if (str)
-		memset(str, 0, len * sizeof(WCHAR));
-	free(str);
-}
-
 BOOL identity_set_from_settings_with_pwd(SEC_WINNT_AUTH_IDENTITY* identity,
                                          const rdpSettings* settings,
                                          FreeRDP_Settings_Keys_String UserId,
@@ -1662,8 +1743,8 @@ BOOL identity_set_from_settings_with_pwd(SEC_WINNT_AUTH_IDENTITY* identity,
 
 	const int rc = sspi_SetAuthIdentityWithLengthW(identity, Username, UserLen, Domain, DomainLen,
 	                                               Password, pwdLen);
-	zfree(Username, UserLen);
-	zfree(Domain, DomainLen);
+	winpr_znfree(Username, UserLen * sizeof(WCHAR));
+	winpr_znfree(Domain, DomainLen * sizeof(WCHAR));
 	return (rc >= 0);
 }
 
@@ -1681,7 +1762,7 @@ BOOL identity_set_from_settings(SEC_WINNT_AUTH_IDENTITY_W* identity, const rdpSe
 
 	const BOOL rc =
 	    identity_set_from_settings_with_pwd(identity, settings, UserId, DomainId, Password, PwdLen);
-	zfree(Password, PwdLen);
+	winpr_znfree(Password, PwdLen * sizeof(WCHAR));
 	return rc;
 }
 
@@ -1710,7 +1791,7 @@ BOOL identity_set_from_smartcard_hash(SEC_WINNT_AUTH_IDENTITY_W* identity,
 	const int rc = sspi_SetAuthIdentityWithLengthW(identity, marshalledCredentials,
 	                                               _wcslen(marshalledCredentials), nullptr, 0,
 	                                               Password, pwdLen);
-	zfree(Password, pwdLen);
+	winpr_znfree(Password, pwdLen * sizeof(WCHAR));
 	CredFree(marshalledCredentials);
 	return (rc >= 0);
 #else
@@ -1773,9 +1854,9 @@ BOOL freerdp_settings_enforce_monitor_exists(rdpSettings* settings)
 		const UINT16 orientation =
 		    freerdp_settings_get_uint16(settings, FreeRDP_DesktopOrientation);
 		const UINT32 desktopScaleFactor =
-		    freerdp_settings_get_uint32(settings, FreeRDP_DeviceScaleFactor);
-		const UINT32 deviceScaleFactor =
 		    freerdp_settings_get_uint32(settings, FreeRDP_DesktopScaleFactor);
+		const UINT32 deviceScaleFactor =
+		    freerdp_settings_get_uint32(settings, FreeRDP_DeviceScaleFactor);
 
 		if (!freerdp_settings_set_uint32(settings, FreeRDP_MonitorCount, 1))
 			return FALSE;
@@ -1799,6 +1880,34 @@ BOOL freerdp_settings_enforce_monitor_exists(rdpSettings* settings)
 	return TRUE;
 }
 
+void freerdp_settings_sanitize_keyboard_type(wLog* log, rdpSettings* settings, const char* source)
+{
+	WINPR_ASSERT(settings);
+
+	switch (settings->KeyboardType)
+	{
+		case WINPR_KBD_TYPE_IBM_PC_XT:
+		case WINPR_KBD_TYPE_OLIVETTI_ICO:
+		case WINPR_KBD_TYPE_IBM_PC_AT:
+		case WINPR_KBD_TYPE_IBM_ENHANCED:
+		case WINPR_KBD_TYPE_NOKIA_1050:
+		case WINPR_KBD_TYPE_NOKIA_9140:
+		case WINPR_KBD_TYPE_JAPANESE:
+		case WINPR_KBD_TYPE_KOREAN:
+			return;
+		default:
+			break;
+	}
+
+	if (!log)
+		log = WLog_Get(TAG);
+	WLog_Print(log, WLOG_WARN,
+	           "%s: KeyboardType=0x%08" PRIx32
+	           " is not a known WINPR_KBD_TYPE, using WINPR_KBD_TYPE_IBM_ENHANCED instead",
+	           source ? source : "settings", settings->KeyboardType);
+	settings->KeyboardType = WINPR_KBD_TYPE_IBM_ENHANCED;
+}
+
 BOOL freerdp_settings_enforce_consistency(rdpSettings* settings)
 {
 	if (freerdp_settings_get_bool(settings, FreeRDP_BitmapCacheV3Enabled))
@@ -1807,10 +1916,26 @@ BOOL freerdp_settings_enforce_consistency(rdpSettings* settings)
 		settings->OrderSupportFlags |= ORDER_FLAGS_EXTRA_SUPPORT;
 	}
 
-	if (settings->FrameMarkerCommandEnabled)
+	if (freerdp_settings_get_bool(settings, FreeRDP_FrameMarkerCommandEnabled))
 	{
 		settings->OrderSupportFlagsEx |= ALTSEC_FRAME_MARKER_SUPPORT;
 		settings->OrderSupportFlags |= ORDER_FLAGS_EXTRA_SUPPORT;
+	}
+
+	/* Try to fix usage mistakes here.
+	 * When a gateway is requested but no host is given deactivate it.
+	 * Be loud about this and log warnings.
+	 */
+	if (freerdp_settings_get_bool(settings, FreeRDP_GatewayEnabled))
+	{
+		const char* host = freerdp_settings_get_string(settings, FreeRDP_GatewayHostname);
+		if (utils_str_is_empty(host))
+		{
+			if (!freerdp_settings_set_bool(settings, FreeRDP_GatewayEnabled, FALSE))
+				return FALSE;
+			WLog_WARN(TAG,
+			          "Gateway enabled but GatewayHostname is empty, deactivating gateway support");
+		}
 	}
 	return TRUE;
 }

@@ -16,17 +16,19 @@
 # limitations under the License.
 
 # Servers
-option(WITH_SHADOW "Compile with shadow server" ON)
+# On macOS the shadow server captures the screen with ScreenCaptureKit (macOS
+# 12.3): off by default for older targets, and on iOS, which has no subsystem
+set(SHADOW_DEFAULT ON)
+if(IOS OR (APPLE AND CMAKE_OSX_DEPLOYMENT_TARGET AND CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS "12.3"))
+  set(SHADOW_DEFAULT OFF)
+endif()
+option(WITH_SHADOW "Compile with shadow server" ${SHADOW_DEFAULT})
 option(WITH_PROXY "Compile with proxy server" ON)
 option(WITH_PLATFORM_SERVER "Compile with platform server" ON)
 
 add_subdirectory(common)
 if(WITH_SHADOW)
-  if(APPLE)
-    message(WARNING "Mac shadow server implementation no longer compiles")
-  else()
-    add_subdirectory(shadow)
-  endif()
+  add_subdirectory(shadow)
 endif()
 if(WITH_PROXY)
   add_subdirectory(proxy)
@@ -80,7 +82,9 @@ endforeach()
 # Do not set Requires.Private if not a static build
 if(NOT BUILD_SHARED_LIBS)
   set(FREERDP_SERVER_PC_REQUIRES_PRIVATE "freerdp${FREERDP_API_VERSION}")
-  set(FREERDP_SERVER_PC_LIBRARY_PRIVATE "-ldl -lpthread")
+
+  include(PkgConfigAddThreads)
+  pkg_config_add_threads(FREERDP_SERVER_PC_LIBRARY_PRIVATE)
 endif()
 set(FREERDP_SERVER_PC_REQUIRES freerdp${FREERDP_API_VERSION})
 

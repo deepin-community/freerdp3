@@ -22,11 +22,14 @@
 
 #include <winpr/sspi.h>
 
+/* Macro converting a ANSII character to a little endian WCHAR */
+#if defined(__BIG_ENDIAN__)
+#define W(c) (((WCHAR)(char)c) << 8)
+#else
+#define W(c) (((WCHAR)(char)c))
+#endif
+
 #define SCHANNEL_CB_MAX_TOKEN 0x00006000
-
-#define SSPI_CREDENTIALS_PASSWORD_HASH 0x00000001
-
-#define SSPI_CREDENTIALS_HASH_LENGTH_OFFSET 512
 
 typedef struct
 {
@@ -35,22 +38,52 @@ typedef struct
 	SEC_GET_KEY_FN pGetKeyFn;
 	void* pvGetKeyArgument;
 	SEC_WINNT_AUTH_IDENTITY identity;
-	SEC_WINPR_NTLM_SETTINGS ntlmSettings;
-	SEC_WINPR_KERBEROS_SETTINGS kerbSettings;
+	SEC_WINPR_NTLM_SETTINGS_V2* ntlmSettingsV2;
 } SSPI_CREDENTIALS;
 
-SSPI_CREDENTIALS* sspi_CredentialsNew(void);
 void sspi_CredentialsFree(SSPI_CREDENTIALS* credentials);
+
+WINPR_ATTR_MALLOC(sspi_CredentialsFree, 1)
+SSPI_CREDENTIALS* sspi_CredentialsNew(void);
 
 PSecBuffer sspi_FindSecBuffer(PSecBufferDesc pMessage, ULONG BufferType);
 
-SecHandle* sspi_SecureHandleAlloc(void);
-void sspi_SecureHandleInvalidate(SecHandle* handle);
-void* sspi_SecureHandleGetLowerPointer(SecHandle* handle);
-void sspi_SecureHandleSetLowerPointer(SecHandle* handle, void* pointer);
-void* sspi_SecureHandleGetUpperPointer(SecHandle* handle);
-void sspi_SecureHandleSetUpperPointer(SecHandle* handle, void* pointer);
 void sspi_SecureHandleFree(SecHandle* handle);
+
+WINPR_ATTR_MALLOC(sspi_SecureHandleFree, 1)
+SecHandle* sspi_SecureHandleAlloc(void);
+
+void sspi_SecureHandleInvalidate(SecHandle* handle);
+
+WINPR_ATTR_NODISCARD
+void* sspi_SecureHandleGetLowerPointer(SecHandle* handle);
+
+void sspi_SecureHandleSetLowerPointer(SecHandle* handle, void* pointer);
+
+WINPR_ATTR_NODISCARD
+void* sspi_SecureHandleGetUpperPointer(SecHandle* handle);
+
+void sspi_SecureHandleSetUpperPointer(SecHandle* handle, void* pointer);
+
+/* Package identity of a SecHandle (1-based; 0 == unset). The order MUST match
+ * SecPkgInfo{A,W}_LIST and SecurityFunctionTable{A,W}_NAME_LIST in sspi_winpr.c;
+ * that is asserted at compile time there. */
+typedef enum WINPR_C23_ENUM_TYPE(uint32_t)
+{
+	SSPI_PACKAGE_NONE = 0,
+	SSPI_PACKAGE_NTLM,
+	SSPI_PACKAGE_KERBEROS,
+	SSPI_PACKAGE_NEGOTIATE,
+	SSPI_PACKAGE_CREDSSP,
+	SSPI_PACKAGE_SCHANNEL,
+	SSPI_PACKAGE_COUNT /* number of identifiers, SSPI_PACKAGE_NONE included; keep last */
+} SSPI_PACKAGE_ID;
+
+/* Typed access to the package identity. Shares the upper-pointer slot and its encoding
+ * with sspi_SecureHandleGet/SetUpperPointer, but never forms a pointer from the
+ * identifier, so no integer-to-pointer conversion appears at any call site. */
+WINPR_ATTR_NODISCARD SSPI_PACKAGE_ID sspi_SecureHandleGetPackageId(SecHandle* handle);
+void sspi_SecureHandleSetPackageId(SecHandle* handle, SSPI_PACKAGE_ID id);
 
 enum SecurityFunctionTableIndex
 {
@@ -85,6 +118,7 @@ enum SecurityFunctionTableIndex
 	SetCredentialsAttributesIndex = 29
 };
 
+WINPR_ATTR_NODISCARD
 BOOL IsSecurityStatusError(SECURITY_STATUS status);
 
 #include "sspi_gss.h"

@@ -35,12 +35,16 @@
 #include <freerdp/client/cmdline.h>
 #include <freerdp/client/cliprdr.h>
 #include <freerdp/client/channels.h>
+#include <freerdp/client/aad_helper.h>
 #include <freerdp/channels/channels.h>
 
 #include <winpr/crt.h>
 #include <winpr/assert.h>
 #include <winpr/synch.h>
 #include <freerdp/log.h>
+#include <freerdp/utils/helpers.h>
+#include <freerdp/build-config.h>
+#include <freerdp/version.h>
 
 #include "tf_channels.h"
 #include "tf_freerdp.h"
@@ -262,7 +266,7 @@ static DWORD WINAPI tf_client_thread_proc(LPVOID arg)
 	{
 		result = freerdp_get_last_error(instance->context);
 		WLog_ERR(TAG, "connection failure 0x%08" PRIx32, result);
-		return result;
+		goto disconnect;
 	}
 
 	while (!freerdp_shall_disconnect_context(instance->context))
@@ -337,6 +341,7 @@ static BOOL tf_client_new(freerdp* instance, rdpContext* context)
 	instance->PostConnect = tf_post_connect;
 	instance->PostDisconnect = tf_post_disconnect;
 	instance->LogonErrorInfo = tf_logon_error_info;
+	instance->GetAccessToken = client_failsafe_get_access_token;
 	/* TODO: Client display set up */
 	WINPR_UNUSED(tf);
 	return TRUE;
@@ -388,6 +393,20 @@ int main(int argc, char* argv[])
 {
 	int rc = -1;
 	RDP_CLIENT_ENTRY_POINTS clientEntryPoints = WINPR_C_ARRAY_INIT;
+
+	/*
+	 * Set custom application details at first thing in main.
+	 * This will initialize a new namespace within FreeRDP and WinPR.
+	 * As a result all configuration files will be searched in different locations.
+	 *
+	 * The location is <prefix>/<vendor>/<product> or <prefix>/<vendor>/<product><version> for
+	 * config file search directories. An example for a system wide configuration file would be
+	 * /etc/FreeRDP/TFreeRDP3/ or ~/.config//FreeRDP/TFreeRDP3/ for user config files.
+	 *
+	 * Consult \ref GetKnownPath for <prefix> locations on different operating systems
+	 */
+	if (!freerdp_setApplicationDetails(FREERDP_VENDOR_STRING, "TFreeRDP", FREERDP_VERSION_MAJOR))
+		return -1;
 
 	RdpClientEntry(&clientEntryPoints);
 	rdpContext* context = freerdp_client_context_new(&clientEntryPoints);

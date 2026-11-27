@@ -179,7 +179,6 @@ int rpc_send_bind_pdu(rdpRpc* rpc, BOOL initial)
 	wStream* buffer = nullptr;
 	UINT32 offset = 0;
 	RpcClientCall* clientCall = nullptr;
-	p_cont_elem_t* p_cont_elem = nullptr;
 	rpcconn_bind_hdr_t bind_pdu = WINPR_C_ARRAY_INIT;
 	RpcVirtualConnection* connection = nullptr;
 	RpcInChannel* inChannel = nullptr;
@@ -222,33 +221,40 @@ int rpc_send_bind_pdu(rdpRpc* rpc, BOOL initial)
 	if (!bind_pdu.p_context_elem.p_cont_elem)
 		goto fail;
 
-	p_cont_elem = &bind_pdu.p_context_elem.p_cont_elem[0];
-	p_cont_elem->p_cont_id = 0;
-	p_cont_elem->n_transfer_syn = 1;
-	p_cont_elem->reserved = 0;
-	CopyMemory(&(p_cont_elem->abstract_syntax.if_uuid), &TSGU_UUID, sizeof(p_uuid_t));
-	p_cont_elem->abstract_syntax.if_version = TSGU_SYNTAX_IF_VERSION;
-	p_cont_elem->transfer_syntaxes = malloc(sizeof(p_syntax_id_t));
+	{
+		p_cont_elem_t* p_cont_elem = &bind_pdu.p_context_elem.p_cont_elem[0];
+		p_cont_elem->p_cont_id = 0;
+		p_cont_elem->n_transfer_syn = 1;
+		p_cont_elem->reserved = 0;
+		CopyMemory(&(p_cont_elem->abstract_syntax.if_uuid), &TSGU_UUID, sizeof(p_uuid_t));
+		p_cont_elem->abstract_syntax.if_version = TSGU_SYNTAX_IF_VERSION;
+		rts_syntax_id_free(p_cont_elem->transfer_syntaxes);
+		p_cont_elem->transfer_syntaxes = rts_syntax_id_new(1);
 
-	if (!p_cont_elem->transfer_syntaxes)
-		goto fail;
+		if (!p_cont_elem->transfer_syntaxes)
+			goto fail;
 
-	CopyMemory(&(p_cont_elem->transfer_syntaxes[0].if_uuid), &NDR_UUID, sizeof(p_uuid_t));
-	p_cont_elem->transfer_syntaxes[0].if_version = NDR_SYNTAX_IF_VERSION;
-	p_cont_elem = &bind_pdu.p_context_elem.p_cont_elem[1];
-	p_cont_elem->p_cont_id = 1;
-	p_cont_elem->n_transfer_syn = 1;
-	p_cont_elem->reserved = 0;
-	CopyMemory(&(p_cont_elem->abstract_syntax.if_uuid), &TSGU_UUID, sizeof(p_uuid_t));
-	p_cont_elem->abstract_syntax.if_version = TSGU_SYNTAX_IF_VERSION;
-	p_cont_elem->transfer_syntaxes = malloc(sizeof(p_syntax_id_t));
+		CopyMemory(&(p_cont_elem->transfer_syntaxes[0].if_uuid), &NDR_UUID, sizeof(p_uuid_t));
+		p_cont_elem->transfer_syntaxes[0].if_version = NDR_SYNTAX_IF_VERSION;
+	}
+	{
+		p_cont_elem_t* p_cont_elem = &bind_pdu.p_context_elem.p_cont_elem[1];
+		p_cont_elem->p_cont_id = 1;
+		p_cont_elem->n_transfer_syn = 1;
+		p_cont_elem->reserved = 0;
+		CopyMemory(&(p_cont_elem->abstract_syntax.if_uuid), &TSGU_UUID, sizeof(p_uuid_t));
+		p_cont_elem->abstract_syntax.if_version = TSGU_SYNTAX_IF_VERSION;
 
-	if (!p_cont_elem->transfer_syntaxes)
-		goto fail;
+		rts_syntax_id_free(p_cont_elem->transfer_syntaxes);
+		p_cont_elem->transfer_syntaxes = rts_syntax_id_new(1);
 
-	CopyMemory(&(p_cont_elem->transfer_syntaxes[0].if_uuid), &BTFN_UUID, sizeof(p_uuid_t));
-	p_cont_elem->transfer_syntaxes[0].if_version = BTFN_SYNTAX_IF_VERSION;
-	offset = 116;
+		if (!p_cont_elem->transfer_syntaxes)
+			goto fail;
+
+		CopyMemory(&(p_cont_elem->transfer_syntaxes[0].if_uuid), &BTFN_UUID, sizeof(p_uuid_t));
+		p_cont_elem->transfer_syntaxes[0].if_version = BTFN_SYNTAX_IF_VERSION;
+		offset = 116;
+	}
 
 	bind_pdu.auth_verifier.auth_type =
 	    rpc_auth_pkg_to_security_provider(credssp_auth_pkg_name(rpc->auth));
@@ -285,8 +291,8 @@ fail:
 
 	if (bind_pdu.p_context_elem.p_cont_elem)
 	{
-		free(bind_pdu.p_context_elem.p_cont_elem[0].transfer_syntaxes);
-		free(bind_pdu.p_context_elem.p_cont_elem[1].transfer_syntaxes);
+		rts_syntax_id_free(bind_pdu.p_context_elem.p_cont_elem[0].transfer_syntaxes);
+		rts_syntax_id_free(bind_pdu.p_context_elem.p_cont_elem[1].transfer_syntaxes);
 	}
 
 	free(bind_pdu.p_context_elem.p_cont_elem);
@@ -341,6 +347,17 @@ BOOL rpc_recv_bind_ack_pdu(rdpRpc* rpc, wStream* s)
 
 	WLog_DBG(TAG, header.common.ptype == PTYPE_BIND_ACK ? "Receiving BindAck PDU"
 	                                                    : "Receiving AlterContextResp PDU");
+
+	const UINT16 MAX_VALID_FRAG = 0x0FF8;
+	if ((header.bind_ack.max_xmit_frag > MAX_VALID_FRAG) ||
+	    (header.bind_ack.max_recv_frag > MAX_VALID_FRAG))
+	{
+		WLog_ERR(TAG,
+		         "bind_ack: invalid fragment size: max_xmit_frag=%" PRIu16
+		         ", max_recv_frag=%" PRIu16 ", maximum=%" PRIu16,
+		         header.bind_ack.max_xmit_frag, header.bind_ack.max_recv_frag, MAX_VALID_FRAG);
+		goto fail;
+	}
 
 	rpc->max_recv_frag = header.bind_ack.max_xmit_frag;
 	rpc->max_xmit_frag = header.bind_ack.max_recv_frag;

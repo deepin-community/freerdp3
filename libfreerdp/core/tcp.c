@@ -769,13 +769,13 @@ static int freerdp_uds_connect(const char* path)
 struct addrinfo* freerdp_tcp_resolve_host(const char* hostname, int port, int ai_flags)
 {
 	char* service = nullptr;
-	char port_str[16];
+	char port_str[16] = WINPR_C_ARRAY_INIT;
 	int status = 0;
-	struct addrinfo hints = WINPR_C_ARRAY_INIT;
+
 	struct addrinfo* result = nullptr;
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = ai_flags;
+	struct addrinfo hints = { .ai_family = AF_UNSPEC,
+		                      .ai_socktype = SOCK_STREAM,
+		                      .ai_flags = ai_flags };
 
 	if (port >= 0)
 	{
@@ -786,7 +786,10 @@ struct addrinfo* freerdp_tcp_resolve_host(const char* hostname, int port, int ai
 	status = getaddrinfo(hostname, service, &hints, &result);
 
 	if (status)
+	{
+		WLog_WARN(TAG, "getaddrinfo(%s) failed with %s", hostname, gai_strerror(status));
 		return nullptr;
+	}
 
 	return result;
 }
@@ -858,21 +861,6 @@ static BOOL freerdp_tcp_connect_timeout(rdpContext* context, int sockfd, struct 
 	}
 
 	{
-		INT32 optval = 0;
-		socklen_t optlen = sizeof(optval);
-		if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &optval, &optlen) < 0)
-			goto fail;
-
-		if (optval != 0)
-		{
-			char ebuffer[256] = WINPR_C_ARRAY_INIT;
-			WLog_DBG(TAG, "connect failed with error: %s [%" PRId32 "]",
-			         winpr_strerror(optval, ebuffer, sizeof(ebuffer)), optval);
-			goto fail;
-		}
-	}
-
-	{
 		const int status = WSAEventSelect((SOCKET)sockfd, handles[0], 0);
 		if (status < 0)
 		{
@@ -886,6 +874,28 @@ static BOOL freerdp_tcp_connect_timeout(rdpContext* context, int sockfd, struct 
 
 	rc = TRUE;
 fail:
+{
+	INT32 optval = 0;
+	socklen_t optlen = sizeof(optval);
+	if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (void*)&optval, &optlen) >= 0)
+	{
+		if (optval != 0)
+		{
+			char ebuffer[256] = WINPR_C_ARRAY_INIT;
+			char hostname[512] = WINPR_C_ARRAY_INIT;
+			char serv[512] = WINPR_C_ARRAY_INIT;
+
+			getnameinfo(addr, WINPR_ASSERTING_INT_CAST(socklen_t, addrlen), hostname,
+			            WINPR_ASSERTING_INT_CAST(socklen_t, sizeof(hostname)), serv,
+			            WINPR_ASSERTING_INT_CAST(socklen_t, sizeof(serv)),
+			            NI_NUMERICHOST | NI_NUMERICSERV);
+			WLog_WARN(TAG, "connect to %s:%s failed with error: %s [%" PRId32 "]", hostname, serv,
+			          winpr_strerror(optval, ebuffer, sizeof(ebuffer)), optval);
+			rc = FALSE;
+		}
+	}
+}
+
 	(void)CloseHandle(handles[0]);
 	return rc;
 }
@@ -1004,6 +1014,15 @@ BOOL freerdp_tcp_set_keep_alive_mode(const rdpSettings* settings, int sockfd)
 	const BOOL keepalive = (freerdp_settings_get_bool(settings, FreeRDP_TcpKeepAlive));
 	UINT32 optval = 0;
 	socklen_t optlen = 0;
+	BOOL isTcp = FALSE;
+
+	int xoptval = 0;
+	socklen_t xoptlen = sizeof(xoptval);
+	const int rc = getsockopt(sockfd, SOL_SOCKET, SO_TYPE, (void*)&xoptval, &xoptlen);
+
+	if (rc == 0)
+		isTcp = xoptval == SOCK_STREAM;
+
 	optval = keepalive ? 1 : 0;
 	optlen = sizeof(optval);
 
@@ -1011,6 +1030,9 @@ BOOL freerdp_tcp_set_keep_alive_mode(const rdpSettings* settings, int sockfd)
 	{
 		WLog_WARN(TAG, "setsockopt() SOL_SOCKET, SO_KEEPALIVE");
 	}
+
+	if (!isTcp)
+		return TRUE;
 
 #ifndef _WIN32
 #ifdef TCP_KEEPIDLE
@@ -1220,8 +1242,8 @@ static void log_connection_address(const char* hostname, struct addrinfo* addr)
 {
 	WINPR_ASSERT(addr);
 
-	char* peerAddress =
-	    freerdp_tcp_address_to_string((const struct sockaddr_storage*)addr->ai_addr, nullptr);
+	char* peerAddress = freerdp_tcp_address_to_string(
+	    WINPR_PACKED_ALIGN_CAST(const struct sockaddr_storage*, addr->ai_addr), nullptr);
 	if (peerAddress)
 		WLog_DBG(TAG, "resolved %s: try to connect to %s", hostname, peerAddress);
 	free(peerAddress);

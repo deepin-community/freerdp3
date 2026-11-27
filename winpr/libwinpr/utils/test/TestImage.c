@@ -4,6 +4,8 @@
 #include <winpr/file.h>
 #include <winpr/path.h>
 #include <winpr/image.h>
+#include <winpr/user.h>
+#include <winpr/endian.h>
 
 static const char test_src_filename[] = TEST_SOURCE_PATH "/rgb";
 static const char test_bin_filename[] = TEST_BINARY_PATH "/rgb";
@@ -49,8 +51,10 @@ static BOOL test_equal(void)
 		goto fail;
 
 	char path[MAX_PATH] = WINPR_C_ARRAY_INIT;
-	(void)_snprintf(path, sizeof(path), "%s.bmp", test_src_filename);
-	PathCchConvertStyleA(path, sizeof(path), PATH_STYLE_NATIVE);
+	if (_snprintf(path, sizeof(path), "%s.bmp", test_src_filename) < 0)
+		goto fail;
+	if (FAILED(PathCchConvertStyleA(path, sizeof(path), PATH_STYLE_NATIVE)))
+		goto fail;
 
 	const int bmpSize = winpr_image_read(bmp, path);
 	if (bmpSize <= 0)
@@ -87,16 +91,24 @@ static BOOL test_read_write_compare(const char* tname, const char* tdst, UINT32 
 	char dpath[MAX_PATH] = WINPR_C_ARRAY_INIT;
 	char bpath1[MAX_PATH] = WINPR_C_ARRAY_INIT;
 	char bpath2[MAX_PATH] = WINPR_C_ARRAY_INIT;
-	(void)_snprintf(spath, sizeof(spath), "%s.%s", tname, winpr_image_format_extension(format));
-	(void)_snprintf(dpath, sizeof(dpath), "%s.%s", tdst, winpr_image_format_extension(format));
-	(void)_snprintf(bpath1, sizeof(bpath1), "%s.src.%s", dpath,
-	                winpr_image_format_extension(WINPR_IMAGE_BITMAP));
-	(void)_snprintf(bpath2, sizeof(bpath2), "%s.bin.%s", dpath,
-	                winpr_image_format_extension(WINPR_IMAGE_BITMAP));
-	PathCchConvertStyleA(spath, sizeof(spath), PATH_STYLE_NATIVE);
-	PathCchConvertStyleA(dpath, sizeof(dpath), PATH_STYLE_NATIVE);
-	PathCchConvertStyleA(bpath1, sizeof(bpath1), PATH_STYLE_NATIVE);
-	PathCchConvertStyleA(bpath2, sizeof(bpath2), PATH_STYLE_NATIVE);
+	if (_snprintf(spath, sizeof(spath), "%s.%s", tname, winpr_image_format_extension(format)) < 0)
+		goto fail;
+	if (_snprintf(dpath, sizeof(dpath), "%s.%s", tdst, winpr_image_format_extension(format)) < 0)
+		goto fail;
+	if (_snprintf(bpath1, sizeof(bpath1), "%s.src.%s", dpath,
+	              winpr_image_format_extension(WINPR_IMAGE_BITMAP)) < 0)
+		goto fail;
+	if (_snprintf(bpath2, sizeof(bpath2), "%s.bin.%s", dpath,
+	              winpr_image_format_extension(WINPR_IMAGE_BITMAP)) < 0)
+		goto fail;
+	if (FAILED(PathCchConvertStyleA(spath, sizeof(spath), PATH_STYLE_NATIVE)))
+		goto fail;
+	if (FAILED(PathCchConvertStyleA(dpath, sizeof(dpath), PATH_STYLE_NATIVE)))
+		goto fail;
+	if (FAILED(PathCchConvertStyleA(bpath1, sizeof(bpath1), PATH_STYLE_NATIVE)))
+		goto fail;
+	if (FAILED(PathCchConvertStyleA(bpath2, sizeof(bpath2), PATH_STYLE_NATIVE)))
+		goto fail;
 
 	const int bmpRSize = winpr_image_read(bmp1, spath);
 	if (bmpRSize <= 0)
@@ -190,6 +202,76 @@ fail:
 	return rc;
 }
 
+static void put_u16(BYTE* p, UINT16 v)
+{
+	p[0] = (BYTE)(v & 0xff);
+	p[1] = (BYTE)((v >> 8) & 0xff);
+}
+
+static void put_u32(BYTE* p, UINT32 v)
+{
+	p[0] = (BYTE)(v & 0xff);
+	p[1] = (BYTE)((v >> 8) & 0xff);
+	p[2] = (BYTE)((v >> 16) & 0xff);
+	p[3] = (BYTE)((v >> 24) & 0xff);
+}
+
+/* A 24bpp BMP whose biSizeImage carries the unaligned image size
+ * (width * bytesPerPixel * height) selects the unaligned read path. The decoder
+ * must not consume more than biSizeImage bytes from the input buffer. The buffer
+ * here is allocated to the exact BMP size, so any over-read is detectable. */
+static BOOL test_unaligned_no_overread(void)
+{
+	BOOL rc = FALSE;
+	const UINT32 width = 1;
+	const UINT32 height = 10;
+	const UINT32 bpp = 3;
+	const UINT32 uscanline = width * bpp;          /* 3, not a multiple of 4 */
+	const UINT32 biSizeImage = uscanline * height; /* 30 */
+	const size_t offBits = 54;                     /* 14 + 40 */
+	const size_t size = offBits + biSizeImage;     /* 84 */
+
+	wImage* image = winpr_image_new();
+	BYTE* bmp = (BYTE*)calloc(1, size);
+	if (!image || !bmp)
+		goto fail;
+
+	bmp[0] = 'B';
+	bmp[1] = 'M';
+	put_u32(&bmp[2], (UINT32)size);              /* bfSize */
+	put_u32(&bmp[10], (UINT32)offBits);          /* bfOffBits */
+	put_u32(&bmp[14], 40);                       /* biSize */
+	put_u32(&bmp[18], width);                    /* biWidth */
+	put_u32(&bmp[22], (UINT32)(-(INT32)height)); /* biHeight, top-down */
+	put_u16(&bmp[26], 1);                        /* biPlanes */
+	put_u16(&bmp[28], 24);                       /* biBitCount */
+	put_u32(&bmp[30], 0);                        /* biCompression BI_RGB */
+	put_u32(&bmp[34], biSizeImage);              /* biSizeImage */
+	for (UINT32 i = 0; i < biSizeImage; i++)
+		bmp[offBits + i] = (BYTE)i;
+
+	if (winpr_image_read_buffer(image, bmp, size) <= 0)
+		goto fail;
+
+	if ((image->width != width) || (image->height != height))
+		goto fail;
+
+	for (UINT32 row = 0; row < height; row++)
+	{
+		for (UINT32 b = 0; b < uscanline; b++)
+		{
+			if (image->data[1ULL * row * image->scanline + b] != (BYTE)(row * uscanline + b))
+				goto fail;
+		}
+	}
+
+	rc = TRUE;
+fail:
+	free(bmp);
+	winpr_image_free(image, TRUE);
+	return rc;
+}
+
 static BOOL test_load(void)
 {
 	const char* names[] = {
@@ -212,6 +294,315 @@ static BOOL test_load(void)
 	return TRUE;
 }
 
+/* Pixel data may follow color masks and additional padding after BITMAPINFOHEADER. */
+static BOOL test_bmp_offbits(UINT32 compression, UINT32 padding, BOOL topDown)
+{
+	BOOL rc = FALSE;
+	const UINT32 width = 2;
+	const UINT32 height = 2;
+	const UINT32 bpp = 32;
+	const UINT32 stride = width * bpp / 8;
+	const UINT32 biSizeImage = stride * height;
+	const size_t headerSize = 54; /* 14 byte file header + 40 byte info header */
+	const size_t maskSize = (compression == BI_BITFIELDS) ? 3 * sizeof(DWORD) : 0;
+	const size_t minOffset = headerSize + maskSize;
+	const size_t offBits = minOffset + padding;
+	const size_t size = offBits + biSizeImage;
+
+	wImage* image = winpr_image_new();
+	BYTE* bmp = (BYTE*)calloc(1, size);
+	if (!image || !bmp)
+		goto fail;
+
+	bmp[0] = 'B';
+	bmp[1] = 'M';
+	put_u32(&bmp[2], (UINT32)size);                                 /* bfSize */
+	put_u32(&bmp[10], (UINT32)offBits);                             /* bfOffBits */
+	put_u32(&bmp[14], 40);                                          /* biSize */
+	put_u32(&bmp[18], width);                                       /* biWidth */
+	put_u32(&bmp[22], topDown ? (UINT32)(-(INT32)height) : height); /* biHeight */
+	put_u16(&bmp[26], 1);                                           /* biPlanes */
+	put_u16(&bmp[28], bpp);                                         /* biBitCount */
+	put_u32(&bmp[30], compression);                                 /* biCompression */
+	put_u32(&bmp[34], biSizeImage);                                 /* biSizeImage */
+	if (compression == BI_BITFIELDS)
+	{
+		put_u32(&bmp[54], 0x00FF0000); /* red color mask */
+		put_u32(&bmp[58], 0x0000FF00); /* green color mask */
+		put_u32(&bmp[62], 0x000000FF); /* blue color mask */
+	}
+
+	{
+		const BYTE pixels[16] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+			                      0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18 };
+		memcpy(&bmp[offBits], pixels, sizeof(pixels));
+
+		if (winpr_image_read_buffer(image, bmp, size) <= 0)
+		{
+			(void)fprintf(stderr, "[%s] failed to read BMP at offset %" PRIuz "\n", __func__,
+			              offBits);
+			goto fail;
+		}
+
+		if ((image->width != width) || (image->height != height) || (image->bitsPerPixel != bpp) ||
+		    (image->bytesPerPixel != bpp / 8) || (image->scanline != stride) || !image->data)
+		{
+			(void)fprintf(stderr, "[%s] unexpected image layout\n", __func__);
+			goto fail;
+		}
+
+		for (size_t row = 0; row < height; row++)
+		{
+			const size_t srcRow = topDown ? row : height - 1 - row;
+			if (memcmp(&image->data[row * image->scanline], &pixels[srcRow * stride], stride) != 0)
+			{
+				(void)fprintf(stderr, "[%s] unexpected pixels in row %" PRIuz "\n", __func__, row);
+				goto fail;
+			}
+		}
+	}
+
+	/* Reject offsets overlapping headers or masks, beyond the buffer, or leaving
+	 * too few bytes for the pixel data. */
+	{
+		const UINT32 offsets[] = { 0,
+			                       (UINT32)(headerSize - 1),
+			                       (UINT32)(minOffset - 1),
+			                       (UINT32)(size - 1),
+			                       (UINT32)size,
+			                       (UINT32)(size + 1),
+			                       UINT32_MAX };
+		for (size_t x = 0; x < ARRAYSIZE(offsets); x++)
+		{
+			winpr_image_free(image, TRUE);
+			image = winpr_image_new();
+			if (!image)
+				goto fail;
+			put_u32(&bmp[10], offsets[x]); /* bfOffBits */
+			if (winpr_image_read_buffer(image, bmp, size) > 0)
+			{
+				(void)fprintf(stderr, "[%s] accepted invalid offset %" PRIu32 "\n", __func__,
+				              offsets[x]);
+				goto fail;
+			}
+		}
+	}
+
+	rc = TRUE;
+fail:
+	free(bmp);
+	winpr_image_free(image, TRUE);
+	return rc;
+}
+
+/* Bitmaps are written bottom-up with a plain BITMAPINFOHEADER, the layout every reader
+ * understands, e.g. Windows when synthesizing CF_BITMAP from a CF_DIB. */
+static BOOL test_write_bottom_up(void)
+{
+	BOOL rc = FALSE;
+	const UINT32 width = 2;
+	const UINT32 height = 2;
+	const UINT32 stride = width * 4;
+	const size_t offBits = 54;
+	const size_t size = offBits + 1ull * stride * height;
+	const BYTE pixels[16] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		                      0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18 };
+
+	wImage* image = winpr_image_new();
+	BYTE* bmp = (BYTE*)calloc(1, size);
+	BYTE* out = nullptr;
+	size_t outSize = 0;
+	if (!image || !bmp)
+		goto fail;
+
+	bmp[0] = 'B';
+	bmp[1] = 'M';
+	put_u32(&bmp[2], (UINT32)size);                      /* bfSize */
+	put_u32(&bmp[10], (UINT32)offBits);                  /* bfOffBits */
+	put_u32(&bmp[14], 40);                               /* biSize */
+	put_u32(&bmp[18], width);                            /* biWidth */
+	put_u32(&bmp[22], (UINT32)(-(INT32)height));         /* biHeight, top-down */
+	put_u16(&bmp[26], 1);                                /* biPlanes */
+	put_u16(&bmp[28], 32);                               /* biBitCount */
+	put_u32(&bmp[30], BI_RGB);                           /* biCompression */
+	put_u32(&bmp[34], (UINT32)(1ull * stride * height)); /* biSizeImage */
+	memcpy(&bmp[offBits], pixels, sizeof(pixels));
+
+	if (winpr_image_read_buffer(image, bmp, size) <= 0)
+		goto fail;
+
+	out = winpr_image_write_buffer(image, WINPR_IMAGE_BITMAP, &outSize);
+	if (!out || (outSize < offBits + sizeof(pixels)))
+	{
+		(void)fprintf(stderr, "[%s] winpr_image_write_buffer failed\n", __func__);
+		goto fail;
+	}
+
+	{
+		const UINT32 bfOffBits = winpr_Data_Get_UINT32(&out[10]);
+		const UINT32 biSize = winpr_Data_Get_UINT32(&out[14]);
+		const INT32 biHeight = winpr_Data_Get_INT32(&out[22]);
+		const UINT32 biCompression = winpr_Data_Get_UINT32(&out[30]);
+		if ((biSize != 40) || (biHeight != (INT32)height) || (biCompression != BI_RGB) ||
+		    (bfOffBits + sizeof(pixels) > outSize))
+		{
+			(void)fprintf(stderr,
+			              "[%s] unexpected header biSize=%" PRIu32 " biHeight=%" PRId32
+			              " biCompression=%" PRIu32 "\n",
+			              __func__, biSize, biHeight, biCompression);
+			goto fail;
+		}
+
+		/* the last row in the file is the top row of the image */
+		if ((memcmp(&out[bfOffBits], &pixels[stride], stride) != 0) ||
+		    (memcmp(&out[bfOffBits + stride], &pixels[0], stride) != 0))
+		{
+			(void)fprintf(stderr, "[%s] rows are not stored bottom-up\n", __func__);
+			goto fail;
+		}
+	}
+
+	rc = TRUE;
+fail:
+	free(out);
+	free(bmp);
+	winpr_image_free(image, TRUE);
+	return rc;
+}
+
+/* Rows that are not padded to 4 bytes, as a 24 bpp PNG decodes to, are padded when writing */
+static BOOL test_write_unpadded_rows(void)
+{
+	BOOL rc = FALSE;
+	const UINT32 width = 3;
+	const UINT32 height = 2;
+	const size_t row = 3ull * width; /* 9 bytes */
+	const size_t padded = 12;        /* rounded up to 4 bytes */
+	const BYTE pixels[18] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+		                      0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19 };
+
+	BYTE* out = nullptr;
+	size_t outSize = 0;
+	wImage* image = winpr_image_new();
+	if (!image)
+		goto fail;
+
+	image->data = (BYTE*)malloc(sizeof(pixels));
+	if (!image->data)
+		goto fail;
+	memcpy(image->data, pixels, sizeof(pixels));
+	image->width = width;
+	image->height = height;
+	image->bitsPerPixel = 24;
+	image->bytesPerPixel = 3;
+	image->scanline = (UINT32)row;
+
+	out = winpr_image_write_buffer(image, WINPR_IMAGE_BITMAP, &outSize);
+	if (!out)
+	{
+		(void)fprintf(stderr, "[%s] winpr_image_write_buffer failed\n", __func__);
+		goto fail;
+	}
+
+	{
+		const UINT32 bfOffBits = winpr_Data_Get_UINT32(&out[10]);
+		const BYTE zero[3] = WINPR_C_ARRAY_INIT;
+		if ((outSize != bfOffBits + padded * height) ||
+		    (memcmp(&out[bfOffBits], &pixels[row], row) != 0) ||
+		    (memcmp(&out[bfOffBits + row], zero, padded - row) != 0) ||
+		    (memcmp(&out[bfOffBits + padded], &pixels[0], row) != 0) ||
+		    (memcmp(&out[bfOffBits + padded + row], zero, padded - row) != 0))
+		{
+			(void)fprintf(stderr, "[%s] unexpected pixel data\n", __func__);
+			goto fail;
+		}
+	}
+
+	rc = TRUE;
+fail:
+	free(out);
+	winpr_image_free(image, TRUE);
+	return rc;
+}
+
+/* PNG writes go through the png_write_data callback, which grows its buffer
+ * with realloc. A failed realloc must abort the write instead of copying past
+ * the end of the old buffer (CVE-2026-109256). The failure itself needs an
+ * exhausted allocator and is not triggered here; this exercises the callback
+ * growth path end to end so the fix cannot silently break PNG output. */
+static BOOL test_png_write_roundtrip(void)
+{
+	BOOL rc = FALSE;
+	const UINT32 width = 5;
+	const UINT32 height = 4;
+	const UINT32 stride = width * 4;
+	BYTE* out = nullptr;
+	size_t outSize = 0;
+	wImage* image = winpr_image_new();
+	wImage* back = winpr_image_new();
+	if (!image || !back)
+		goto fail;
+
+	if (!winpr_image_format_is_supported(WINPR_IMAGE_PNG))
+	{
+		rc = TRUE;
+		goto fail;
+	}
+
+	image->data = (BYTE*)malloc(1ull * stride * height);
+	if (!image->data)
+		goto fail;
+	for (UINT32 y = 0; y < height; y++)
+	{
+		for (UINT32 x = 0; x < width; x++)
+		{
+			BYTE* px = &image->data[1ull * y * stride + 4ull * x];
+			px[0] = (BYTE)(x * 17);
+			px[1] = (BYTE)(y * 31);
+			px[2] = (BYTE)(x + y);
+			px[3] = 0xFF;
+		}
+	}
+	image->width = width;
+	image->height = height;
+	image->bitsPerPixel = 32;
+	image->bytesPerPixel = 4;
+	image->scanline = stride;
+
+	out = winpr_image_write_buffer(image, WINPR_IMAGE_PNG, &outSize);
+	if (!out || (outSize < 8))
+	{
+		(void)fprintf(stderr, "[%s] winpr_image_write_buffer(PNG) failed\n", __func__);
+		goto fail;
+	}
+
+	/* PNG signature */
+	if ((out[0] != 137) || (out[1] != 'P') || (out[2] != 'N') || (out[3] != 'G'))
+	{
+		(void)fprintf(stderr, "[%s] missing PNG signature\n", __func__);
+		goto fail;
+	}
+
+	if (winpr_image_read_buffer(back, out, outSize) <= 0)
+	{
+		(void)fprintf(stderr, "[%s] winpr_image_read_buffer(PNG) failed\n", __func__);
+		goto fail;
+	}
+
+	if ((back->width != width) || (back->height != height))
+	{
+		(void)fprintf(stderr, "[%s] PNG roundtrip dimensions mismatch\n", __func__);
+		goto fail;
+	}
+
+	rc = TRUE;
+fail:
+	free(out);
+	winpr_image_free(image, TRUE);
+	winpr_image_free(back, TRUE);
+	return rc;
+}
+
 int TestImage(int argc, char* argv[])
 {
 	int rc = 0;
@@ -227,6 +618,22 @@ int TestImage(int argc, char* argv[])
 
 	if (!test_load())
 		rc -= 4;
+
+	if (!test_unaligned_no_overread())
+		rc -= 8;
+
+	if (!test_bmp_offbits(BI_BITFIELDS, 0, FALSE) || !test_bmp_offbits(BI_BITFIELDS, 4, TRUE) ||
+	    !test_bmp_offbits(BI_RGB, 0, FALSE) || !test_bmp_offbits(BI_RGB, 12, TRUE))
+		rc -= 16;
+
+	if (!test_write_bottom_up())
+		rc -= 32;
+
+	if (!test_write_unpadded_rows())
+		rc -= 64;
+
+	if (!test_png_write_roundtrip())
+		rc -= 128;
 
 	return rc;
 }

@@ -19,6 +19,7 @@
  */
 #include <cassert>
 #include <algorithm>
+#include <optional>
 
 #include <winpr/cast.h>
 
@@ -39,11 +40,11 @@ SdlInputWidgetPairList::SdlInputWidgetPairList(const std::string& title,
 	const std::vector<std::string> buttonlabels = { "accept", "cancel" };
 
 	const size_t widget_width = 300;
-	const size_t widget_heigth = 50;
+	const size_t widget_height = 50;
 
 	const size_t total_width = widget_width + widget_width;
-	const size_t input_height = labels.size() * (widget_heigth + vpadding) + vpadding;
-	const size_t total_height = input_height + widget_heigth;
+	const size_t input_height = labels.size() * (widget_height + vpadding) + vpadding;
+	const size_t total_height = input_height + widget_height;
 	assert(total_width <= INT32_MAX);
 	assert(total_height <= INT32_MAX);
 
@@ -53,13 +54,13 @@ SdlInputWidgetPairList::SdlInputWidgetPairList(const std::string& title,
 		{
 			auto widget =
 			    std::make_shared<SdlInputWidgetPair>(_renderer, labels.at(x), initial.at(x),
-			                                         flags.at(x), x, widget_width, widget_heigth);
+			                                         flags.at(x), x, widget_width, widget_height);
 			m_list.emplace_back(widget);
 		}
 
 		std::ignore = _buttons.populate(
 		    _renderer, buttonlabels, buttonids, total_width, static_cast<Sint32>(input_height),
-		    static_cast<Sint32>(widget_width), static_cast<Sint32>(widget_heigth));
+		    static_cast<Sint32>(widget_width), static_cast<Sint32>(widget_height));
 		_buttons.set_highlight(0);
 		m_currentActiveTextInput = selected;
 	}
@@ -122,8 +123,6 @@ bool SdlInputWidgetPairList::updateInternal()
 	{
 		if (!btn->update())
 			return false;
-		if (!btn->update())
-			return false;
 	}
 
 	return true;
@@ -156,13 +155,14 @@ int SdlInputWidgetPairList::run(std::vector<std::string>& result)
 	if (!SDL_StartTextInput(_window.get()))
 		return -3;
 
+	std::optional<SDL_Event> forward;
 	try
 	{
 		bool running = true;
 		while (running)
 		{
 			if (!update())
-				throw;
+				throw std::exception();
 
 			SDL_Event event = {};
 			if (!SDL_WaitEventTimeout(&event, 30))
@@ -183,12 +183,12 @@ int SdlInputWidgetPairList::run(std::vector<std::string>& result)
 									if ((event.key.mod & SDL_KMOD_CTRL) != 0)
 									{
 										if (!cur->set_str(""))
-											throw;
+											throw std::exception();
 									}
 									else
 									{
 										if (!cur->remove_str(1))
-											throw;
+											throw std::exception();
 									}
 								}
 							}
@@ -214,7 +214,7 @@ int SdlInputWidgetPairList::run(std::vector<std::string>& result)
 									{
 										auto text = SDL_GetClipboardText();
 										if (!cur->set_str(text))
-											throw;
+											throw std::exception();
 									}
 								}
 								break;
@@ -229,7 +229,7 @@ int SdlInputWidgetPairList::run(std::vector<std::string>& result)
 						if (cur)
 						{
 							if (!cur->append_str(event.text.text))
-								throw;
+								throw std::exception();
 						}
 					}
 					break;
@@ -266,11 +266,27 @@ int SdlInputWidgetPairList::run(std::vector<std::string>& result)
 						}
 					}
 					break;
+					case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+						/* Closing any window cancels the dialog. The event of another
+						 * window is queued again once the dialog is done, so the main
+						 * loop still handles it. */
+						if (event.window.windowID != SDL_GetWindowID(_window.get()))
+							forward = event;
+						res = INPUT_BUTTON_CANCEL;
+						running = false;
+						break;
 					case SDL_EVENT_WINDOW_OCCLUDED:
 					case SDL_EVENT_WINDOW_MINIMIZED:
-					case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-					case SDL_EVENT_TERMINATING:
 					case SDL_EVENT_WINDOW_DESTROYED:
+						/* Only events of our own window cancel the dialog. Hiding the
+						 * connection dialog for this prompt destroys its window, and that
+						 * event is still queued when this loop starts. */
+						if (event.window.windowID != SDL_GetWindowID(_window.get()))
+							break;
+						res = INPUT_BUTTON_CANCEL;
+						running = false;
+						break;
+					case SDL_EVENT_TERMINATING:
 					case SDL_EVENT_QUIT:
 						res = INPUT_BUTTON_CANCEL;
 						running = false;
@@ -288,20 +304,13 @@ int SdlInputWidgetPairList::run(std::vector<std::string>& result)
 			for (auto& cur : m_list)
 			{
 				if (!cur->set_highlight(false))
-					throw;
+					throw std::exception();
 			}
 			auto cur = get(m_currentActiveTextInput);
 			if (cur)
 			{
 				if (!cur->set_highlight(true))
-					throw;
-			}
-
-			auto rc = SDL_RenderPresent(_renderer.get());
-			if (!rc)
-			{
-				SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[%s] SDL_RenderPresent failed with %s",
-				            __func__, SDL_GetError());
+					throw std::exception();
 			}
 		}
 
@@ -313,8 +322,14 @@ int SdlInputWidgetPairList::run(std::vector<std::string>& result)
 		res = -2;
 	}
 
+	/* Drop the input that was meant for the dialog, so it does not reach the session.
+	 * Other events, such as window and clipboard events, are still handled. */
 	SDL_PumpEvents();
-	SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_USER);
+	SDL_FlushEvents(SDL_EVENT_KEY_DOWN, SDL_EVENT_MOUSE_REMOVED);
+	SDL_FlushEvents(SDL_EVENT_FINGER_DOWN, SDL_EVENT_FINGER_CANCELED);
+	SDL_FlushEvents(SDL_EVENT_PEN_PROXIMITY_IN, SDL_EVENT_PEN_AXIS);
+	if (forward)
+		std::ignore = SDL_PushEvent(&*forward);
 
 	if (!SDL_StopTextInput(_window.get()))
 		return -4;

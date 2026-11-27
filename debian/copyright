@@ -20,7 +20,6 @@ Files-Excluded:
  server/Windows
  resources/FreeRDP_OSX.icns
  resources/FreeRDP_Logo_Icon.ai
- scripts/OpenSSL-DownloadAndBuild.command
  winpr/libwinpr/crt/unicode_builtin.c
  winpr/libwinpr/crt/unicode_android.c
  winpr/libwinpr/crt/unicode_apple.m

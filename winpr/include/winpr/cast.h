@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 
+#include <winpr/platform.h>
 #include <winpr/assert-api.h>
 
 /**
@@ -30,7 +31,74 @@
 #ifdef __cplusplus
 #define WINPR_CXX_COMPAT_CAST(t, val) static_cast<t>(val)
 #else
-#define WINPR_CXX_COMPAT_CAST(t, val) (t)(val)
+#define WINPR_CXX_COMPAT_CAST(t, val) ((t)(val))
+#endif
+
+/**! @brief Checks alignment requirements.
+ * - On supported platforms (arm, arm64) check that unaligned access is enabled or die
+ * - On unsupported platforms print a compiler warning
+ */
+#if defined(DISABLE_SUPPORTED_ARCH_CHECKS)
+#elif defined(_M_ARM) || defined(_M_ARM64)
+/* MSVC is not defining the same guards as everyone else, so lets hope they always support it and
+ * not only sometimes. */
+#if !defined(__ARM_FEATURE_UNALIGNED) && !defined(_MSC_VER)
+#warning \
+    "-munaligned-access is required on arm. Use -DDISABLE_SUPPORTED_ARCH_CHECKS=ON to ignore, but there will be dragons ahead!"
+#else
+#define WINPR_ARCH_SUPPORTED 1
+#endif
+#elif defined(_M_IX86) || defined(_M_AMD64) || defined(_M_PPC) || defined(_M_S390X)
+#define WINPR_ARCH_SUPPORTED 1
+#elif defined(_M_RISCV32) || defined(_M_RISCV64)
+#if !defined(__riscv_misaligned_fast)
+#warning \
+    "RISCV must support __riscv_misaligned_fast. Use -DDISABLE_SUPPORTED_ARCH_CHECKS=ON to ignore, but there will be dragons ahead!"
+#else
+#define WINPR_ARCH_SUPPORTED 1
+#endif
+#elif defined(__EMSCRIPTEN__)
+#define WINPR_ARCH_SUPPORTED 1
+#endif
+
+#if !defined(WINPR_ARCH_SUPPORTED)
+#if defined(__GNUC__) || defined(__clang__) ||                      \
+    (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 202311L)) || \
+    (defined(__cplusplus) && (__cplusplus >= 202302L))
+#warning "unaligned pointer access not verified on platform, SIGBUS may happen!"
+#endif
+#endif
+
+/**! @brief Cast to \ref t and silence Wcast-align warnings.
+ *
+ * This just silences compiler warnings on supported architectures.
+ * Support is checked at compile time.
+ *
+ * @since version 3.32.0
+ */
+#if defined(_WIN32)
+#define WINPR_PACKED_ALIGN_CAST(t, val) WINPR_CXX_COMPAT_CAST(t, val)
+#elif defined(WINPR_ARCH_SUPPORTED)
+#define WINPR_PACKED_ALIGN_CAST(t, val)                     \
+	__extension__({                                         \
+		WINPR_PRAGMA_DIAG_PUSH;                             \
+		WINPR_PRAGMA_DIAG_IGNORED_CAST_ALIGN;               \
+		typeof(t) aligntmp = WINPR_CXX_COMPAT_CAST(t, val); \
+		WINPR_PRAGMA_DIAG_POP;                              \
+		aligntmp;                                           \
+	})
+#else
+#define WINPR_PACKED_ALIGN_CAST(t, val)                          \
+	__extension__({                                              \
+		typeof(t) aligntmp = WINPR_CXX_COMPAT_CAST(t, val);      \
+		if (aligntmp)                                            \
+		{                                                        \
+			const size_t fromtype = _Alignof(typeof(*aligntmp)); \
+			const size_t actual = ((uintptr_t)(val)) % fromtype; \
+			WINPR_ASSERT(actual == 0);                           \
+		}                                                        \
+		aligntmp;                                                \
+	})
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)

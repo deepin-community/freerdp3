@@ -1,6 +1,5 @@
 Source: freerdp3
 Section: x11
-Priority: optional
 Maintainer: Debian Remote Maintainers <debian-remote@lists.debian.org>
 Uploaders:
  Mike Gabriel <sunweaver@debian.org>,
@@ -14,10 +13,8 @@ Build-Depends-Arch:
  libasound2-dev,
 # ffmpeg is in universe in ubuntu (not enabled):
  libavcodec-dev, libavutil-dev, libswscale-dev,
- libcbor-dev [linux-any],
 # cairo is used on ubuntu only (alternative to swscale from ffmpeg):
  libcairo2-dev,
- libfido2-dev [linux-any],
  libjson-c-dev,
  libcups2-dev,
  libfuse3-dev [linux-any],
@@ -59,7 +56,6 @@ Build-Depends-Arch:
  xmlto,
  xsltproc,
 Standards-Version: 4.7.2
-Rules-Requires-Root: no
 Homepage: https://www.freerdp.com/
 Vcs-Browser: https://salsa.debian.org/debian-remote-team/freerdp3
 Vcs-Git: https://salsa.debian.org/debian-remote-team/freerdp3.git
@@ -80,7 +76,7 @@ Description: RDP client for Windows Terminal Services (X11 client)
 
 Package: freerdp3-x11
 Architecture: all
-Depends: freerdp-x11 (>> ${source:Version}~)
+Depends: freerdp-x11 (>> ${source:Version}~), ${misc:Depends}
 Section: oldlibs
 Description: RDP client for Windows Terminal Services (X11 client tramsitional package)
  FreeRDP is a libre client/server implementation of the Remote
@@ -236,7 +232,7 @@ Description: Windows Portable Runtime library command line utilities
 
 Package: winpr3-utils
 Architecture: all
-Depends: winpr-utils
+Depends: winpr-utils, ${misc:Depends}
 Section: oldlibs
 Description: Windows Portable Runtime library command line utilities (transitional package)
  This package provides compatibility links for transition from winpr3-utils
@@ -288,7 +284,7 @@ Description: FreeRDP x11 shadowing server
 
 Package: freerdp3-shadow-x11
 Architecture: all
-Depends: freerdp-shadow-x11 (>> ${source:Version}~)
+Depends: freerdp-shadow-x11 (>> ${source:Version}~), ${misc:Depends}
 Section: oldlibs
 Description: FreeRDP x11 shadowing server (transitional package)
  FreeRDP is a libre client/server implementation of the Remote
@@ -313,7 +309,7 @@ Description: RDP client for Windows Terminal Services (wayland client)
 
 Package: freerdp3-wayland
 Architecture: all
-Depends: freerdp-wayland (>> ${source:Version}~)
+Depends: freerdp-wayland (>> ${source:Version}~), ${misc:Depends}
 Section: oldlibs
 Description: RDP client for Windows Terminal Services (wayland client transitional package)
  FreeRDP is a libre client/server implementation of the Remote
@@ -336,7 +332,7 @@ Description: RDP client for Windows Terminal Services (SDL client)
 
 Package: freerdp3-sdl
 Architecture: all
-Depends: freerdp-sdl (>> ${source:Version}~)
+Depends: freerdp-sdl (>> ${source:Version}~), ${misc:Depends}
 Section: oldlibs
 Description: RDP client for Windows Terminal Services (SDL client transitional package)
  FreeRDP is a libre client/server implementation of the Remote
@@ -392,7 +388,7 @@ Description: FreeRDP proxy server
 
 Package: freerdp3-proxy-modules
 Architecture: all
-Depends: freerdp-proxy-modules
+Depends: freerdp-proxy-modules, ${misc:Depends}
 Section: oldlibs
 Description: FreeRDP Remote Desktop Protocol proxy module libraries (transitional package)
  FreeRDP is a libre client/server implementation of the Remote
@@ -403,7 +399,7 @@ Description: FreeRDP Remote Desktop Protocol proxy module libraries (transitiona
 
 Package: freerdp3-proxy
 Architecture: all
-Depends: freerdp-proxy
+Depends: freerdp-proxy, ${misc:Depends}
 Section: oldlibs
 Description: FreeRDP proxy server (transitional package)
  FreeRDP is a libre client/server implementation of the Remote

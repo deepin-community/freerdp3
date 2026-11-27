@@ -18,7 +18,11 @@
 
 #include <freerdp/config.h>
 
+#include <errno.h>
+#include <stdlib.h>
+
 #include <winpr/assert.h>
+#include <winpr/sysinfo.h>
 
 #include "shadow.h"
 
@@ -44,15 +48,16 @@ UINT32 shadow_encoder_inflight_frames(rdpShadowEncoder* encoder)
 	 * Note: This function is exported so that subsystem could
 	 * implement its own strategy to tune fps.
 	 */
-	return (encoder->queueDepth == SUSPEND_FRAME_ACKNOWLEDGEMENT)
-	           ? 0
-	           : encoder->frameId - encoder->lastAckframeId;
+	if (encoder->queueDepth == SUSPEND_FRAME_ACKNOWLEDGEMENT)
+		return 0;
+	if (encoder->lastAckframeId > encoder->frameId)
+		return 1;
+	return encoder->frameId - encoder->lastAckframeId;
 }
 
 UINT32 shadow_encoder_create_frame_id(rdpShadowEncoder* encoder)
 {
-	UINT32 frameId = 0;
-	UINT32 inFlightFrames = shadow_encoder_inflight_frames(encoder);
+	const UINT64 inFlightFrames = shadow_encoder_inflight_frames(encoder);
 
 	/*
 	 * Calculate preferred fps according to how much frames are
@@ -61,7 +66,10 @@ UINT32 shadow_encoder_create_frame_id(rdpShadowEncoder* encoder)
 	 */
 	if (inFlightFrames > 1)
 	{
-		encoder->fps = (100 / (inFlightFrames + 1) * encoder->maxFps) / 100;
+		UINT64 fps = (100 / (inFlightFrames + 1) * encoder->maxFps) / 100;
+		if (fps > encoder->maxFps)
+			fps = encoder->maxFps;
+		encoder->fps = WINPR_ASSERTING_INT_CAST(UINT32, fps);
 	}
 	else
 	{
@@ -74,7 +82,7 @@ UINT32 shadow_encoder_create_frame_id(rdpShadowEncoder* encoder)
 	if (encoder->fps < 1)
 		encoder->fps = 1;
 
-	frameId = ++encoder->frameId;
+	const UINT32 frameId = ++encoder->frameId;
 	return frameId;
 }
 
@@ -153,6 +161,7 @@ static int shadow_encoder_init_rfx(rdpShadowEncoder* encoder)
 	return 1;
 fail:
 	rfx_context_free(encoder->rfx);
+	encoder->rfx = nullptr;
 	return -1;
 }
 
@@ -265,6 +274,9 @@ static int shadow_encoder_init_h264(rdpShadowEncoder* encoder)
 	                             encoder->server->h264FrameRate))
 		goto fail;
 	if (!h264_context_set_option(encoder->h264, H264_CONTEXT_OPTION_QP, encoder->server->h264QP))
+		goto fail;
+	if (!h264_context_set_option(encoder->h264, H264_CONTEXT_OPTION_HW_ACCEL,
+	                             (UINT32)encoder->server->h264HwAccel))
 		goto fail;
 
 	encoder->codecs |= FREERDP_CODEC_AVC420 | FREERDP_CODEC_AVC444;
@@ -462,6 +474,18 @@ static int shadow_encoder_uninit(rdpShadowEncoder* encoder)
 
 	shadow_encoder_uninit_progressive(encoder);
 
+	/* Release the RFX dirty tile skip snapshot. shadow_encoder_reset also
+	 * routes through here, so after a reset/free the next frame is always
+	 * encoded in full. */
+	free(encoder->gfxSnapshot);
+	encoder->gfxSnapshot = nullptr;
+	free(encoder->gfxTileEncoded);
+	encoder->gfxTileEncoded = nullptr;
+	encoder->gfxSnapshotValid = FALSE;
+	encoder->gfxSnapshotWidth = 0;
+	encoder->gfxSnapshotHeight = 0;
+	encoder->gfxSnapshotStep = 0;
+
 	return 1;
 }
 
@@ -490,6 +514,8 @@ int shadow_encoder_reset(rdpShadowEncoder* encoder)
 	encoder->maxFps = 32;
 	encoder->frameId = 0;
 	encoder->lastAckframeId = 0;
+	encoder->lastAckTick = GetTickCount64();
+	encoder->gfxHeld = FALSE;
 	encoder->frameAck = freerdp_settings_get_bool(settings, FreeRDP_SurfaceFrameMarkerEnabled);
 	return 1;
 }
@@ -582,6 +608,23 @@ rdpShadowEncoder* shadow_encoder_new(rdpShadowClient* client)
 	encoder->server = server;
 	encoder->fps = 16;
 	encoder->maxFps = 32;
+	encoder->lastAckTick = GetTickCount64();
+	{
+		/* like xrdp's XRDP_GFX_FRAMES_IN_FLIGHT; 0 turns the limit off */
+		// NOLINTNEXTLINE(concurrency-mt-unsafe)
+		const char* env = getenv("FREERDP_SHADOW_GFX_FRAMES_IN_FLIGHT");
+		encoder->maxInFlight = SHADOW_GFX_FRAMES_IN_FLIGHT;
+		if (env && *env)
+		{
+			char* end = nullptr;
+			errno = 0;
+			const unsigned long value = strtoul(env, &end, 10);
+			if ((errno == 0) && end && (*end == '\0') && (value <= 1000))
+				encoder->maxInFlight = (UINT32)value;
+			else
+				WLog_WARN(TAG, "FREERDP_SHADOW_GFX_FRAMES_IN_FLIGHT=%s ignored: 0 to 1000", env);
+		}
+	}
 
 	if (shadow_encoder_init(encoder) < 0)
 	{

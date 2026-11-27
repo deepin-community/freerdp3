@@ -183,10 +183,13 @@ static void sdl_term_handler([[maybe_unused]] int signum, [[maybe_unused]] const
 
 				WLog_Print(sdl->getWLog(), WLOG_TRACE, "got event %s [0x%08" PRIx32 "]",
 				           sdl::utils::toString(windowEvent.type).c_str(), windowEvent.type);
-				if (sdl->shallAbort(true))
+				/* The connection dialog paints on window events, so let it see them even
+				 * after the session is gone: it may still show an error message. */
+				if (sdl->getDialog().handleEvent(windowEvent))
 					continue;
 
-				if (sdl->getDialog().handleEvent(windowEvent))
+				/* Still handle a quit, it cancels the session */
+				if (sdl->shallAbort(true) && (windowEvent.type != SDL_EVENT_QUIT))
 					continue;
 
 				if (!sdl->handleEvent(windowEvent))
@@ -195,7 +198,7 @@ static void sdl_term_handler([[maybe_unused]] int signum, [[maybe_unused]] const
 				switch (windowEvent.type)
 				{
 					case SDL_EVENT_QUIT:
-						std::ignore = freerdp_abort_connect_context(sdl->context());
+						std::ignore = sdl->abortConnect();
 						break;
 					case SDL_EVENT_USER_CERT_DIALOG:
 					{
@@ -294,6 +297,14 @@ static void sdl_term_handler([[maybe_unused]] int signum, [[maybe_unused]] const
 						if (!sdl->setCursor(static_cast<rdpPointer*>(windowEvent.user.data1)))
 							throw ErrorMsg{ -1, windowEvent.type, "sdl->setCursor" };
 						break;
+					case SDL_EVENT_USER_RAIL_MOVE:
+					{
+						const auto id = static_cast<uint32_t>(
+						    reinterpret_cast<uintptr_t>(windowEvent.user.data1));
+						const auto moveType = static_cast<uint16_t>(windowEvent.user.code);
+						sdl->getRailChannelContext().handleLocalMoveRequested(id, moveType);
+					}
+					break;
 					case SDL_EVENT_USER_QUIT:
 					default:
 						break;
@@ -368,9 +379,13 @@ static void sdl_client_free([[maybe_unused]] freerdp* instance, rdpContext* cont
 
 [[nodiscard]] static int sdl_client_stop(rdpContext* context)
 {
+	const int rc = freerdp_client_common_stop(context);
 	auto sdl = get_context(context);
 	WINPR_ASSERT(sdl);
-	return sdl->join();
+	const int rc2 = sdl->join();
+	if (rc < 0)
+		return rc;
+	return rc2;
 }
 
 static void RdpClientEntry(RDP_CLIENT_ENTRY_POINTS* pEntryPoints)
@@ -559,7 +574,10 @@ static void SDLCALL rdp_file_cb(void* userdata, const char* const* filelist,
 
 	bool running = true;
 	if (!SDL_Init(flags))
+	{
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_Init failed: %s", SDL_GetError());
 		return {};
+	}
 
 	auto props = SDL_CreateProperties();
 	SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING,
@@ -635,7 +653,7 @@ int main(int argc, char* argv[])
 		                                                          sdl->args());
 		if (freerdp_settings_get_bool(settings, FreeRDP_ListMonitors))
 		{
-			if (!sdl_list_monitors(sdl))
+			if (sdl_list_monitors(sdl) != 0)
 				return -1;
 		}
 		else
@@ -674,10 +692,30 @@ int main(int argc, char* argv[])
 	if (!SDL_SetHint(SDL_HINT_MOUSE_DPI_SCALE_CURSORS, "1"))
 		return -1;
 #endif
+	/* /f enters fullscreen with SDL_SetWindowFullscreen, and SDL's "auto" then hides the macOS menu
+	 * bar for good: no menu, no title bar, no way out. Fails if the environment variable is set,
+	 * which then wins, so the result is ignored. */
+	std::ignore = SDL_SetHint(SDL_HINT_VIDEO_MAC_FULLSCREEN_MENU_VISIBILITY, "1");
+
+#if defined(_WIN32)
+	/* Without vsync D3D11 drops a frame while one is still queued (DXGI_PRESENT_DO_NOT_WAIT). */
+	if (freerdp_settings_get_bool(settings, FreeRDP_RemoteApplicationMode) &&
+	    !SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1"))
+		return -1;
+#endif
 
 	/* Basic SDL initialization */
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
+	{
+		WLog_Print(sdl->getWLog(), WLOG_ERROR, "SDL_Init failed: %s", SDL_GetError());
 		return -1;
+	}
+
+#if defined(__APPLE__)
+	/* macOS has no num lock state, SDL_KMOD_NUM always starts off and we would turn num lock
+	 * off on the server with every sync. Start with it on, the server LEDs take over from there. */
+	SDL_SetModState(SDL_GetModState() | SDL_KMOD_NUM);
+#endif
 
 	/* Redirect SDL log messages to wLog */
 	SDL_SetLogOutputFunction(winpr_LogOutputFunction, sdl);
@@ -697,6 +735,8 @@ int main(int argc, char* argv[])
 		    sdl_dialogs_uninit();
 		    SDL_Quit();
 	    });
+	if (!freerdp_add_signal_cleanup_handler(sdl->context(), sdl_term_handler))
+		return -1;
 	if (!sdl->detectDisplays())
 		return -1;
 

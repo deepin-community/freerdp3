@@ -71,6 +71,19 @@ struct rdp_wst
 
 static const char arm_query_param[] = "%s%cClmTk=Bearer%%20%s";
 
+/** True if @p uri carries the ARM/Azure bearer token in the query (do not duplicate in headers). */
+static BOOL wst_uri_has_clmtk_bearer(const char* uri)
+{
+	if (!uri)
+		return FALSE;
+	for (const char* p = uri; *p; p++)
+	{
+		if (_strnicmp(p, "ClmTk=", 6) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
 static BOOL wst_get_gateway_credentials(wLog* log, rdpContext* context, rdp_auth_reason reason)
 {
 	WINPR_ASSERT(context);
@@ -160,13 +173,16 @@ static BOOL wst_set_auth_header(rdpCredsspAuth* auth, HttpRequest* request)
 	return TRUE;
 }
 
-static BOOL wst_recv_auth_token(rdpCredsspAuth* auth, HttpResponse* response)
+static BOOL wst_recv_auth_token(rdpCredsspAuth* auth, HttpResponse* response, BOOL* pHaveToken)
 {
 	size_t len = 0;
 	size_t authTokenLength = 0;
 	BYTE* authTokenData = nullptr;
 	SecBuffer authToken = WINPR_C_ARRAY_INIT;
 	int rc = 0;
+
+	WINPR_ASSERT(pHaveToken);
+	*pHaveToken = FALSE;
 
 	if (!auth || !response)
 		return FALSE;
@@ -185,7 +201,12 @@ static BOOL wst_recv_auth_token(rdpCredsspAuth* auth, HttpResponse* response)
 	const char* token64 = http_response_get_auth_token(response, credssp_auth_pkg_name(auth));
 
 	if (!token64)
-		return FALSE;
+	{
+		/* See the matching comment in rdg_recv_auth_token(). */
+		return TRUE;
+	}
+
+	*pHaveToken = TRUE;
 
 	len = strlen(token64);
 
@@ -288,14 +309,12 @@ static BOOL wst_tls_connect(rdpWst* wst, rdpTls* tls, UINT32 timeout)
 static wStream* wst_build_http_request(rdpWst* wst)
 {
 	wStream* s = nullptr;
-	HttpRequest* request = nullptr;
-	const char* uri = nullptr;
 
 	if (!wst)
 		return nullptr;
 
-	uri = http_context_get_uri(wst->http);
-	request = http_request_new();
+	const char* uri = http_context_get_uri(wst->http);
+	HttpRequest* request = http_request_new();
 
 	if (!request)
 		return nullptr;
@@ -310,12 +329,17 @@ static wStream* wst_build_http_request(rdpWst* wst)
 	}
 	else if (freerdp_settings_get_string(wst->context->settings, FreeRDP_GatewayHttpExtAuthBearer))
 	{
-		if (!http_request_set_auth_scheme(request, "Bearer"))
-			goto out;
-		if (!http_request_set_auth_param(
-		        request, freerdp_settings_get_string(wst->context->settings,
-		                                             FreeRDP_GatewayHttpExtAuthBearer)))
-			goto out;
+		/* After ARRAffinity retry the token is appended as ClmTk=Bearer%20... on the URI; keeping
+		 * Authorization: Bearer would duplicate a large JWT and exceed Azure header limits. */
+		if (!wst_uri_has_clmtk_bearer(uri))
+		{
+			if (!http_request_set_auth_scheme(request, "Bearer"))
+				goto out;
+			if (!http_request_set_auth_param(
+			        request, freerdp_settings_get_string(wst->context->settings,
+			                                             FreeRDP_GatewayHttpExtAuthBearer)))
+				goto out;
+		}
 	}
 
 	s = http_request_write(wst->http, request);
@@ -391,24 +415,14 @@ static BOOL wst_handle_ok_or_forbidden(rdpWst* wst, HttpResponse** ppresponse, D
 			char firstParam = (strchr(wst->gwpath, '?') != nullptr) ? '&' : '?';
 			const char* bearer = freerdp_settings_get_string(wst->context->settings,
 			                                                 FreeRDP_GatewayHttpExtAuthBearer);
-			const char* ua =
-			    freerdp_settings_get_string(wst->context->settings, FreeRDP_GatewayHttpMsUserAgent);
-			winpr_asprintf(&urlWithAuth, &urlLen, arm_query_param, wst->gwpath, firstParam, bearer,
-			               ua);
-			if (!urlWithAuth)
+			if (winpr_asprintf(&urlWithAuth, &urlLen, arm_query_param, wst->gwpath, firstParam,
+			                   bearer) < 0 ||
+			    !urlWithAuth)
 				return FALSE;
 			free(wst->gwpath);
 			wst->gwpath = urlWithAuth;
-			if (!utils_str_is_empty(ua))
-			{
-				size_t ualen = 0;
-				char* uastr = nullptr;
-				winpr_asprintf(&uastr, &ualen, "%s&X-MS-User-Agent=%s", wst->gwpath, ua);
-				if (!uastr)
-					return FALSE;
-				free(wst->gwpath);
-				wst->gwpath = uastr;
-			}
+			/* X-MS-User-Agent is already sent as a header (http_context_set_x_ms_user_agent); omit
+			 * from the query string to keep the request line within gateway limits. */
 			if (!http_context_set_uri(wst->http, wst->gwpath))
 				return FALSE;
 			if (!http_context_enable_websocket_upgrade(wst->http, TRUE))
@@ -452,8 +466,17 @@ static BOOL wst_handle_denied(rdpWst* wst, HttpResponse** ppresponse, UINT16* pS
 
 	while (!credssp_auth_is_complete(wst->auth))
 	{
-		if (!wst_recv_auth_token(wst->auth, *ppresponse))
+		BOOL haveToken = FALSE;
+
+		if (!wst_recv_auth_token(wst->auth, *ppresponse, &haveToken))
 			return FALSE;
+
+		if (!haveToken)
+		{
+			WLog_Print(wst->log, WLOG_DEBUG,
+			           "No authentication token in the response, ending the exchange");
+			break;
+		}
 
 		if (credssp_auth_have_output_token(wst->auth))
 		{
@@ -466,6 +489,8 @@ static BOOL wst_handle_denied(rdpWst* wst, HttpResponse** ppresponse, UINT16* pS
 				return FALSE;
 			(void)http_response_extract_cookies(*ppresponse, wst->http);
 		}
+		else
+			break; /* nothing more to send: do not re-parse the same response */
 	}
 	*pStatusCode = http_response_get_status_code(*ppresponse);
 	return TRUE;

@@ -57,13 +57,32 @@ typedef struct
 	int result;
 } RDPEWA_FIDO_ASYNC;
 
-static void zfree(char* str)
+static bool rdpewa_fido_get_pin(rdpContext* context, char** pin)
 {
-	char* orig = str;
-	if (str)
-		while (*str != '\0')
-			*str++ = '\0';
-	free(orig);
+	WINPR_ASSERT(pin);
+	*pin = nullptr;
+
+	freerdp* instance = context->instance;
+	char* u = nullptr;
+	char* p = nullptr;
+	char* d = nullptr;
+	const bool rc = instance && instance->AuthenticateEx &&
+	                instance->AuthenticateEx(instance, &u, &p, &d, AUTH_FIDO_PIN) && p;
+	free(u);
+	free(d);
+	if (!rc)
+	{
+		winpr_zfree(p);
+		return false;
+	}
+
+	*pin = p;
+	return true;
+}
+
+static bool rdpewa_fido_uv_failed(int result)
+{
+	return (result == FIDO_ERR_UV_BLOCKED) || (result == FIDO_ERR_UV_INVALID);
 }
 
 static DWORD WINAPI rdpewa_fido_makecred_thread(LPVOID arg)
@@ -106,12 +125,14 @@ static bool notifyWait(rdpContext* context, HANDLE ft, fido_dev_t* dev)
 	const UINT64 id = winpr_GetTickCount64NS();
 	(void)notify(context, id, false);
 	const DWORD status = WaitForMultipleObjects(ARRAYSIZE(hdl), hdl, FALSE, INFINITE);
-	CloseHandle(ft);
 	(void)notify(context, id, true);
 
 	const bool rc = (status == WAIT_OBJECT_0);
 	if (!rc)
 		fido_dev_cancel(dev);
+
+	(void)WaitForSingleObject(ft, INFINITE);
+	CloseHandle(ft);
 	return rc;
 }
 /**
@@ -178,7 +199,7 @@ static void rdpewa_fido_fill_device_info(fido_dev_t* dev, const char* path,
 		                          .maxSerializedLargeBlobArray = 1024,
 		                          .providerType = "Hid",
 		                          .providerName = "FreeRDPFidoProvider",
-		                          .uvStatus = fido_dev_has_pin(dev) ? 1 : 0,
+		                          .uvStatus = fido_dev_has_uv(dev) ? 1 : 0,
 		                          .uvRetries = 3 };
 
 	if (path)
@@ -298,6 +319,7 @@ static wStream* rdpewa_fido_make_credential(rdpContext* context, const BYTE* cta
 	RDPEWA_DEVICE_INFO devInfo = WINPR_C_ARRAY_INIT;
 	fido_cred_t* cred = nullptr;
 	wStream* ret = nullptr;
+	bool uv = false;
 
 	WINPR_ASSERT(ctapData);
 
@@ -503,11 +525,16 @@ static wStream* rdpewa_fido_make_credential(rdpContext* context, const BYTE* cta
 
 						const char* ok = (const char*)cbor_string_handle(oPairs[j].key);
 						size_t okl = cbor_string_length(oPairs[j].key);
-						if (okl == 2 && memcmp(ok, "rk", 2) == 0 &&
-						    cbor_isa_float_ctrl(oPairs[j].value))
+						if (!cbor_isa_float_ctrl(oPairs[j].value))
+							continue;
+
+						if (okl == 2 && memcmp(ok, "rk", 2) == 0)
+							fido_cred_set_rk(cred, cbor_get_bool(oPairs[j].value) ? FIDO_OPT_TRUE
+							                                                      : FIDO_OPT_FALSE);
+						else if (okl == 2 && memcmp(ok, "uv", 2) == 0)
 						{
-							if (cbor_get_bool(oPairs[j].value))
-								fido_cred_set_rk(cred, FIDO_OPT_TRUE);
+							uv = cbor_get_bool(oPairs[j].value);
+							fido_cred_set_uv(cred, uv ? FIDO_OPT_TRUE : FIDO_OPT_FALSE);
 						}
 					}
 				}
@@ -578,24 +605,11 @@ static wStream* rdpewa_fido_make_credential(rdpContext* context, const BYTE* cta
 
 	{
 		char* pin = nullptr;
-		if (fido_dev_has_pin(dev))
+		const bool useUv = uv && fido_dev_has_uv(dev);
+		if (fido_dev_has_pin(dev) && !useUv && !rdpewa_fido_get_pin(context, &pin))
 		{
-			freerdp* instance = context->instance;
-			char* u = nullptr;
-			char* p = nullptr;
-			char* d = nullptr;
-			if (!instance || !instance->AuthenticateEx ||
-			    !instance->AuthenticateEx(instance, &u, &p, &d, AUTH_FIDO_PIN) || !p)
-			{
-				free(u);
-				zfree(p);
-				free(d);
-				ret = rdpewa_cbor_encode_webauthn_response(E_FAIL, 0x01, nullptr, 0, &devInfo);
-				goto out;
-			}
-			free(u);
-			free(d);
-			pin = p;
+			ret = rdpewa_cbor_encode_webauthn_response(E_FAIL, 0x01, nullptr, 0, &devInfo);
+			goto out;
 		}
 
 		/* Run fido in background (key starts blinking), notify via PubSub */
@@ -603,12 +617,32 @@ static wStream* rdpewa_fido_make_credential(rdpContext* context, const BYTE* cta
 		HANDLE ft = CreateThread(nullptr, 0, rdpewa_fido_makecred_thread, &fta, 0, nullptr);
 		if (!notifyWait(context, ft, dev))
 		{
-			zfree(pin);
+			winpr_zfree(pin);
 			goto out;
 		}
 
 		r = fta.result;
-		zfree(pin);
+		winpr_zfree(pin);
+
+		if (useUv && rdpewa_fido_uv_failed(r) && fido_dev_has_pin(dev))
+		{
+			if (!rdpewa_fido_get_pin(context, &pin))
+			{
+				ret = rdpewa_cbor_encode_webauthn_response(E_FAIL, 0x01, nullptr, 0, &devInfo);
+				goto out;
+			}
+
+			fta.pin = pin;
+			fta.result = FIDO_ERR_INTERNAL;
+			ft = CreateThread(nullptr, 0, rdpewa_fido_makecred_thread, &fta, 0, nullptr);
+			if (!notifyWait(context, ft, dev))
+			{
+				winpr_zfree(pin);
+				goto out;
+			}
+			r = fta.result;
+			winpr_zfree(pin);
+		}
 	}
 
 	if (r != FIDO_OK)
@@ -735,6 +769,7 @@ static wStream* rdpewa_fido_get_assertion(rdpContext* context, const BYTE* ctapD
 	RDPEWA_DEVICE_INFO devInfo = WINPR_C_ARRAY_INIT;
 	fido_assert_t* assert = nullptr;
 	wStream* ret = nullptr;
+	bool uv = false;
 
 	WINPR_ASSERT(ctapData);
 
@@ -828,12 +863,17 @@ static wStream* rdpewa_fido_get_assertion(rdpContext* context, const BYTE* ctapD
 
 						const char* ok = (const char*)cbor_string_handle(oPairs[j].key);
 						size_t okl = cbor_string_length(oPairs[j].key);
-						if (okl == 2 && memcmp(ok, "up", 2) == 0 &&
-						    cbor_isa_float_ctrl(oPairs[j].value))
-						{
+						if (!cbor_isa_float_ctrl(oPairs[j].value))
+							continue;
+
+						if (okl == 2 && memcmp(ok, "up", 2) == 0)
 							fido_assert_set_up(assert, cbor_get_bool(oPairs[j].value)
 							                               ? FIDO_OPT_TRUE
 							                               : FIDO_OPT_FALSE);
+						else if (okl == 2 && memcmp(ok, "uv", 2) == 0)
+						{
+							uv = cbor_get_bool(oPairs[j].value);
+							fido_assert_set_uv(assert, uv ? FIDO_OPT_TRUE : FIDO_OPT_FALSE);
 						}
 					}
 				}
@@ -903,24 +943,11 @@ static wStream* rdpewa_fido_get_assertion(rdpContext* context, const BYTE* ctapD
 
 	{
 		char* pin = nullptr;
-		if (fido_dev_has_pin(dev))
+		const bool useUv = uv && fido_dev_has_uv(dev);
+		if (fido_dev_has_pin(dev) && !useUv && !rdpewa_fido_get_pin(context, &pin))
 		{
-			freerdp* instance = context->instance;
-			char* u = nullptr;
-			char* p = nullptr;
-			char* d = nullptr;
-			if (!instance || !instance->AuthenticateEx ||
-			    !instance->AuthenticateEx(instance, &u, &p, &d, AUTH_FIDO_PIN) || !p)
-			{
-				free(u);
-				zfree(p);
-				free(d);
-				ret = rdpewa_cbor_encode_webauthn_response(E_FAIL, 0x01, nullptr, 0, &devInfo);
-				goto out;
-			}
-			free(u);
-			free(d);
-			pin = p;
+			ret = rdpewa_cbor_encode_webauthn_response(E_FAIL, 0x01, nullptr, 0, &devInfo);
+			goto out;
 		}
 
 		/* Run fido in background (key starts blinking), show prompt on this thread */
@@ -928,12 +955,32 @@ static wStream* rdpewa_fido_get_assertion(rdpContext* context, const BYTE* ctapD
 		HANDLE ft = CreateThread(nullptr, 0, rdpewa_fido_getassert_thread, &fta, 0, nullptr);
 		if (!notifyWait(context, ft, dev))
 		{
-			zfree(pin);
+			winpr_zfree(pin);
 			goto out;
 		}
 
 		r = fta.result;
-		zfree(pin);
+		winpr_zfree(pin);
+
+		if (useUv && rdpewa_fido_uv_failed(r) && fido_dev_has_pin(dev))
+		{
+			if (!rdpewa_fido_get_pin(context, &pin))
+			{
+				ret = rdpewa_cbor_encode_webauthn_response(E_FAIL, 0x01, nullptr, 0, &devInfo);
+				goto out;
+			}
+
+			fta.pin = pin;
+			fta.result = FIDO_ERR_INTERNAL;
+			ft = CreateThread(nullptr, 0, rdpewa_fido_getassert_thread, &fta, 0, nullptr);
+			if (!notifyWait(context, ft, dev))
+			{
+				winpr_zfree(pin);
+				goto out;
+			}
+			r = fta.result;
+			winpr_zfree(pin);
+		}
 	}
 
 	if (r != FIDO_OK)

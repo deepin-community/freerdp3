@@ -134,7 +134,7 @@ static inline pstatus_t sse41_YUV420ToRGB_BGRX(const BYTE* WINPR_RESTRICT pSrc[]
 
 	for (size_t y = 0; y < nHeight; y++)
 	{
-		__m128i* dst = (__m128i*)(pDst + dstStep * y);
+		__m128i* dst = WINPR_PACKED_ALIGN_CAST(__m128i*, (pDst + dstStep * y));
 		const BYTE* YData = pSrc[0] + y * srcStep[0];
 		const BYTE* UData = pSrc[1] + (y / 2) * srcStep[1];
 		const BYTE* VData = pSrc[2] + (y / 2) * srcStep[2];
@@ -160,7 +160,8 @@ static inline pstatus_t sse41_YUV420ToRGB_BGRX(const BYTE* WINPR_RESTRICT pSrc[]
 			const BYTE Y = *YData++;
 			const BYTE U = *UData;
 			const BYTE V = *VData;
-			dst = (__m128i*)writeYUVPixel((BYTE*)dst, PIXEL_FORMAT_BGRX32, Y, U, V, writePixelBGRX);
+			dst = WINPR_PACKED_ALIGN_CAST(
+			    __m128i*, writeYUVPixel((BYTE*)dst, PIXEL_FORMAT_BGRX32, Y, U, V, writePixelBGRX));
 
 			if (x % 2)
 			{
@@ -324,7 +325,7 @@ static inline void sse41_BGRX_fillRGB_pixel(BYTE* WINPR_RESTRICT pRGB, __m128i Y
 	const __m128i mask = mm_set_epu8(0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF,
 	                                 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF);
 
-	__m128i* rgb = (__m128i*)pRGB;
+	__m128i* rgb = WINPR_PACKED_ALIGN_CAST(__m128i*, pRGB);
 	const __m128i bgrx0 = _mm_unpacklo_epi16(bg[1], rx[1]);
 	_mm_maskmoveu_si128(bgrx0, mask, (char*)&rgb[0]);
 	const __m128i bgrx1 = _mm_unpackhi_epi16(bg[1], rx[1]);
@@ -418,7 +419,6 @@ static inline pstatus_t sse41_YUV444ToRGB_8u_P3AC4R_BGRX_DOUBLE_ROW(
     BYTE* WINPR_RESTRICT pDst[2], const BYTE* WINPR_RESTRICT YData[2],
     const BYTE* WINPR_RESTRICT UData[2], const BYTE* WINPR_RESTRICT VData[2], UINT32 nWidth)
 {
-	WINPR_ASSERT((nWidth % 2) == 0);
 	const UINT32 pad = nWidth % 16;
 
 	size_t x = 0;
@@ -465,8 +465,6 @@ static inline pstatus_t sse41_YUV444ToRGB_8u_P3AC4R_BGRX_SINGLE_ROW(
     BYTE* WINPR_RESTRICT pDst, const BYTE* WINPR_RESTRICT YData, const BYTE* WINPR_RESTRICT UData,
     const BYTE* WINPR_RESTRICT VData, UINT32 nWidth)
 {
-	WINPR_ASSERT((nWidth % 2) == 0);
-
 	for (size_t x = 0; x < nWidth; x += 2)
 	{
 		BGRX_fillRGB_single(x, pDst, YData, UData, VData, TRUE);
@@ -524,6 +522,54 @@ static pstatus_t sse41_YUV444ToRGB_8u_P3AC4R(const BYTE* WINPR_RESTRICT pSrc[],
 
 		default:
 			return generic->YUV444ToRGB_8u_P3AC4R(pSrc, srcStep, pDst, dstStep, DstFormat, roi);
+	}
+}
+
+static inline void sse41_I444ToRGB_BGRX_ROW(BYTE* WINPR_RESTRICT pDst,
+                                            const BYTE* WINPR_RESTRICT YData,
+                                            const BYTE* WINPR_RESTRICT UData,
+                                            const BYTE* WINPR_RESTRICT VData, UINT32 nWidth)
+{
+	const UINT32 pad = nWidth % 16;
+
+	size_t x = 0;
+	for (; x < nWidth - pad; x += 16)
+	{
+		const __m128i Y = LOAD_SI128(&YData[x]);
+		const __m128i U = LOAD_SI128(&UData[x]);
+		const __m128i V = LOAD_SI128(&VData[x]);
+
+		sse41_BGRX_fillRGB_pixel(&pDst[x * 4], Y, U, V);
+	}
+
+	for (; x < nWidth; x++)
+	{
+		writeYUVPixel(&pDst[x * 4], PIXEL_FORMAT_BGRX32, YData[x], UData[x], VData[x],
+		              writePixelBGRX);
+	}
+}
+
+static pstatus_t sse41_I444ToRGB_8u(const BYTE* WINPR_RESTRICT pSrc[], const UINT32 srcStep[],
+                                    BYTE* WINPR_RESTRICT pDst, UINT32 dstStep, UINT32 DstFormat,
+                                    const prim_size_t* WINPR_RESTRICT roi)
+{
+	switch (DstFormat)
+	{
+		case PIXEL_FORMAT_BGRX32:
+		case PIXEL_FORMAT_BGRA32:
+			for (size_t y = 0; y < roi->height; y++)
+			{
+				BYTE* dst = pDst + dstStep * y;
+				const BYTE* YData = pSrc[0] + y * srcStep[0];
+				const BYTE* UData = pSrc[1] + y * srcStep[1];
+				const BYTE* VData = pSrc[2] + y * srcStep[2];
+
+				sse41_I444ToRGB_BGRX_ROW(dst, YData, UData, VData, roi->width);
+			}
+			return PRIMITIVES_SUCCESS;
+
+		default:
+			return generic->I444ToRGB_8u(pSrc, srcStep, pDst, dstStep, DstFormat, roi);
 	}
 }
 
@@ -600,8 +646,8 @@ static inline void sse41_BGRX_TO_YUV(const BYTE* WINPR_RESTRICT pLine1, BYTE* WI
 static inline void sse41_RGBToYUV420_BGRX_Y(const BYTE* WINPR_RESTRICT src, BYTE* dst, UINT32 width)
 {
 	const __m128i y_factors = BGRX_Y_FACTORS;
-	const __m128i* argb = (const __m128i*)src;
-	__m128i* ydst = (__m128i*)dst;
+	const __m128i* argb = WINPR_PACKED_ALIGN_CAST(const __m128i*, src);
+	__m128i* ydst = WINPR_PACKED_ALIGN_CAST(__m128i*, dst);
 
 	UINT32 x = 0;
 
@@ -654,10 +700,10 @@ static inline void sse41_RGBToYUV420_BGRX_UV(const BYTE* WINPR_RESTRICT src1,
 
 	for (; x < width - width % 16; x += 16)
 	{
-		const __m128i* rgb1 = (const __m128i*)&src1[4ULL * x];
-		const __m128i* rgb2 = (const __m128i*)&src2[4ULL * x];
-		__m64* udst = (__m64*)&dst1[x / 2];
-		__m64* vdst = (__m64*)&dst2[x / 2];
+		const __m128i* rgb1 = WINPR_PACKED_ALIGN_CAST(const __m128i*, &src1[4ULL * x]);
+		const __m128i* rgb2 = WINPR_PACKED_ALIGN_CAST(const __m128i*, &src2[4ULL * x]);
+		__m64* udst = WINPR_PACKED_ALIGN_CAST(__m64*, &dst1[x / 2]);
+		__m64* vdst = WINPR_PACKED_ALIGN_CAST(__m64*, &dst2[x / 2]);
 
 		/* subsample 16x2 pixels into 16x1 pixels */
 		__m128i x0 = LOAD_SI128(&rgb1[0]);
@@ -738,8 +784,12 @@ static pstatus_t sse41_RGBToYUV420_BGRX(const BYTE* WINPR_RESTRICT pSrc, UINT32 
 		return !PRIMITIVES_SUCCESS;
 	}
 
-	size_t y = 0;
-	for (; y < roi->height - roi->height % 2; y += 2)
+	/* The loops below take 2x2 pixel blocks; an odd last column and an odd last row have U and V
+	 * too, which they would never reach, so the generic routine does those edges. */
+	const UINT32 width = roi->width - roi->width % 2;
+	const size_t height = roi->height - roi->height % 2;
+
+	for (size_t y = 0; y < height; y += 2)
 	{
 		const BYTE* line1 = &pSrc[y * srcStep];
 		const BYTE* line2 = &pSrc[(1ULL + y) * srcStep];
@@ -748,16 +798,34 @@ static pstatus_t sse41_RGBToYUV420_BGRX(const BYTE* WINPR_RESTRICT pSrc, UINT32 
 		BYTE* udst = &pDst[1][y / 2 * dstStep[1]];
 		BYTE* vdst = &pDst[2][y / 2 * dstStep[2]];
 
-		sse41_RGBToYUV420_BGRX_UV(line1, line2, udst, vdst, roi->width);
-		sse41_RGBToYUV420_BGRX_Y(line1, ydst1, roi->width);
-		sse41_RGBToYUV420_BGRX_Y(line2, ydst2, roi->width);
+		sse41_RGBToYUV420_BGRX_UV(line1, line2, udst, vdst, width);
+		sse41_RGBToYUV420_BGRX_Y(line1, ydst1, width);
+		sse41_RGBToYUV420_BGRX_Y(line2, ydst2, width);
 	}
 
-	for (; y < roi->height; y++)
+	WINPR_ASSERT(generic);
+
+	/* the odd last column, every row */
+	if (width < roi->width)
 	{
-		const BYTE* line = &pSrc[y * srcStep];
-		BYTE* ydst = &pDst[0][1ULL * y * dstStep[0]];
-		sse41_RGBToYUV420_BGRX_Y(line, ydst, roi->width);
+		const BYTE* src = &pSrc[4ULL * width];
+		BYTE* dst[3] = { &pDst[0][width], &pDst[1][width / 2], &pDst[2][width / 2] };
+		const prim_size_t rest = { 1, roi->height };
+		const pstatus_t rc =
+		    generic->RGBToYUV420_8u_P3AC4R(src, PIXEL_FORMAT_BGRX32, srcStep, dst, dstStep, &rest);
+		if (rc != PRIMITIVES_SUCCESS)
+			return rc;
+	}
+
+	/* the odd last row, left of that column */
+	if ((height < roi->height) && (width > 0))
+	{
+		const BYTE* src = &pSrc[height * srcStep];
+		BYTE* dst[3] = { &pDst[0][height * dstStep[0]], &pDst[1][(height / 2) * dstStep[1]],
+			             &pDst[2][(height / 2) * dstStep[2]] };
+		const prim_size_t rest = { width, 1 };
+		return generic->RGBToYUV420_8u_P3AC4R(src, PIXEL_FORMAT_BGRX32, srcStep, dst, dstStep,
+		                                      &rest);
 	}
 
 	return PRIMITIVES_SUCCESS;
@@ -788,8 +856,8 @@ static inline void sse41_RGBToAVC444YUV_BGRX_DOUBLE_ROW(
     BYTE* WINPR_RESTRICT b3, BYTE* WINPR_RESTRICT b4, BYTE* WINPR_RESTRICT b5,
     BYTE* WINPR_RESTRICT b6, BYTE* WINPR_RESTRICT b7, UINT32 width)
 {
-	const __m128i* argbEven = (const __m128i*)srcEven;
-	const __m128i* argbOdd = (const __m128i*)srcOdd;
+	const __m128i* argbEven = WINPR_PACKED_ALIGN_CAST(const __m128i*, srcEven);
+	const __m128i* argbOdd = WINPR_PACKED_ALIGN_CAST(const __m128i*, srcOdd);
 	const __m128i y_factors = BGRX_Y_FACTORS;
 	const __m128i u_factors = BGRX_U_FACTORS;
 	const __m128i v_factors = BGRX_V_FACTORS;
@@ -882,7 +950,7 @@ static inline void sse41_RGBToAVC444YUV_BGRX_DOUBLE_ROW(
 				const __m128i added = _mm_hadd_epi16(lo, hi);
 				const __m128i avg16 = _mm_srai_epi16(added, 2);
 				const __m128i avg = _mm_packus_epi16(avg16, avg16);
-				_mm_storel_epi64((__m128i*)b2, avg);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, b2), avg);
 			}
 			else
 			{
@@ -890,7 +958,7 @@ static inline void sse41_RGBToAVC444YUV_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 14, 12, 10, 8, 6, 4, 2, 0);
 				const __m128i ud = _mm_shuffle_epi8(ue, mask);
-				_mm_storel_epi64((__m128i*)b2, ud);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, b2), ud);
 			}
 
 			b2 += 8;
@@ -907,7 +975,7 @@ static inline void sse41_RGBToAVC444YUV_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 15, 13, 11, 9, 7, 5, 3, 1);
 				const __m128i ude = _mm_shuffle_epi8(ue, mask);
-				_mm_storel_epi64((__m128i*)b6, ude);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, b6), ude);
 				b6 += 8;
 			}
 		}
@@ -960,7 +1028,7 @@ static inline void sse41_RGBToAVC444YUV_BGRX_DOUBLE_ROW(
 				const __m128i added = _mm_hadd_epi16(lo, hi);
 				const __m128i avg16 = _mm_srai_epi16(added, 2);
 				const __m128i avg = _mm_packus_epi16(avg16, avg16);
-				_mm_storel_epi64((__m128i*)b3, avg);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, b3), avg);
 			}
 			else
 			{
@@ -968,7 +1036,7 @@ static inline void sse41_RGBToAVC444YUV_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 14, 12, 10, 8, 6, 4, 2, 0);
 				const __m128i vd = _mm_shuffle_epi8(ve, mask);
-				_mm_storel_epi64((__m128i*)b3, vd);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, b3), vd);
 			}
 
 			b3 += 8;
@@ -985,7 +1053,7 @@ static inline void sse41_RGBToAVC444YUV_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 15, 13, 11, 9, 7, 5, 3, 1);
 				const __m128i vde = _mm_shuffle_epi8(ve, mask);
-				_mm_storel_epi64((__m128i*)b7, vde);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, b7), vde);
 				b7 += 8;
 			}
 		}
@@ -1080,8 +1148,8 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
     BYTE* WINPR_RESTRICT vChromaDst1, BYTE* WINPR_RESTRICT vChromaDst2, UINT32 width)
 {
 	const __m128i vector128 = CONST128_FACTORS;
-	const __m128i* argbEven = (const __m128i*)srcEven;
-	const __m128i* argbOdd = (const __m128i*)srcOdd;
+	const __m128i* argbEven = WINPR_PACKED_ALIGN_CAST(const __m128i*, srcEven);
+	const __m128i* argbOdd = WINPR_PACKED_ALIGN_CAST(const __m128i*, srcOdd);
 
 	UINT32 x = 0;
 	for (; x < width - width % 16; x += 16)
@@ -1178,7 +1246,7 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 15, 13, 11, 9, 7, 5, 3, 1);
 				const __m128i ude = _mm_shuffle_epi8(ue, mask);
-				_mm_storel_epi64((__m128i*)yEvenChromaDst1, ude);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, yEvenChromaDst1), ude);
 				yEvenChromaDst1 += 8;
 			}
 
@@ -1188,7 +1256,8 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 15, 13, 11, 9, 7, 5, 3, 1);
 				const __m128i udo /* codespell:ignore udo */ = _mm_shuffle_epi8(uo, mask);
-				_mm_storel_epi64((__m128i*)yOddChromaDst1, udo); // codespell:ignore udo
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, yOddChromaDst1),
+				                 udo); // codespell:ignore udo
 				yOddChromaDst1 += 8;
 			}
 
@@ -1198,8 +1267,8 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 14, 10, 6, 2, 12, 8, 4, 0);
 				const __m128i ud = _mm_shuffle_epi8(uo, mask);
-				int* uDst1 = (int*)uChromaDst1;
-				int* vDst1 = (int*)vChromaDst1;
+				int* uDst1 = WINPR_PACKED_ALIGN_CAST(int*, uChromaDst1);
+				int* vDst1 = WINPR_PACKED_ALIGN_CAST(int*, vChromaDst1);
 				const int* src = (const int*)&ud;
 				_mm_stream_si32(uDst1, src[0]);
 				_mm_stream_si32(vDst1, src[1]);
@@ -1209,7 +1278,7 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 
 			if (yLumaDstOdd)
 			{
-				_mm_storel_epi64((__m128i*)uLumaDst, uavg);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, uLumaDst), uavg);
 				uLumaDst += 8;
 			}
 			else
@@ -1218,7 +1287,7 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 14, 12, 10, 8, 6, 4, 2, 0);
 				const __m128i ud = _mm_shuffle_epi8(ue, mask);
-				_mm_storel_epi64((__m128i*)uLumaDst, ud);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, uLumaDst), ud);
 				uLumaDst += 8;
 			}
 		}
@@ -1269,7 +1338,7 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 15, 13, 11, 9, 7, 5, 3, 1);
 				__m128i vde = _mm_shuffle_epi8(ve, mask);
-				_mm_storel_epi64((__m128i*)yEvenChromaDst2, vde);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, yEvenChromaDst2), vde);
 				yEvenChromaDst2 += 8;
 			}
 
@@ -1279,7 +1348,7 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 15, 13, 11, 9, 7, 5, 3, 1);
 				__m128i vdo = _mm_shuffle_epi8(vo, mask);
-				_mm_storel_epi64((__m128i*)yOddChromaDst2, vdo);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, yOddChromaDst2), vdo);
 				yOddChromaDst2 += 8;
 			}
 
@@ -1289,8 +1358,8 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 14, 10, 6, 2, 12, 8, 4, 0);
 				const __m128i vd = _mm_shuffle_epi8(vo, mask);
-				int* uDst2 = (int*)uChromaDst2;
-				int* vDst2 = (int*)vChromaDst2;
+				int* uDst2 = WINPR_PACKED_ALIGN_CAST(int*, uChromaDst2);
+				int* vDst2 = WINPR_PACKED_ALIGN_CAST(int*, vChromaDst2);
 				const int* src = (const int*)&vd;
 				_mm_stream_si32(uDst2, src[0]);
 				_mm_stream_si32(vDst2, src[1]);
@@ -1300,7 +1369,7 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 
 			if (yLumaDstOdd)
 			{
-				_mm_storel_epi64((__m128i*)vLumaDst, vavg);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, vLumaDst), vavg);
 				vLumaDst += 8;
 			}
 			else
@@ -1309,7 +1378,7 @@ static inline void sse41_RGBToAVC444YUVv2_BGRX_DOUBLE_ROW(
 				    _mm_set_epi8((char)0x80, (char)0x80, (char)0x80, (char)0x80, (char)0x80,
 				                 (char)0x80, (char)0x80, (char)0x80, 14, 12, 10, 8, 6, 4, 2, 0);
 				__m128i vd = _mm_shuffle_epi8(ve, mask);
-				_mm_storel_epi64((__m128i*)vLumaDst, vd);
+				_mm_storel_epi64(WINPR_PACKED_ALIGN_CAST(__m128i*, vLumaDst), vd);
 				vLumaDst += 8;
 			}
 		}
@@ -1497,7 +1566,7 @@ static pstatus_t sse41_ChromaV1ToYUV444(const BYTE* WINPR_RESTRICT pSrcRaw[3],
 	const UINT32 oddX = 1;
 	/* The auxiliary frame is aligned to multiples of 16x16.
 	 * We need the padded height for B4 and B5 conversion. */
-	const UINT32 padHeigth = nHeight + 16 - nHeight % 16;
+	const UINT32 padHeight = nHeight + 16 - nHeight % 16;
 	const BYTE* pSrc[3] = { pSrcRaw[0] + 1ULL * roi->top * srcStep[0] + roi->left,
 		                    pSrcRaw[1] + 1ULL * roi->top / 2 * srcStep[1] + roi->left / 2,
 		                    pSrcRaw[2] + 1ULL * roi->top / 2 * srcStep[2] + roi->left / 2 };
@@ -1510,7 +1579,7 @@ static pstatus_t sse41_ChromaV1ToYUV444(const BYTE* WINPR_RESTRICT pSrcRaw[3],
 
 	/* The second half of U and V is a bit more tricky... */
 	/* B4 and B5 */
-	for (size_t y = 0; y < padHeigth; y++)
+	for (size_t y = 0; y < padHeight; y++)
 	{
 		const BYTE* Ya = pSrc[0] + 1ULL * srcStep[0] * y;
 		BYTE* pX = nullptr;
@@ -1534,7 +1603,8 @@ static pstatus_t sse41_ChromaV1ToYUV444(const BYTE* WINPR_RESTRICT pSrcRaw[3],
 			pX = pDst[2] + 1ULL * dstStep[2] * pos;
 		}
 
-		memcpy(pX, Ya, nWidth);
+		if (y < nHeight)
+			memcpy(pX, Ya, nWidth);
 	}
 
 	/* B6 and B7 */
@@ -1553,15 +1623,18 @@ static pstatus_t sse41_ChromaV1ToYUV444(const BYTE* WINPR_RESTRICT pSrcRaw[3],
 				const __m128i u = LOAD_SI128(&Ua[x]);
 				const __m128i u2 = _mm_unpackhi_epi8(u, zero);
 				const __m128i u1 = _mm_unpacklo_epi8(u, zero);
-				_mm_maskmoveu_si128(u1, mask, (char*)&pU[2 * x]);
-				_mm_maskmoveu_si128(u2, mask, (char*)&pU[2 * x + 16]);
+				/* the mask selects the even bytes of u1/u2, which carry the
+				 * samples; B6 goes to the odd columns 2x + 1 */
+				_mm_maskmoveu_si128(u1, mask, (char*)&pU[2 * x + 1]);
+				_mm_maskmoveu_si128(u2, mask, (char*)&pU[2 * x + 17]);
 			}
 			{
 				const __m128i u = LOAD_SI128(&Va[x]);
 				const __m128i u2 = _mm_unpackhi_epi8(u, zero);
 				const __m128i u1 = _mm_unpacklo_epi8(u, zero);
-				_mm_maskmoveu_si128(u1, mask, (char*)&pV[2 * x]);
-				_mm_maskmoveu_si128(u2, mask, (char*)&pV[2 * x + 16]);
+				/* B7 likewise to the odd columns */
+				_mm_maskmoveu_si128(u1, mask, (char*)&pV[2 * x + 1]);
+				_mm_maskmoveu_si128(u2, mask, (char*)&pV[2 * x + 17]);
 			}
 		}
 
@@ -1721,6 +1794,132 @@ static pstatus_t sse41_YUV420CombineToYUV444(avc444_frame_type type,
 			return -1;
 	}
 }
+
+/* RGBToI444_8u: one Y, U and V sample per pixel, with the exact integer math of
+ * RGB2Y/RGB2U/RGB2V (16 bit lanes are wide enough for every intermediate value),
+ * so the result matches the generic routine byte for byte. */
+
+/* a pshufb mask that moves byte off of each of four 32 bit pixels into the low
+ * byte of 16 bit lane first..first+3, and zeroes every other byte */
+static inline __m128i sse41_I444_mask(size_t off, size_t first)
+{
+	BYTE m[16];
+	memset(m, 0x80, sizeof(m));
+	for (size_t x = 0; x < 4; x++)
+		m[2 * (first + x)] = (BYTE)(4 * x + off);
+	return _mm_loadu_si128((const __m128i*)m);
+}
+
+/* Y, U and V of eight pixels given as 16 bit R, G and B lanes */
+static inline void sse41_I444_YUV(__m128i r, __m128i g, __m128i b, __m128i* WINPR_RESTRICT y,
+                                  __m128i* WINPR_RESTRICT u, __m128i* WINPR_RESTRICT v)
+{
+	const __m128i c128 = _mm_set1_epi16(128);
+
+	/* (54 R + 183 G + 18 B) >> 8: at most 65025, exact as unsigned 16 bit */
+	__m128i t = _mm_add_epi16(_mm_mullo_epi16(r, _mm_set1_epi16(54)),
+	                          _mm_mullo_epi16(g, _mm_set1_epi16(183)));
+	t = _mm_add_epi16(t, _mm_mullo_epi16(b, _mm_set1_epi16(18)));
+	*y = _mm_srli_epi16(t, 8);
+
+	/* ((128 B - (29 R + 99 G)) >> 8) + 128: both terms are at most 32640 */
+	t = _mm_add_epi16(_mm_mullo_epi16(r, _mm_set1_epi16(29)),
+	                  _mm_mullo_epi16(g, _mm_set1_epi16(99)));
+	t = _mm_sub_epi16(_mm_slli_epi16(b, 7), t);
+	*u = _mm_add_epi16(_mm_srai_epi16(t, 8), c128);
+
+	/* ((128 R - (116 G + 12 B)) >> 8) + 128 */
+	t = _mm_add_epi16(_mm_mullo_epi16(g, _mm_set1_epi16(116)),
+	                  _mm_mullo_epi16(b, _mm_set1_epi16(12)));
+	t = _mm_sub_epi16(_mm_slli_epi16(r, 7), t);
+	*v = _mm_add_epi16(_mm_srai_epi16(t, 8), c128);
+}
+
+/* eight pixels from two loads of four: lo picks a channel of the first four
+ * pixels into lanes 0-3, hi the same channel of the next four into lanes 4-7 */
+static inline void sse41_I444_8px(const BYTE* WINPR_RESTRICT src, const __m128i masks[6],
+                                  __m128i* WINPR_RESTRICT y, __m128i* WINPR_RESTRICT u,
+                                  __m128i* WINPR_RESTRICT v)
+{
+	const __m128i p0 = LOAD_SI128(src);
+	const __m128i p1 = LOAD_SI128(src + 16);
+	const __m128i r = _mm_or_si128(_mm_shuffle_epi8(p0, masks[0]), _mm_shuffle_epi8(p1, masks[1]));
+	const __m128i g = _mm_or_si128(_mm_shuffle_epi8(p0, masks[2]), _mm_shuffle_epi8(p1, masks[3]));
+	const __m128i b = _mm_or_si128(_mm_shuffle_epi8(p0, masks[4]), _mm_shuffle_epi8(p1, masks[5]));
+	sse41_I444_YUV(r, g, b, y, u, v);
+}
+
+static pstatus_t sse41_RGBToI444_32bpp(const BYTE* WINPR_RESTRICT pSrc, UINT32 srcStep,
+                                       BYTE* WINPR_RESTRICT pDst[3], const UINT32 dstStep[3],
+                                       const prim_size_t* WINPR_RESTRICT roi, size_t rOff,
+                                       size_t gOff, size_t bOff)
+{
+	const __m128i masks[6] = { sse41_I444_mask(rOff, 0), sse41_I444_mask(rOff, 4),
+		                       sse41_I444_mask(gOff, 0), sse41_I444_mask(gOff, 4),
+		                       sse41_I444_mask(bOff, 0), sse41_I444_mask(bOff, 4) };
+	const size_t width = roi->width;
+
+	for (size_t row = 0; row < roi->height; row++)
+	{
+		const BYTE* src = &pSrc[row * srcStep];
+		BYTE* yd = &pDst[0][row * dstStep[0]];
+		BYTE* ud = &pDst[1][row * dstStep[1]];
+		BYTE* vd = &pDst[2][row * dstStep[2]];
+
+		size_t x = 0;
+		for (; x + 16 <= width; x += 16)
+		{
+			__m128i y0 = _mm_setzero_si128();
+			__m128i u0 = _mm_setzero_si128();
+			__m128i v0 = _mm_setzero_si128();
+			__m128i y1 = _mm_setzero_si128();
+			__m128i u1 = _mm_setzero_si128();
+			__m128i v1 = _mm_setzero_si128();
+			sse41_I444_8px(&src[4 * x], masks, &y0, &u0, &v0);
+			sse41_I444_8px(&src[4 * x + 32], masks, &y1, &u1, &v1);
+			STORE_SI128(&yd[x], _mm_packus_epi16(y0, y1));
+			STORE_SI128(&ud[x], _mm_packus_epi16(u0, u1));
+			STORE_SI128(&vd[x], _mm_packus_epi16(v0, v1));
+		}
+
+		for (; x < width; x++)
+		{
+			const BYTE* px = &src[4 * x];
+			const BYTE R = px[rOff];
+			const BYTE G = px[gOff];
+			const BYTE B = px[bOff];
+			yd[x] = RGB2Y(R, G, B);
+			ud[x] = RGB2U(R, G, B);
+			vd[x] = RGB2V(R, G, B);
+		}
+	}
+
+	return PRIMITIVES_SUCCESS;
+}
+
+static pstatus_t sse41_RGBToI444_8u(const BYTE* WINPR_RESTRICT pSrc, UINT32 SrcFormat,
+                                    const UINT32 srcStep, BYTE* WINPR_RESTRICT pDst[3],
+                                    const UINT32 dstStep[3], const prim_size_t* WINPR_RESTRICT roi)
+{
+	/* byte offsets of R, G and B in memory, as in general_RGBToI444_8u */
+	switch (SrcFormat)
+	{
+		case PIXEL_FORMAT_BGRA32:
+		case PIXEL_FORMAT_BGRX32:
+			return sse41_RGBToI444_32bpp(pSrc, srcStep, pDst, dstStep, roi, 2, 1, 0);
+		case PIXEL_FORMAT_RGBA32:
+		case PIXEL_FORMAT_RGBX32:
+			return sse41_RGBToI444_32bpp(pSrc, srcStep, pDst, dstStep, roi, 0, 1, 2);
+		case PIXEL_FORMAT_ARGB32:
+		case PIXEL_FORMAT_XRGB32:
+			return sse41_RGBToI444_32bpp(pSrc, srcStep, pDst, dstStep, roi, 1, 2, 3);
+		case PIXEL_FORMAT_ABGR32:
+		case PIXEL_FORMAT_XBGR32:
+			return sse41_RGBToI444_32bpp(pSrc, srcStep, pDst, dstStep, roi, 3, 2, 1);
+		default:
+			return generic->RGBToI444_8u(pSrc, SrcFormat, srcStep, pDst, dstStep, roi);
+	}
+}
 #endif
 
 void primitives_init_YUV_sse41_int(primitives_t* WINPR_RESTRICT prims)
@@ -1730,10 +1929,12 @@ void primitives_init_YUV_sse41_int(primitives_t* WINPR_RESTRICT prims)
 
 	WLog_VRB(PRIM_TAG, "SSE3/sse41 optimizations");
 	prims->RGBToYUV420_8u_P3AC4R = sse41_RGBToYUV420;
+	prims->RGBToI444_8u = sse41_RGBToI444_8u;
 	prims->RGBToAVC444YUV = sse41_RGBToAVC444YUV;
 	prims->RGBToAVC444YUVv2 = sse41_RGBToAVC444YUVv2;
 	prims->YUV420ToRGB_8u_P3AC4R = sse41_YUV420ToRGB;
 	prims->YUV444ToRGB_8u_P3AC4R = sse41_YUV444ToRGB_8u_P3AC4R;
+	prims->I444ToRGB_8u = sse41_I444ToRGB_8u;
 	prims->YUV420CombineToYUV444 = sse41_YUV420CombineToYUV444;
 #else
 	WLog_VRB(PRIM_TAG, "undefined WITH_SIMD or sse41 intrinsics not available");

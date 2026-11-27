@@ -115,6 +115,7 @@ static NTSTATUS GetLastErrorToIoStatus(SERIAL_DEVICE* serial)
 	return STATUS_UNSUCCESSFUL;
 }
 
+WINPR_ATTR_NODISCARD
 static UINT serial_process_irp_create(SERIAL_DEVICE* serial, IRP* irp)
 {
 	DWORD DesiredAccess = 0;
@@ -165,6 +166,13 @@ static UINT serial_process_irp_create(SERIAL_DEVICE* serial, IRP* irp)
 	SharedAccess = 0;
 	CreateDisposition = OPEN_EXISTING;
 #endif
+	if (serial->hComm)
+	{
+		WLog_Print(serial->log, WLOG_ERROR, "Device %s already open, cancel request",
+		           serial->device.name);
+		return ERROR_INVALID_DATA;
+	}
+
 	serial->hComm = winpr_CreateFile(serial->device.name, DesiredAccess, SharedAccess,
 	                                 nullptr,              /* SecurityAttributes */
 	                                 CreateDisposition, 0, /* FlagsAndAttributes */
@@ -217,6 +225,13 @@ static UINT serial_process_irp_close(SERIAL_DEVICE* serial, IRP* irp)
 
 	Stream_Seek(irp->input, 32); /* Padding (32 bytes) */
 
+	if (!serial->hComm)
+	{
+		WLog_Print(serial->log, WLOG_ERROR, "serial device %s is not open, aborting close",
+		           serial->device.name);
+		return ERROR_INVALID_DATA;
+	}
+
 	close_terminated_irp_thread_handles(serial, TRUE);
 
 	if (!CloseHandle(serial->hComm))
@@ -241,11 +256,11 @@ error_handle:
  *
  * @return 0 on success, otherwise a Win32 error code
  */
+WINPR_ATTR_NODISCARD
 static UINT serial_process_irp_read(SERIAL_DEVICE* serial, IRP* irp)
 {
 	UINT32 Length = 0;
 	UINT64 Offset = 0;
-	BYTE* buffer = nullptr;
 	DWORD nbRead = 0;
 
 	WINPR_ASSERT(serial);
@@ -259,7 +274,15 @@ static UINT serial_process_irp_read(SERIAL_DEVICE* serial, IRP* irp)
 	(void)Offset;                /* [MS-RDPESP] 3.2.5.1.4 Processing a Server Read Request Message
 	                              * ignored */
 	Stream_Seek(irp->input, 20); /* Padding (20 bytes) */
-	buffer = (BYTE*)calloc(Length, sizeof(BYTE));
+
+	if (!serial->hComm)
+	{
+		WLog_Print(serial->log, WLOG_ERROR, "serial device %s is not open, aborting read",
+		           serial->device.name);
+		return ERROR_INVALID_DATA;
+	}
+
+	BYTE* buffer = (BYTE*)calloc(Length, sizeof(BYTE));
 
 	if (buffer == nullptr)
 	{
@@ -307,6 +330,7 @@ error_handle:
 	return CHANNEL_RC_OK;
 }
 
+WINPR_ATTR_NODISCARD
 static UINT serial_process_irp_write(SERIAL_DEVICE* serial, IRP* irp)
 {
 	UINT32 Length = 0;
@@ -338,6 +362,14 @@ static UINT serial_process_irp_write(SERIAL_DEVICE* serial, IRP* irp)
 	const void* ptr = Stream_ConstPointer(irp->input);
 	if (!Stream_SafeSeek(irp->input, Length))
 		return ERROR_INVALID_DATA;
+
+	if (!serial->hComm)
+	{
+		WLog_Print(serial->log, WLOG_ERROR, "serial device %s is not open, aborting write",
+		           serial->device.name);
+		return ERROR_INVALID_DATA;
+	}
+
 	/* FIXME: CommWriteFile to be replaced by WriteFile */
 	if (CommWriteFile(serial->hComm, ptr, Length, &nbWritten, nullptr))
 	{
@@ -363,13 +395,9 @@ static UINT serial_process_irp_write(SERIAL_DEVICE* serial, IRP* irp)
  *
  * @return 0 on success, otherwise a Win32 error code
  */
+WINPR_ATTR_NODISCARD
 static UINT serial_process_irp_device_control(SERIAL_DEVICE* serial, IRP* irp)
 {
-	UINT32 IoControlCode = 0;
-	UINT32 InputBufferLength = 0;
-	BYTE* InputBuffer = nullptr;
-	UINT32 OutputBufferLength = 0;
-	BYTE* OutputBuffer = nullptr;
 	DWORD BytesReturned = 0;
 
 	WINPR_ASSERT(serial);
@@ -378,34 +406,41 @@ static UINT serial_process_irp_device_control(SERIAL_DEVICE* serial, IRP* irp)
 	if (!Stream_CheckAndLogRequiredLengthWLog(serial->log, irp->input, 32))
 		return ERROR_INVALID_DATA;
 
-	Stream_Read_UINT32(irp->input, OutputBufferLength); /* OutputBufferLength (4 bytes) */
-	Stream_Read_UINT32(irp->input, InputBufferLength);  /* InputBufferLength (4 bytes) */
-	Stream_Read_UINT32(irp->input, IoControlCode);      /* IoControlCode (4 bytes) */
+	const UINT32 OutputBufferLength =
+	    Stream_Get_UINT32(irp->input); /* OutputBufferLength (4 bytes) */
+	const UINT32 InputBufferLength =
+	    Stream_Get_UINT32(irp->input);                          /* InputBufferLength (4 bytes) */
+	const UINT32 IoControlCode = Stream_Get_UINT32(irp->input); /* IoControlCode (4 bytes) */
 	Stream_Seek(irp->input, 20);                        /* Padding (20 bytes) */
 
 	if (!Stream_CheckAndLogRequiredLengthWLog(serial->log, irp->input, InputBufferLength))
 		return ERROR_INVALID_DATA;
 
-	OutputBuffer = (BYTE*)calloc(OutputBufferLength, sizeof(BYTE));
-
-	if (OutputBuffer == nullptr)
+	if (!serial->hComm)
 	{
-		irp->IoStatus = STATUS_NO_MEMORY;
-		goto error_handle;
+		WLog_Print(serial->log, WLOG_ERROR,
+		           "serial device %s is not open, aborting device IO control", serial->device.name);
+		return ERROR_INVALID_DATA;
 	}
 
-	InputBuffer = (BYTE*)calloc(InputBufferLength, sizeof(BYTE));
+	const BYTE* InputBuffer = Stream_PointerAs(irp->input, BYTE);
+	if (!Stream_SafeSeek(irp->input, InputBufferLength))
+		return ERROR_INVALID_DATA;
 
-	if (InputBuffer == nullptr)
-	{
-		irp->IoStatus = STATUS_NO_MEMORY;
-		goto error_handle;
-	}
-
-	Stream_Read(irp->input, InputBuffer, InputBufferLength);
 	WLog_Print(serial->log, WLOG_DEBUG,
 	           "CommDeviceIoControl: CompletionId=%" PRIu32 ", IoControlCode=[0x%" PRIX32 "] %s",
 	           irp->CompletionId, IoControlCode, _comm_serial_ioctl_name(IoControlCode));
+
+	BYTE* OutputBuffer = nullptr;
+	if (OutputBufferLength > 0)
+	{
+		OutputBuffer = (BYTE*)calloc(OutputBufferLength, sizeof(BYTE));
+		if (!OutputBuffer)
+		{
+			irp->IoStatus = STATUS_NO_MEMORY;
+			goto error_handle;
+		}
+	}
 
 	/* FIXME: CommDeviceIoControl to be replaced by DeviceIoControl() */
 	if (CommDeviceIoControl(serial->hComm, IoControlCode, InputBuffer, InputBufferLength,
@@ -423,13 +458,10 @@ static UINT serial_process_irp_device_control(SERIAL_DEVICE* serial, IRP* irp)
 		           "] %s, last-error: 0x%08" PRIX32 "",
 		           IoControlCode, _comm_serial_ioctl_name(IoControlCode), GetLastError());
 		irp->IoStatus = GetLastErrorToIoStatus(serial);
+		BytesReturned = 0;
 	}
 
 error_handle:
-	/* FIXME: find out whether it's required or not to get
-	 * BytesReturned == OutputBufferLength when
-	 * CommDeviceIoControl returns FALSE */
-	WINPR_ASSERT(OutputBufferLength == BytesReturned);
 	Stream_Write_UINT32(irp->output, BytesReturned); /* OutputBufferLength (4 bytes) */
 
 	if (BytesReturned > 0)
@@ -437,7 +469,6 @@ error_handle:
 		if (!Stream_EnsureRemainingCapacity(irp->output, BytesReturned))
 		{
 			WLog_Print(serial->log, WLOG_ERROR, "Stream_EnsureRemainingCapacity failed!");
-			free(InputBuffer);
 			free(OutputBuffer);
 			return CHANNEL_RC_NO_MEMORY;
 		}
@@ -453,7 +484,6 @@ error_handle:
 	/* { */
 	/* 	Stream_Write_UINT8(irp->output, 0); /\* Padding (1 byte) *\/ */
 	/* } */
-	free(InputBuffer);
 	free(OutputBuffer);
 	return CHANNEL_RC_OK;
 }
@@ -693,6 +723,11 @@ static void create_irp_thread(SERIAL_DEVICE* serial, IRP* irp)
 
 	{
 		const BOOL added = ListDictionary_Add(serial->IrpThreads, (void*)key, irpThread);
+
+		/* Start the thread before the list is unlocked: IRP_MJ_CLOSE terminates and closes every
+		 * thread it finds in the list, which must not happen to a thread not yet started. */
+		if (added)
+			ResumeThread(irpThread);
 		ListDictionary_Unlock(serial->IrpThreads);
 
 		if (!added)
@@ -701,8 +736,6 @@ static void create_irp_thread(SERIAL_DEVICE* serial, IRP* irp)
 			goto error_handle;
 		}
 	}
-
-	ResumeThread(irpThread);
 
 	return;
 error_handle:

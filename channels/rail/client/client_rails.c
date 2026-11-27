@@ -6,34 +6,31 @@
 
 #include "rail_main.h"
 
-UINT client_rail_server_start_cmd(RailClientContext* context)
+UINT rail_send_client_status(RailClientContext* context)
 {
-	UINT status = 0;
-	char argsAndFile[520] = WINPR_C_ARRAY_INIT;
-	RAIL_EXEC_ORDER exec = WINPR_C_ARRAY_INIT;
-	RAIL_SYSPARAM_ORDER sysparam = WINPR_C_ARRAY_INIT;
-	RAIL_CLIENT_STATUS_ORDER clientStatus = WINPR_C_ARRAY_INIT;
-
 	WINPR_ASSERT(context);
 	railPlugin* rail = context->handle;
 	WINPR_ASSERT(rail);
 	WINPR_ASSERT(rail->rdpcontext);
-
 	const rdpSettings* settings = rail->rdpcontext->settings;
 	WINPR_ASSERT(settings);
-
-	clientStatus.flags = TS_RAIL_CLIENTSTATUS_ALLOWLOCALMOVESIZE;
-
+	RAIL_CLIENT_STATUS_ORDER clientStatus = { .flags = freerdp_settings_get_uint32(
+		                                          settings, FreeRDP_RemoteAppFeatureFlags) };
 	if (freerdp_settings_get_bool(settings, FreeRDP_AutoReconnectionEnabled))
 		clientStatus.flags |= TS_RAIL_CLIENTSTATUS_AUTORECONNECT;
-
-	clientStatus.flags |= TS_RAIL_CLIENTSTATUS_ZORDER_SYNC;
-	clientStatus.flags |= TS_RAIL_CLIENTSTATUS_WINDOW_RESIZE_MARGIN_SUPPORTED;
-	clientStatus.flags |= TS_RAIL_CLIENTSTATUS_APPBAR_REMOTING_SUPPORTED;
-	clientStatus.flags |= TS_RAIL_CLIENTSTATUS_POWER_DISPLAY_REQUEST_SUPPORTED;
-	clientStatus.flags |= TS_RAIL_CLIENTSTATUS_BIDIRECTIONAL_CLOAK_SUPPORTED;
-	status = context->ClientInformation(context, &clientStatus);
-
+	else
+		clientStatus.flags &= ~TS_RAIL_CLIENTSTATUS_AUTORECONNECT;
+	return context->ClientInformation(context, &clientStatus);
+}
+UINT client_rail_server_start_cmd(RailClientContext* context)
+{
+	WINPR_ASSERT(context);
+	railPlugin* rail = context->handle;
+	WINPR_ASSERT(rail);
+	WINPR_ASSERT(rail->rdpcontext);
+	const rdpSettings* settings = rail->rdpcontext->settings;
+	WINPR_ASSERT(settings);
+	UINT status = rail_send_client_status(context);
 	if (status != CHANNEL_RC_OK)
 		return status;
 
@@ -54,29 +51,18 @@ UINT client_rail_server_start_cmd(RailClientContext* context)
 		}
 	}
 
-	sysparam.params = 0;
-	sysparam.params |= SPI_MASK_SET_HIGH_CONTRAST;
-	sysparam.highContrast.colorScheme.string = nullptr;
-	sysparam.highContrast.colorScheme.length = 0;
-	sysparam.highContrast.flags = 0x7E;
-	sysparam.params |= SPI_MASK_SET_MOUSE_BUTTON_SWAP;
-	sysparam.mouseButtonSwap = FALSE;
-	sysparam.params |= SPI_MASK_SET_KEYBOARD_PREF;
-	sysparam.keyboardPref = FALSE;
-	sysparam.params |= SPI_MASK_SET_DRAG_FULL_WINDOWS;
-	sysparam.dragFullWindows = FALSE;
-	sysparam.params |= SPI_MASK_SET_KEYBOARD_CUES;
-	sysparam.keyboardCues = FALSE;
-	sysparam.params |= SPI_MASK_SET_WORK_AREA;
-	sysparam.workArea.left = 0;
-	sysparam.workArea.top = 0;
-
 	const UINT32 w = freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
 	const UINT32 h = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
 
-	sysparam.workArea.right = WINPR_ASSERTING_INT_CAST(UINT16, w);
-	sysparam.workArea.bottom = WINPR_ASSERTING_INT_CAST(UINT16, h);
-	sysparam.dragFullWindows = FALSE;
+	const RAIL_SYSPARAM_ORDER sysparam = {
+		.params = SPI_MASK_SET_HIGH_CONTRAST | SPI_MASK_SET_MOUSE_BUTTON_SWAP |
+		          SPI_MASK_SET_KEYBOARD_PREF | SPI_MASK_SET_DRAG_FULL_WINDOWS |
+		          SPI_MASK_SET_KEYBOARD_CUES | SPI_MASK_SET_WORK_AREA,
+		.highContrast.flags = 0x7E,
+		.workArea.right = WINPR_ASSERTING_INT_CAST(UINT16, w),
+		.workArea.bottom = WINPR_ASSERTING_INT_CAST(UINT16, h)
+	};
+
 	status = context->ClientSystemParam(context, &sysparam);
 
 	if (status != CHANNEL_RC_OK)
@@ -86,6 +72,9 @@ UINT client_rail_server_start_cmd(RailClientContext* context)
 	    freerdp_settings_get_string(settings, FreeRDP_RemoteApplicationFile);
 	const char* RemoteApplicationCmdLine =
 	    freerdp_settings_get_string(settings, FreeRDP_RemoteApplicationCmdLine);
+
+	char argsAndFile[520] = WINPR_C_ARRAY_INIT;
+	RAIL_EXEC_ORDER exec = WINPR_C_ARRAY_INIT;
 	if (RemoteApplicationFile && RemoteApplicationCmdLine)
 	{
 		(void)_snprintf(argsAndFile, ARRAYSIZE(argsAndFile), "%s %s", RemoteApplicationCmdLine,

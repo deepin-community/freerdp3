@@ -38,13 +38,8 @@
 #pragma clang diagnostic pop
 #endif
 
-#if defined(__FreeBSD__) || defined(__DragonFly__)
+#ifdef __FreeBSD__
 #define USE_SHM
-#endif
-
-/* uClibc and uClibc-ng don't provide O_TMPFILE */
-#if !defined(O_TMPFILE) && !defined(__FreeBSD__)
-#define O_TMPFILE (020000000 | O_DIRECTORY)
 #endif
 
 #include <sys/types.h>
@@ -253,9 +248,9 @@ int uwac_create_anonymous_file(off_t size)
 	fd = open(path, O_TMPFILE | O_RDWR | O_EXCL, 0600);
 #else
 	/*
-	 * Some platforms (e.g. FreeBSD) won't support O_TMPFILE and can't
-	 * reasonably emulate it at first blush.  Opt to make them rely on
-	 * the create_tmpfile_cloexec() path instead.
+	 * Some platforms will not support O_TMPFILE and cannot
+	 * reasonably emulate it at first blush. Opt to make them
+	 * rely on the create_tmpfile_cloexec() path instead.
 	 */
 	fd = -1;
 #endif

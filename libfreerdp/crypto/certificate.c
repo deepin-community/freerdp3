@@ -52,6 +52,7 @@
 #include "certificate.h"
 #include "cert_common.h"
 #include "crypto.h"
+#include "../core/utils.h"
 
 #include "x509_utils.h"
 #include "privatekey.h"
@@ -60,7 +61,6 @@
 #define TAG FREERDP_TAG("core")
 
 #ifdef WITH_DEBUG_CERTIFICATE
-#define CERTIFICATE_TAG FREERDP_TAG("core.certificate")
 #define DEBUG_CERTIFICATE(...) WLog_DBG(TAG, __VA_ARGS__)
 #else
 #define DEBUG_CERTIFICATE(...) \
@@ -261,7 +261,7 @@ BOOL cert_blob_write(const rdpCertBlob* blob, wStream* s)
 {
 	WINPR_ASSERT(blob);
 
-	if (!Stream_EnsureRemainingCapacity(s, 4 + blob->length))
+	if (!Stream_EnsureRemainingCapacity(s, 4ull + blob->length))
 		return FALSE;
 
 	Stream_Write_UINT32(s, blob->length);
@@ -919,7 +919,7 @@ static BOOL cert_write_rsa_public_key(wStream* s, const rdpCertificate* cert)
 
 	const size_t wPublicKeyBlobLen = 16 + pubExpLen + keyLen;
 	WINPR_ASSERT(wPublicKeyBlobLen <= UINT16_MAX);
-	if (!Stream_EnsureRemainingCapacity(s, 2 + wPublicKeyBlobLen))
+	if (!Stream_EnsureRemainingCapacity(s, 2ull + wPublicKeyBlobLen))
 		return FALSE;
 	Stream_Write_UINT16(s, (UINT16)wPublicKeyBlobLen);
 	Stream_Write(s, rsa_magic, sizeof(rsa_magic));
@@ -945,7 +945,8 @@ static BOOL cert_write_rsa_signature(wStream* s, const void* sigData, size_t sig
 	                               sizeof(encryptedSignature)) < 0)
 		return FALSE;
 
-	if (!Stream_EnsureRemainingCapacity(s, 2 * sizeof(UINT16) + sizeof(encryptedSignature) + 8))
+	if (!Stream_EnsureRemainingCapacity(s,
+	                                    2ull * sizeof(UINT16) + sizeof(encryptedSignature) + 8ull))
 		return FALSE;
 	Stream_Write_UINT16(s, BB_RSA_SIGNATURE_BLOB);
 	Stream_Write_UINT16(s, sizeof(encryptedSignature) + 8); /* wSignatureBlobLen */
@@ -958,17 +959,20 @@ static BOOL cert_write_rsa_signature(wStream* s, const void* sigData, size_t sig
 static BOOL cert_write_server_certificate_v1(wStream* s, const rdpCertificate* certificate)
 {
 	const size_t start = Stream_GetPosition(s);
-	const BYTE* sigData = Stream_PointerAs(s, const BYTE) - sizeof(UINT32);
 
 	WINPR_ASSERT(start >= 4);
 	if (!Stream_EnsureRemainingCapacity(s, 10))
 		return FALSE;
+
 	Stream_Write_UINT32(s, SIGNATURE_ALG_RSA);
 	Stream_Write_UINT32(s, KEY_EXCHANGE_ALG_RSA);
 	Stream_Write_UINT16(s, BB_RSA_KEY_BLOB);
 	if (!cert_write_rsa_public_key(s, certificate))
 		return FALSE;
 
+	/* The writes above may have reallocated the stream buffer, so only take
+	 * the pointer to the signed data (starting at dwVersion) now. */
+	const BYTE* sigData = Stream_BufferAs(s, const BYTE) + start - sizeof(UINT32);
 	const size_t end = Stream_GetPosition(s);
 	return cert_write_rsa_signature(s, sigData, end - start + sizeof(UINT32));
 }
@@ -1530,64 +1534,6 @@ fail:
 	return nullptr;
 }
 
-static BOOL bio_read_pem(BIO* bio, char** ppem, size_t* plength)
-{
-	BOOL rc = FALSE;
-
-	WINPR_ASSERT(bio);
-	WINPR_ASSERT(ppem);
-
-	const size_t blocksize = 2048;
-	size_t offset = 0;
-	size_t length = blocksize;
-	char* pem = nullptr;
-
-	*ppem = nullptr;
-	if (plength)
-		*plength = 0;
-
-	while (offset < length)
-	{
-		char* tmp = realloc(pem, length + 1);
-		if (!tmp)
-			goto fail;
-		pem = tmp;
-
-		ERR_clear_error();
-
-		const int status = BIO_read(bio, &pem[offset], (int)(length - offset));
-		if (status < 0)
-		{
-			WLog_ERR(TAG, "failed to read certificate");
-			goto fail;
-		}
-
-		if (status == 0)
-			break;
-
-		offset += (size_t)status;
-		if (length - offset > 0)
-			break;
-		length += blocksize;
-	}
-
-	if (pem)
-	{
-		if (offset >= length)
-			goto fail;
-		pem[offset] = '\0';
-	}
-	*ppem = pem;
-	if (plength)
-		*plength = offset;
-	rc = TRUE;
-fail:
-	if (!rc)
-		free(pem);
-
-	return rc;
-}
-
 char* freerdp_certificate_get_pem(const rdpCertificate* cert, size_t* pLength)
 {
 	return freerdp_certificate_get_pem_ex(cert, pLength, TRUE);
@@ -1637,7 +1583,7 @@ char* freerdp_certificate_get_pem_ex(const rdpCertificate* cert, size_t* pLength
 		}
 	}
 
-	(void)bio_read_pem(bio, &pem, pLength);
+	pem = x509_utils_bio_read(bio, pLength);
 
 fail:
 	BIO_free_all(bio);
@@ -1703,7 +1649,24 @@ BOOL freerdp_certificate_get_public_key(const rdpCertificate* cert, BYTE** Publi
 
 	if (length < 1)
 	{
-		WLog_ERR(TAG, "i2d_PublicKey() failed");
+		/* i2d_PublicKey() has no encoding for keys such as Ed25519 or ML-DSA. CredSSP binds
+		 * the SubjectPublicKey of the certificate, which is what i2d_PublicKey() returns for
+		 * RSA and EC keys: take the BIT STRING contents. */
+		const unsigned char* spk = nullptr;
+		int spklen = 0;
+		if ((X509_PUBKEY_get0_param(nullptr, &spk, &spklen, nullptr,
+		                            X509_get_X509_PUBKEY(cert->x509)) != 1) ||
+		    !spk || (spklen < 1))
+		{
+			WLog_ERR(TAG, "i2d_PublicKey() failed");
+			goto exit;
+		}
+		*PublicKey = optr = (BYTE*)calloc((size_t)spklen, sizeof(BYTE));
+		if (!optr)
+			goto exit;
+		memcpy(optr, spk, (size_t)spklen);
+		*PublicKeyLength = (DWORD)spklen;
+		status = TRUE;
 		goto exit;
 	}
 
@@ -1740,6 +1703,13 @@ char** freerdp_certificate_get_dns_names(const rdpCertificate* cert, size_t* pco
 	return x509_utils_get_dns_names(cert->x509, pcount, pplengths);
 }
 
+char** freerdp_certificate_get_ip_names(const rdpCertificate* cert, size_t* pcount,
+                                        size_t** pplengths)
+{
+	WINPR_ASSERT(cert);
+	return x509_utils_get_ip_names(cert->x509, pcount, pplengths);
+}
+
 char* freerdp_certificate_get_common_name(const rdpCertificate* cert, size_t* plength)
 {
 	WINPR_ASSERT(cert);
@@ -1755,6 +1725,11 @@ WINPR_MD_TYPE freerdp_certificate_get_signature_alg(const rdpCertificate* cert)
 void freerdp_certificate_free_dns_names(size_t count, size_t* lengths, char** names)
 {
 	x509_utils_dns_names_free(count, lengths, names);
+}
+
+void freerdp_certificate_free_ip_names(size_t count, size_t* lengths, char** names)
+{
+	x509_utils_ip_names_free(count, lengths, names);
 }
 
 char* freerdp_certificate_get_hash(const rdpCertificate* cert, const char* hash, size_t* plength)
@@ -1945,4 +1920,96 @@ X509* freerdp_certificate_get_chain_at(rdpCertificate* certificate, size_t offse
 	WINPR_ASSERT(freerdp_certificate_get_chain_len(certificate) > offset);
 	const int ioff = WINPR_ASSERTING_INT_CAST(int, offset);
 	return sk_X509_value(certificate->chain, ioff);
+}
+
+WINPR_ATTR_NODISCARD
+static BOOL tls_match_hostname(const char* pattern, const size_t pattern_length,
+                               const char* hostname)
+{
+	WINPR_ASSERT(hostname);
+	WINPR_ASSERT(pattern || (pattern_length == 0));
+
+	const size_t hlen = strlen(hostname);
+	if (hlen == pattern_length)
+	{
+		if (_strnicmp(hostname, pattern, pattern_length) == 0)
+			return TRUE;
+	}
+
+	if ((pattern_length > 2) && (pattern[0] == '*') && (pattern[1] == '.') &&
+	    (hlen >= pattern_length))
+	{
+		/* Ensure wildcard only matches foo.example.com and not foo.bar.example.com */
+		const size_t prefixlen = hlen - pattern_length;
+		for (size_t x = 0; x < prefixlen; x++)
+		{
+			char cur = hostname[x];
+			if (cur == '.')
+				return FALSE;
+		}
+
+		/* Check the hostname ends with the domain */
+		const char* check_hostname = &hostname[prefixlen + 1];
+		return _strnicmp(check_hostname, &pattern[1], pattern_length - 1) == 0;
+	}
+
+	return FALSE;
+}
+
+BOOL freerdp_certificate_matches_hostname(const rdpCertificate* cert, const char* hostname,
+                                          size_t hostlen)
+{
+	/* extra common name and alternative names */
+	size_t common_name_length = 0;
+	size_t dns_names_count = 0;
+	size_t* dns_names_lengths = nullptr;
+	size_t ip_names_count = 0;
+	size_t* ip_names_lengths = nullptr;
+
+	char* common_name = freerdp_certificate_get_common_name(cert, &common_name_length);
+	char** dns_names =
+	    freerdp_certificate_get_dns_names(cert, &dns_names_count, &dns_names_lengths);
+	char** ip_names = freerdp_certificate_get_ip_names(cert, &ip_names_count, &ip_names_lengths);
+
+	BOOL hostname_match = FALSE;
+	BOOL skip = FALSE;
+	if (utils_is_valid_ipN(hostname, hostlen))
+	{
+		for (size_t index = 0; index < ip_names_count; index++)
+		{
+			if (utils_compare_ip_strings(ip_names[index], ip_names_lengths[index], hostname,
+			                             hostlen))
+			{
+				hostname_match = TRUE;
+				break;
+			}
+		}
+		skip = TRUE;
+	}
+
+	/* compare against alternative names */
+	if (!skip && dns_names)
+	{
+		for (size_t index = 0; index < dns_names_count; index++)
+		{
+			if (tls_match_hostname(dns_names[index], dns_names_lengths[index], hostname))
+			{
+				hostname_match = TRUE;
+				break;
+			}
+		}
+		skip = TRUE;
+	}
+
+	/* compare against common name */
+	if (!skip && common_name)
+	{
+		if (tls_match_hostname(common_name, common_name_length, hostname))
+			hostname_match = TRUE;
+	}
+
+	freerdp_certificate_free_dns_names(dns_names_count, dns_names_lengths, dns_names);
+	freerdp_certificate_free_ip_names(ip_names_count, ip_names_lengths, ip_names);
+	free(common_name);
+	return hostname_match;
 }

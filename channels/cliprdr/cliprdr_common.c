@@ -268,8 +268,15 @@ wStream* cliprdr_packet_format_list_new(const CLIPRDR_FORMAT_LIST* formatList,
 
 		const char* szFormatName = format->formatName;
 		size_t formatNameLength = 0;
+		size_t formatNameStrLength = 0;
 		if (szFormatName)
-			formatNameLength = strlen(szFormatName);
+		{
+			formatNameStrLength = strlen(szFormatName);
+			const SSIZE_T wlen = ConvertUtf8ToWChar(szFormatName, nullptr, 0);
+			if (wlen < 0)
+				goto fail;
+			formatNameLength = WINPR_ASSERTING_INT_CAST(size_t, wlen);
+		}
 
 		size_t formatNameMaxLength = formatNameLength + 1; /* Ensure '\0' termination in output */
 		if (!Stream_EnsureRemainingCapacity(s,
@@ -293,9 +300,12 @@ wStream* cliprdr_packet_format_list_new(const CLIPRDR_FORMAT_LIST* formatList,
 			}
 			else
 			{
-				if (Stream_Write_UTF16_String_From_UTF8(s, formatNameMaxLength, szFormatName,
-				                                        formatNameLength, TRUE) < 0)
+				const size_t formatNameWriteLength =
+				    MIN(formatNameStrLength, formatNameMaxLength - 1);
+				if (Stream_Write_UTF16_String_From_UTF8(s, formatNameMaxLength - 1, szFormatName,
+				                                        formatNameWriteLength, TRUE) < 0)
 					goto fail;
+				Stream_Write_UINT16(s, 0);
 			}
 		}
 		else
@@ -334,9 +344,12 @@ UINT cliprdr_read_format_data_response(wStream* s, CLIPRDR_FORMAT_DATA_RESPONSE*
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, response->common.dataLen))
 		return ERROR_INVALID_DATA;
 
-	if (response->common.dataLen)
+	if (response->common.dataLen > 0)
+	{
 		response->requestedFormatData = Stream_ConstPointer(s);
-
+		if (!Stream_SafeSeek(s, response->common.dataLen))
+			return ERROR_INVALID_DATA;
+	}
 	return CHANNEL_RC_OK;
 }
 
@@ -373,8 +386,16 @@ UINT cliprdr_read_file_contents_response(wStream* s, CLIPRDR_FILE_CONTENTS_RESPO
 	Stream_Read_UINT32(s, response->streamId);   /* streamId (4 bytes) */
 	response->requestedData = Stream_ConstPointer(s); /* requestedFileContentsData */
 
-	WINPR_ASSERT(response->common.dataLen >= 4);
+	if (response->common.dataLen < 4)
+	{
+		WLog_WARN(TAG, "dataLen=%" PRIu32 " but expected >= 4", response->common.dataLen);
+		return ERROR_INVALID_DATA;
+	}
+
 	response->cbRequested = response->common.dataLen - 4;
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, response->cbRequested))
+		return ERROR_INVALID_DATA;
+	Stream_Seek(s, response->cbRequested);
 	return CHANNEL_RC_OK;
 }
 
@@ -482,7 +503,9 @@ UINT cliprdr_read_format_list(wLog* log, wStream* s, CLIPRDR_FORMAT_LIST* format
 		wStream sub2buffer = sub1buffer;
 		wStream* sub2 = &sub2buffer;
 
-		while (Stream_GetRemainingLength(sub1) > 0)
+		/* Bound must match the read pass below: some clients pad the format list with
+		 * trailing bytes that do not start another entry. */
+		while (Stream_GetRemainingLength(sub1) >= 4)
 		{
 			size_t rest = 0;
 			if (!Stream_SafeSeek(sub1, 4)) /* formatId (4 bytes) */

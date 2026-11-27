@@ -27,6 +27,8 @@
 
 #include <msusb.h>
 
+#include "urbdrc_types.h"
+
 #define DEVICE_HARDWARE_ID_SIZE 32
 #define DEVICE_COMPATIBILITY_ID_SIZE 36
 #define DEVICE_INSTANCE_STR_SIZE 37
@@ -92,7 +94,8 @@ typedef struct
 typedef void (*t_isoch_transfer_cb)(IUDEVICE* idev, GENERIC_CHANNEL_CALLBACK* callback,
                                     wStream* out, UINT32 InterfaceId, BOOL noAck, UINT32 MessageId,
                                     UINT32 RequestId, UINT32 NumberOfPackets, UINT32 status,
-                                    UINT32 StartFrame, UINT32 ErrorCount, UINT32 OutputBufferSize);
+                                    UINT32 StartFrame, UINT32 ErrorCount, UINT32 OutputBufferSize,
+                                    int transferDir);
 
 struct S_IUDEVICE
 {
@@ -101,7 +104,7 @@ struct S_IUDEVICE
 	    IUDEVICE* idev, GENERIC_CHANNEL_CALLBACK* callback, UINT32 MessageId, UINT32 RequestId,
 	    UINT32 EndpointAddress, UINT32 TransferFlags, UINT32 StartFrame, UINT32 ErrorCount,
 	    BOOL NoAck, const BYTE* packetDescriptorData, UINT32 NumberOfPackets, UINT32 BufferSize,
-	    const BYTE* Buffer, t_isoch_transfer_cb cb, UINT32 Timeout);
+	    const BYTE* Buffer, int transferDir, t_isoch_transfer_cb cb, UINT32 Timeout);
 
 	WINPR_ATTR_NODISCARD BOOL (*control_transfer)(IUDEVICE* idev, UINT32 RequestId,
 	                                              UINT32 EndpointAddress, UINT32 TransferFlags,
@@ -112,7 +115,7 @@ struct S_IUDEVICE
 	WINPR_ATTR_NODISCARD int (*bulk_or_interrupt_transfer)(
 	    IUDEVICE* idev, GENERIC_CHANNEL_CALLBACK* callback, UINT32 MessageId, UINT32 RequestId,
 	    UINT32 EndpointAddress, UINT32 TransferFlags, BOOL NoAck, UINT32 BufferSize,
-	    const BYTE* data, t_isoch_transfer_cb cb, UINT32 Timeout);
+	    const BYTE* data, int transferDir, t_isoch_transfer_cb cb, UINT32 Timeout);
 
 	WINPR_ATTR_NODISCARD int (*select_configuration)(IUDEVICE* idev, UINT32 bConfigurationValue);
 
@@ -138,12 +141,17 @@ struct S_IUDEVICE
 
 	WINPR_ATTR_NODISCARD int (*query_device_descriptor)(IUDEVICE* idev, int offset);
 
+	/** Negotiated bus speed. */
+	WINPR_ATTR_NODISCARD enum device_speed (*query_device_speed)(IUDEVICE* idev);
+
 	WINPR_ATTR_NODISCARD BOOL (*detach_kernel_driver)(IUDEVICE* idev);
 
 	WINPR_ATTR_NODISCARD BOOL (*attach_kernel_driver)(IUDEVICE* idev);
 
 	WINPR_ATTR_NODISCARD int (*query_device_port_status)(IUDEVICE* idev, UINT32* UsbdStatus,
 	                                                     UINT32* BufferSize, BYTE* Buffer);
+
+	WINPR_ATTR_NODISCARD int (*reset_device)(IUDEVICE* idev);
 
 	WINPR_ATTR_NODISCARD MSUSB_CONFIG_DESCRIPTOR* (*complete_msconfig_setup)(
 	    IUDEVICE* idev, MSUSB_CONFIG_DESCRIPTOR* MsConfig);
@@ -157,12 +165,13 @@ struct S_IUDEVICE
 	void (*setAlreadySend)(IUDEVICE* idev);
 	void (*setChannelClosed)(IUDEVICE* idev);
 	void (*markChannelClosed)(IUDEVICE* idev);
-	WINPR_ATTR_NODISCARD char* (*getPath)(IUDEVICE* idev);
+	WINPR_ATTR_NODISCARD const char* (*getPath)(IUDEVICE* idev);
 
 	void (*free)(IUDEVICE* idev);
 
 	BASIC_DEV_STATE_DEFINED(channelManager, IWTSVirtualChannelManager*);
 	BASIC_DEV_STATE_DEFINED(channelID, UINT32);
+	BASIC_DEV_STATE_DEFINED(channelCallback, GENERIC_CHANNEL_CALLBACK*);
 	BASIC_DEV_STATE_DEFINED(UsbDevice, UINT32);
 	BASIC_DEV_STATE_DEFINED(ReqCompletion, UINT32);
 	BASIC_DEV_STATE_DEFINED(bus_number, BYTE);
@@ -207,6 +216,10 @@ struct S_IUDEVMAN
 
 	IWTSPlugin* plugin;
 	UINT32 controlChannelId;
+	/* The control channel, set when it is established and cleared in its OnClose callback, both
+	 * under loading_lock. Used instead of looking the channel up by id: the lookup takes the
+	 * dynamic channel table lock, and drdynvc calls OnClose with that lock held. */
+	IWTSVirtualChannel* controlChannel;
 	UINT32 status;
 };
 

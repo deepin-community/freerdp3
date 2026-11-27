@@ -620,11 +620,17 @@ int shadow_server_parse_command_line(rdpShadowServer* server, int argc, char** a
 
 		if (arg->Flags & COMMAND_LINE_VALUE_PRESENT)
 		{
-			/* Select monitors */
+			/* Select monitors. errno may hold anything from what ran before
+			 * (enumerating the monitors makes system calls of its own) */
+			errno = 0;
 			long val = strtol(arg->Value, nullptr, 0);
 
 			if ((val < 0) || (errno != 0) || ((UINT32)val >= numMonitors))
+			{
+				WLog_ERR(TAG, "no monitor '%s': there are %" PRIu32 " (/monitors lists them)",
+				         arg->Value, numMonitors);
 				status = COMMAND_LINE_STATUS_PRINT;
+			}
 
 			server->selectedMonitor = (UINT32)val;
 		}
@@ -653,6 +659,8 @@ int shadow_server_parse_command_line(rdpShadowServer* server, int argc, char** a
 	if (!server->authentication && !freerdp_settings_get_bool(settings, FreeRDP_VmConnectMode))
 	{
 		if (!freerdp_settings_set_bool(settings, FreeRDP_NlaSecurity, FALSE))
+			return COMMAND_LINE_ERROR;
+		if (!freerdp_settings_set_bool(settings, FreeRDP_ExtSecurity, FALSE))
 			return COMMAND_LINE_ERROR;
 	}
 	return status;
@@ -911,6 +919,7 @@ static int shadow_server_init_config_path(rdpShadowServer* server)
 	return 1;
 }
 
+#if defined(WITH_WINPR_TOOLS)
 WINPR_ATTR_NODISCARD
 static BOOL shadow_server_create_certificate(rdpShadowServer* server, const char* filepath)
 {
@@ -947,6 +956,58 @@ static BOOL shadow_server_create_certificate(rdpShadowServer* server, const char
 	rc = TRUE;
 out_fail:
 	makecert_context_free(makecert);
+	return rc;
+}
+#endif
+
+WINPR_ATTR_NODISCARD
+static BOOL shadow_server_read_pem(rdpShadowServer* server)
+{
+	BOOL rc = FALSE;
+	WINPR_ASSERT(server);
+
+	rdpSettings* settings = server->settings;
+	WINPR_ASSERT(settings);
+
+	{
+		rdpPrivateKey* key = freerdp_key_new_from_file_enc(server->PrivateKeyFile, nullptr);
+		if (!key)
+		{
+			WLog_ERR(TAG, "Private Key PEM %s invalid, aborting", server->PrivateKeyFile);
+			return FALSE;
+		}
+
+		if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerRsaKey, key, 1))
+		{
+			WLog_ERR(TAG, "Private Key PEM %s valid, but some properties failed to be extracted",
+			         server->PrivateKeyFile);
+			return FALSE;
+		}
+	}
+	{
+		rdpCertificate* cert = freerdp_certificate_new_from_file(server->CertificateFile);
+		if (!cert)
+		{
+			WLog_ERR(TAG, "Certificate PEM %s invalid, aborting", server->CertificateFile);
+			return FALSE;
+		}
+
+		if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerCertificate, cert, 1))
+			goto out_fail;
+
+		if (!freerdp_certificate_is_rdp_security_compatible(cert))
+		{
+			if (!freerdp_settings_set_bool(settings, FreeRDP_UseRdpSecurityLayer, FALSE))
+				goto out_fail;
+			if (!freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, FALSE))
+				goto out_fail;
+		}
+	}
+	rc = TRUE;
+
+out_fail:
+	WLog_ERR(TAG, "Certificate PEM %s valid, but some properties failed to be extracted",
+	         server->CertificateFile);
 	return rc;
 }
 
@@ -986,40 +1047,19 @@ static BOOL shadow_server_init_certificate(rdpShadowServer* server)
 	if ((!winpr_PathFileExists(server->CertificateFile)) ||
 	    (!winpr_PathFileExists(server->PrivateKeyFile)))
 	{
+#if defined(WITH_WINPR_TOOLS)
 		if (!shadow_server_create_certificate(server, filepath))
+#else
+		const char* cexist = winpr_PathFileExists(server->CertificateFile) ? "exists" : "not found";
+		const char* pexist = winpr_PathFileExists(server->PrivateKeyFile) ? "exists" : "not found";
+		WLog_ERR(TAG, "PEM files do not exist: cert: %s (%s), key: %s (%s)",
+		         server->CertificateFile, cexist, server->PrivateKeyFile, pexist);
+#endif
 			goto out_fail;
 	}
 
-	{
-		rdpSettings* settings = server->settings;
-		WINPR_ASSERT(settings);
+	ret = shadow_server_read_pem(server);
 
-		{
-			rdpPrivateKey* key = freerdp_key_new_from_file_enc(server->PrivateKeyFile, nullptr);
-			if (!key)
-				goto out_fail;
-			if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerRsaKey, key, 1))
-				goto out_fail;
-		}
-		{
-			rdpCertificate* cert = freerdp_certificate_new_from_file(server->CertificateFile);
-			if (!cert)
-				goto out_fail;
-
-			if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerCertificate, cert, 1))
-				goto out_fail;
-
-			if (!freerdp_certificate_is_rdp_security_compatible(cert))
-			{
-				if (!freerdp_settings_set_bool(settings, FreeRDP_UseRdpSecurityLayer, FALSE))
-					goto out_fail;
-				if (!freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, FALSE))
-					goto out_fail;
-			}
-		}
-	}
-
-	ret = TRUE;
 out_fail:
 	free(filepath);
 	return ret;
@@ -1137,9 +1177,10 @@ rdpShadowServer* shadow_server_new(void)
 	server->h264BitRate = 10000000;
 	server->h264FrameRate = 30;
 	server->h264QP = 0;
+	server->h264HwAccel = FALSE;
 	server->authentication = TRUE;
 #if defined(WITH_GFX_AV1)
-	server->AV1BitRate = 500;
+	server->AV1BitRate = 3000; /* kbit/s */
 	server->AV1RateControlMode = FREERDP_AV1_VBR;
 #endif
 	server->settings = freerdp_settings_new(FREERDP_SETTINGS_SERVER_MODE);

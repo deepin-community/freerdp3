@@ -21,6 +21,7 @@
 
 #include "sdl_touch.hpp"
 #include "sdl_context.hpp"
+#include "sdl_prefs.hpp"
 
 #include <winpr/wtypes.h>
 #include <winpr/assert.h>
@@ -122,22 +123,24 @@ bool SdlTouch::handleEvent(SdlContext* sdl, const SDL_MouseWheelEvent& ev)
 {
 	WINPR_ASSERT(sdl);
 
-	const BOOL flipped = (ev.direction == SDL_MOUSEWHEEL_FLIPPED);
+	const bool flipped = (ev.direction == SDL_MOUSEWHEEL_FLIPPED) &&
+	                     !SdlPref::instance()->get_bool("UseLocalMouseScrollDirection");
 	const auto x = static_cast<INT32>(ev.x * (flipped ? -1.0f : 1.0f) * 120.0f);
 	const auto y = static_cast<INT32>(ev.y * (flipped ? -1.0f : 1.0f) * 120.0f);
-	UINT16 flags = 0;
 
+	/* [MS-RDPBCGR] 2.2.8.1.1.3.1.1.3 Pointer Event: a wheel rotation event carries no flags
+	 * besides PTR_FLAGS_WHEEL_NEGATIVE and the rotation itself, so the two axes cannot share
+	 * one event. Keep the flags apart, the horizontal rotation would otherwise be applied to
+	 * the vertical axis. */
 	if (y != 0)
 	{
-		flags |= PTR_FLAGS_WHEEL;
-		if (!send_mouse_wheel(sdl, flags, y))
+		if (!send_mouse_wheel(sdl, PTR_FLAGS_WHEEL, y))
 			return false;
 	}
 
 	if (x != 0)
 	{
-		flags |= PTR_FLAGS_HWHEEL;
-		if (!send_mouse_wheel(sdl, flags, x))
+		if (!send_mouse_wheel(sdl, PTR_FLAGS_HWHEEL, x))
 			return false;
 	}
 	return TRUE;
@@ -187,7 +190,7 @@ bool SdlTouch::handleEvent(SdlContext* sdl, const SDL_MouseButtonEvent& ev)
 	else if ((xflags & (~PTR_XFLAGS_DOWN)) != 0)
 		return freerdp_client_send_extended_button_event(sdl->common(), relative, xflags, x, y);
 	else
-		return FALSE;
+		return TRUE;
 }
 
 bool SdlTouch::handleEvent(SdlContext* sdl, const SDL_TouchFingerEvent& ev)

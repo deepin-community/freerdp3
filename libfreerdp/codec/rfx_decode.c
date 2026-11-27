@@ -60,7 +60,8 @@ static inline BOOL rfx_decode_component(RFX_CONTEXT* WINPR_RESTRICT context,
 
 	PROFILER_EXIT(context->priv->prof_rfx_rlgr_decode)
 	PROFILER_ENTER(context->priv->prof_rfx_differential_decode)
-	rfx_differential_decode(buffer + 4032, 64);
+	if (!rfx_differential_decode(buffer + 4032, 64))
+		goto fail;
 	PROFILER_EXIT(context->priv->prof_rfx_differential_decode)
 	PROFILER_ENTER(context->priv->prof_rfx_quantization_decode)
 	if (!context->quantization_decode(buffer, quantization_values, nrQuantValues))
@@ -101,9 +102,12 @@ BOOL rfx_decode_rgb(RFX_CONTEXT* WINPR_RESTRICT context, const RFX_TILE* WINPR_R
 	cb_quants = context->quants + (NR_QUANT_VALUES * tile->quantIdxCb);
 	cr_quants = context->quants + (NR_QUANT_VALUES * tile->quantIdxCr);
 	pBuffer = (BYTE*)BufferPool_Take(context->priv->BufferPool, -1);
-	pSrcDst[0] = (INT16*)((&pBuffer[((8192ULL + 32ULL) * 0ULL) + 16ULL]));        /* y_r_buffer */
-	pSrcDst[1] = (INT16*)((&pBuffer[((8192ULL + 32ULL) * 1ULL) + 16ULL]));        /* cb_g_buffer */
-	pSrcDst[2] = (INT16*)((&pBuffer[((8192ULL + 32ULL) * 2ULL) + 16ULL]));        /* cr_b_buffer */
+	pSrcDst[0] = WINPR_PACKED_ALIGN_CAST(
+	    INT16*, ((&pBuffer[((8192ULL + 32ULL) * 0ULL) + 16ULL]))); /* y_r_buffer */
+	pSrcDst[1] = WINPR_PACKED_ALIGN_CAST(
+	    INT16*, ((&pBuffer[((8192ULL + 32ULL) * 1ULL) + 16ULL]))); /* cb_g_buffer */
+	pSrcDst[2] = WINPR_PACKED_ALIGN_CAST(
+	    INT16*, ((&pBuffer[((8192ULL + 32ULL) * 2ULL) + 16ULL]))); /* cr_b_buffer */
 	if (!rfx_decode_component(context, y_quants, NR_QUANT_VALUES, tile->YData, tile->YLen,
 	                          pSrcDst[0])) /* YData */
 		goto fail;

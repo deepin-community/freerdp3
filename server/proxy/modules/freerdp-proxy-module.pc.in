@@ -7,7 +7,7 @@ proxy_plugindir=${plugindir}/proxy
 
 Name: @PROJECT_NAME@
 Description: FreeRDP proxy module
-URL: http://www.freerdp.com/
+URL: https://freerdp.com/
 Version: @PROJECT_VERSION@
 Requires: @PROJECT_PC_REQUIRES@ 
 Requires.private: @PROJECT_PC_REQUIRES_PRIVATE@ 

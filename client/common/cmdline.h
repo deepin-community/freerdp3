@@ -29,7 +29,8 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "Addin" },
 	{ "azure", COMMAND_LINE_VALUE_REQUIRED,
 	  "[tenantid:<id>],[use-tenantid[:[on|off]],[ad:<url>]"
-	  "[avd-access:<format string>],[avd-token:<format string>],[avd-scope:<format string>]",
+	  "[avd-access:<format string>],[avd-token:<format string>],[avd-scope:<format string>],"
+	  "[user-agent:<string>],[auth-helper:<path|autodetect>]",
 	  nullptr, nullptr, -1, nullptr, "AzureAD options" },
 	{ "action-script", COMMAND_LINE_VALUE_REQUIRED, "<file-name>", "~/.config/freerdp/action.sh",
 	  nullptr, -1, nullptr, "Action script" },
@@ -63,7 +64,7 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "Asynchronous channels (experimental)" },
 	{ "async-update", COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueFalse, nullptr, -1, nullptr,
 	  "Asynchronous update" },
-	{ "audio-mode", COMMAND_LINE_VALUE_REQUIRED, "[[none|0]|[redirect|1]|[server|2]]", nullptr,
+	{ "audio-mode", COMMAND_LINE_VALUE_REQUIRED, "[[none|2]|[server|1]|[redirect|0]]", nullptr,
 	  nullptr, -1, nullptr, "Audio output mode" },
 	{ "auth-only", COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueFalse, nullptr, -1, nullptr,
 	  "Authenticate only" },
@@ -167,13 +168,17 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "Encryption (experimental)" },
 	{ "encryption-methods", COMMAND_LINE_VALUE_REQUIRED, "[40,][56,][128,][FIPS]", nullptr, nullptr,
 	  -1, nullptr, "RDP standard security encryption methods" },
+	{ "endpointfedauth", COMMAND_LINE_VALUE_REQUIRED, "<token>", nullptr, nullptr, -1, nullptr,
+	  "Endpoint FedAuth token for Hyper-V VM console-connect scenarios" },
 	{ "f", COMMAND_LINE_VALUE_FLAG, nullptr, nullptr, nullptr, -1, nullptr,
 	  "Fullscreen mode (<Ctrl>+<Alt>+<Enter> toggles fullscreen)" },
 	{ "fipsmode", COMMAND_LINE_VALUE_BOOL, nullptr, nullptr, nullptr, -1, nullptr, "FIPS mode" },
 	{ "floatbar", COMMAND_LINE_VALUE_OPTIONAL,
-	  "sticky:[on|off],default:[visible|hidden],show:[always|fullscreen|window]", nullptr, nullptr,
-	  -1, nullptr,
-	  "floatbar is disabled by default (when enabled defaults to sticky in fullscreen mode)" },
+	  "sticky:[on|off],default:[visible|hidden],show:[always|fullscreen|window],position:[left|"
+	  "center|right]",
+	  nullptr, nullptr, -1, nullptr,
+	  "floatbar is disabled by default (when enabled defaults to sticky, centered, in fullscreen "
+	  "mode)" },
 	{ "fonts", COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueTrue, nullptr, -1, nullptr,
 	  "smooth fonts (ClearType)" },
 	{ "force-console-callbacks", COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueFalse, nullptr, -1,
@@ -192,7 +197,7 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "g:<gateway>[:<port>],u:<user>,d:<domain>,p:<password>,usage-method:["
 	  "direct|detect],access-token:<"
 	  "token>,type:[rpc|http[,no-websockets][,extauth-sspi-ntlm]|auto[,no-websockets][,extauth-"
-	  "sspi-ntlm]]|arm,url:<wss://url>,bearer:<oauth2-bearer-token>",
+	  "sspi-ntlm]]|arm,url:<wss://url>,bearer:<oauth2-bearer-token>,timeout:<1-600000 ms>",
 	  nullptr, nullptr, -1, "gw", "Gateway Hostname" },
 #if defined(WITH_FREERDP_DEPRECATED_COMMANDLINE)
 	{ "g", COMMAND_LINE_VALUE_REQUIRED, "<gateway>[:<port>]", nullptr, nullptr, -1, nullptr,
@@ -353,12 +358,20 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	{ "multimedia", COMMAND_LINE_VALUE_OPTIONAL, "[sys:<sys>,][dev:<dev>,][decoder:<decoder>]",
 	  nullptr, nullptr, -1, "mmr", "[DEPRECATED], use /video] Redirect multimedia (video)" },
 #endif
-	{ "multimon", COMMAND_LINE_VALUE_OPTIONAL, "force", nullptr, nullptr, -1, nullptr,
-	  "Use multiple monitors" },
+	{ "multimon", COMMAND_LINE_VALUE_BOOL | COMMAND_LINE_VALUE_OPTIONAL, "on|off|force",
+	  BoolValueFalse, nullptr, -1, nullptr, "Use multiple monitors" },
 	{ "multitouch", COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueFalse, nullptr, -1, nullptr,
 	  "Redirect multitouch input" },
+#if defined(WITH_RDPEUDP)
+	{ "multitransport", COMMAND_LINE_VALUE_BOOL | COMMAND_LINE_VALUE_OPTIONAL,
+	  "[tcp-only|udp|udp-preferred]", BoolValueTrue, nullptr, -1, nullptr,
+	  "Support multitransport protocol. With tcp-only just enable the capability but deny an "
+	  "actual switch UDP transport. udp (the default) enables the switch to UDP transport, "
+	  "udp-preferred also tunnels the static channels over it" },
+#else
 	{ "multitransport", COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueTrue, nullptr, -1, nullptr,
 	  "Support multitransport protocol" },
+#endif
 	{ "nego", COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueTrue, nullptr, -1, nullptr,
 	  "protocol security negotiation" },
 	{ "network", COMMAND_LINE_VALUE_REQUIRED,
@@ -398,16 +411,18 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  nullptr, "Print base64 reconnect cookie after connecting" },
 	{ "printer", COMMAND_LINE_VALUE_OPTIONAL, "<name>[,<driver>[,default]]", nullptr, nullptr, -1,
 	  nullptr, "Redirect printer device" },
-	{ "proxy", COMMAND_LINE_VALUE_REQUIRED, "[<proto>://][<user>:<password>@]<host>[:<port>]",
-	  nullptr, nullptr, -1, nullptr,
+	{ "proxy", COMMAND_LINE_VALUE_REQUIRED,
+	  "[ignore|[<proto>://][<user>:<password>@]<host>[:<port>]]", nullptr, nullptr, -1, nullptr,
 	  "Proxy settings: override env. var (see also environment variable below). Protocol "
 	  "\"socks5\" should be given explicitly where \"http\" is default." },
 	{ "pth", COMMAND_LINE_VALUE_REQUIRED, "<password-hash>", nullptr, nullptr, -1, "pass-the-hash",
 	  "Pass the hash (restricted admin mode)" },
 	{ "pwidth", COMMAND_LINE_VALUE_REQUIRED, "<width>", nullptr, nullptr, -1, nullptr,
 	  "Physical width of display (in millimeters)" },
+#if !defined(WITHOUT_FREERDP_3x_DEPRECATED)
 	{ "rdp2tcp", COMMAND_LINE_VALUE_REQUIRED, "<executable path[:arg...]>", nullptr, nullptr, -1,
 	  nullptr, "TCP redirection" },
+#endif
 	{ "reconnect-cookie", COMMAND_LINE_VALUE_REQUIRED, "<base64-cookie>", nullptr, nullptr, -1,
 	  nullptr, "Pass base64 reconnect cookie to the connection" },
 	{ "redirect-prefer", COMMAND_LINE_VALUE_REQUIRED, "<FQDN|IP|NETBIOS>,[...]", nullptr, nullptr,
@@ -437,7 +452,7 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "Force specific protocol security. e.g. /sec:nla enables NLA and disables all others, while "
 	  "/sec:nla:[on|off] just toggles NLA" },
 #if defined(WITH_FREERDP_DEPRECATED_COMMANDLINE)
-	{ "sec-ext", COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueFalse, nullptr, -1, nullptr,
+	{ "sec-ext", COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueTrue, nullptr, -1, nullptr,
 	  "[DEPRECATED, use /sec:ext] NLA extended protocol security" },
 	{ "sec-nla", COMMAND_LINE_VALUE_BOOL, nullptr, BoolValueTrue, nullptr, -1, nullptr,
 	  "[DEPRECATED, use /sec:nla] NLA protocol security" },
@@ -458,17 +473,22 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "Shell working directory" },
 	{ "size", COMMAND_LINE_VALUE_REQUIRED, "<width>x<height> or <percent>%[wh]", "1024x768",
 	  nullptr, -1, nullptr, "Screen size" },
-	{ "smart-sizing", COMMAND_LINE_VALUE_OPTIONAL, "<width>x<height>", nullptr, nullptr, -1,
-	  nullptr, "Scale remote desktop to window size" },
+	{ "smart-sizing", COMMAND_LINE_VALUE_BOOL | COMMAND_LINE_VALUE_OPTIONAL,
+	  "<width>x<height>|on|off", BoolValueFalse, nullptr, -1, nullptr,
+	  "Scale remote desktop to window size" },
 	{ "smartcard", COMMAND_LINE_VALUE_OPTIONAL, "<str>[,<str>...]", nullptr, nullptr, -1, nullptr,
 	  "Redirect the smartcard devices containing any of the <str> in their names." },
 	{ "smartcard-logon", COMMAND_LINE_VALUE_OPTIONAL,
-	  "[cert:<path>,key:<key>,pin:<pin>,csp:<csp name>,reader:<reader>,card:<card>]", nullptr,
-	  nullptr, -1, nullptr, "Activates Smartcard (optional certificate) Logon authentication." },
+	  "[[cert:<path>|cert:<base64(PEM)>],[key:<path>|key:<base64(PEM)>],pin:<pin>,csp:<csp "
+	  "name>,reader:<reader>,card:<card>]",
+	  nullptr, nullptr, -1, nullptr,
+	  "Activates Smartcard (optional certificate) Logon authentication." },
 	{ "sound", COMMAND_LINE_VALUE_OPTIONAL,
 	  "[sys:<sys>,][dev:<dev>,][format:<format>,][rate:<rate>,][channel:<channel>,][latency:<"
 	  "latency>,][quality:<quality>]",
-	  nullptr, nullptr, -1, "audio", "Audio output (sound)" },
+	  nullptr, nullptr, -1, "audio",
+	  "Audio output (sound). <format> is a format tag (e.g. 0x704F) or its WAVE_FORMAT_ "
+	  "name with or without the prefix (e.g. opus, pcm, alaw, aac_ms)" },
 	{ "span", COMMAND_LINE_VALUE_FLAG, nullptr, nullptr, nullptr, -1, nullptr,
 	  "Span screen over multiple monitors" },
 	{ "spn-class", COMMAND_LINE_VALUE_REQUIRED, "<service-class>", nullptr, nullptr, -1, nullptr,
@@ -495,7 +515,8 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "TLS configuration options:"
 	  " * ciphers:[netmon|ma|<cipher names>]\n"
 	  " * seclevel:<level>, default: 1, range: [0-5] Override the default TLS security level, "
-	  "might be required for older target servers\n"
+	  "might be required for older target servers. Details at "
+	  "https://docs.openssl.org/3.0/man3/SSL_CTX_set_security_level/\n"
 	  " * secrets-file:<filename>\n"
 	  " * enforce[:[ssl3|1.0|1.1|1.2|1.3]] Force use of SSL/TLS version for a connection. Some "
 	  "servers have a buggy TLS "
@@ -528,8 +549,8 @@ static const COMMAND_LINE_ARGUMENT_A global_cmd_args[] = {
 	  "Let server see real physical pointer button" },
 #ifdef CHANNEL_URBDRC_CLIENT
 	{ "usb", COMMAND_LINE_VALUE_REQUIRED,
-	  "[dbg,][id:<vid>:<pid>#...,][addr:<bus>:<addr>#...,][auto]", nullptr, nullptr, -1, nullptr,
-	  "Redirect USB device" },
+	  "[dbg,][id:<vid>:<pid>#...,][addr:<bus>:<addr>#...,][auto,][filter:<class>#...|none]",
+	  nullptr, nullptr, -1, nullptr, "Redirect USB device" },
 #endif
 	{ "v", COMMAND_LINE_VALUE_REQUIRED, "<server>[:port]", nullptr, nullptr, -1, nullptr,
 	  "Server hostname|URL|IPv4|IPv6 or vsock://<number> or /some/path/to/pipe or |:1234 to pass a "

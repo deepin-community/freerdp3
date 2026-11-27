@@ -28,13 +28,18 @@ add_compile_definitions(TEST_CLIP_PNG="${TEST_CLIP_PNG}")
 create_test_sourcelist(SRCS ${DRIVER} ${TESTS})
 
 add_executable(${MODULE_NAME} ${SRCS})
-target_link_libraries(${MODULE_NAME} winpr)
+target_link_libraries(${MODULE_NAME} PRIVATE winpr)
 
 set_target_properties(${MODULE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TESTING_OUTPUT_DIRECTORY}")
 
 foreach(test ${TESTS})
   get_filename_component(TestName ${test} NAME_WE)
-  add_test(${TestName} ${TESTING_OUTPUT_DIRECTORY}/${MODULE_NAME} ${TestName})
+  add_test(NAME ${TestName} COMMAND ${MODULE_NAME} ${TestName})
 endforeach()
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "WinPR/Test")
+
+set(FUZZERS TestFuzzWinPRClipboard.c)
+
+include(AddFuzzerTest)
+add_fuzzer_test("${FUZZERS}" "winpr")

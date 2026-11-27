@@ -26,7 +26,9 @@
 
 #include <SDL3/SDL_oldnames.h>
 
+#include <array>
 #include <map>
+#include <tuple>
 
 #include <freerdp/utils/string.h>
 #include <freerdp/scancode.h>
@@ -166,7 +168,8 @@ static const scancode_entry_t map[] = {
 	ENTRY(SDL_SCANCODE_MEDIA_PREVIOUS_TRACK, RDP_SCANCODE_MEDIA_PREV_TRACK),
 	ENTRY(SDL_SCANCODE_MEDIA_STOP, RDP_SCANCODE_MEDIA_STOP),
 	ENTRY(SDL_SCANCODE_MEDIA_PLAY, RDP_SCANCODE_MEDIA_PLAY_PAUSE),
-	ENTRY(SDL_SCANCODE_MUTE, RDP_SCANCODE_VOLUME_MUTE),
+	ENTRY(SDL_SCANCODE_MEDIA_PAUSE, RDP_SCANCODE_MEDIA_PLAY_PAUSE),
+	ENTRY(SDL_SCANCODE_MEDIA_PLAY_PAUSE, RDP_SCANCODE_MEDIA_PLAY_PAUSE),
 	ENTRY(SDL_SCANCODE_MEDIA_SELECT, RDP_SCANCODE_LAUNCH_MEDIA_SELECT),
 	ENTRY(SDL_SCANCODE_SYSREQ, RDP_SCANCODE_SYSREQ),
 	ENTRY(SDL_SCANCODE_LEFTBRACKET, RDP_SCANCODE_OEM_4),
@@ -185,7 +188,7 @@ static const scancode_entry_t map[] = {
 	ENTRY(SDL_SCANCODE_AC_STOP, RDP_SCANCODE_BROWSER_STOP),
 
 	ENTRY(SDL_SCANCODE_NONUSHASH, RDP_SCANCODE_UNKNOWN),
-	ENTRY(SDL_SCANCODE_APPLICATION, RDP_SCANCODE_UNKNOWN),
+	ENTRY(SDL_SCANCODE_APPLICATION, RDP_SCANCODE_APPS),
 	ENTRY(SDL_SCANCODE_POWER, RDP_SCANCODE_UNKNOWN),
 	ENTRY(SDL_SCANCODE_KP_EQUALS, RDP_SCANCODE_UNKNOWN),
 	ENTRY(SDL_SCANCODE_EXECUTE, RDP_SCANCODE_UNKNOWN),
@@ -199,17 +202,17 @@ static const scancode_entry_t map[] = {
 	ENTRY(SDL_SCANCODE_COPY, RDP_SCANCODE_UNKNOWN),
 	ENTRY(SDL_SCANCODE_PASTE, RDP_SCANCODE_UNKNOWN),
 	ENTRY(SDL_SCANCODE_KP_EQUALSAS400, RDP_SCANCODE_UNKNOWN),
-	ENTRY(SDL_SCANCODE_INTERNATIONAL1, RDP_SCANCODE_UNKNOWN),
-	ENTRY(SDL_SCANCODE_INTERNATIONAL2, RDP_SCANCODE_UNKNOWN),
-	ENTRY(SDL_SCANCODE_INTERNATIONAL3, RDP_SCANCODE_UNKNOWN),
-	ENTRY(SDL_SCANCODE_INTERNATIONAL4, RDP_SCANCODE_UNKNOWN),
-	ENTRY(SDL_SCANCODE_INTERNATIONAL5, RDP_SCANCODE_UNKNOWN),
+	ENTRY(SDL_SCANCODE_INTERNATIONAL1, RDP_SCANCODE_ABNT_C1),
+	ENTRY(SDL_SCANCODE_INTERNATIONAL2, RDP_SCANCODE_HIRAGANA),
+	ENTRY(SDL_SCANCODE_INTERNATIONAL3, RDP_SCANCODE_BACKSLASH_JP),
+	ENTRY(SDL_SCANCODE_INTERNATIONAL4, RDP_SCANCODE_CONVERT_JP),
+	ENTRY(SDL_SCANCODE_INTERNATIONAL5, RDP_SCANCODE_NONCONVERT_JP),
 	ENTRY(SDL_SCANCODE_INTERNATIONAL6, RDP_SCANCODE_UNKNOWN),
 	ENTRY(SDL_SCANCODE_INTERNATIONAL7, RDP_SCANCODE_UNKNOWN),
 	ENTRY(SDL_SCANCODE_INTERNATIONAL8, RDP_SCANCODE_UNKNOWN),
 	ENTRY(SDL_SCANCODE_INTERNATIONAL9, RDP_SCANCODE_UNKNOWN),
-	ENTRY(SDL_SCANCODE_LANG1, RDP_SCANCODE_UNKNOWN),
-	ENTRY(SDL_SCANCODE_LANG2, RDP_SCANCODE_UNKNOWN),
+	ENTRY(SDL_SCANCODE_LANG1, RDP_SCANCODE_KANA_HANGUL),
+	ENTRY(SDL_SCANCODE_LANG2, RDP_SCANCODE_HANJA_KANJI),
 	ENTRY(SDL_SCANCODE_LANG3, RDP_SCANCODE_UNKNOWN),
 	ENTRY(SDL_SCANCODE_LANG4, RDP_SCANCODE_UNKNOWN),
 	ENTRY(SDL_SCANCODE_LANG5, RDP_SCANCODE_UNKNOWN),
@@ -295,6 +298,28 @@ static const scancode_entry_t map[] = {
 	// TODO: KBD_SYNC_KANA_LOCK
 
 	return flags;
+}
+
+[[nodiscard]] static UINT32 sdl_get_kbd_modmask(SDL_Keymod mod)
+{
+	static const std::array<std::pair<SDL_Keymod, uint32_t>, 8> masks = {
+		{ { SDL_KMOD_LSHIFT, FREERDP_CLIENT_KBD_MOD_LSHIFT },
+		  { SDL_KMOD_RSHIFT, FREERDP_CLIENT_KBD_MOD_RSHIFT },
+		  { SDL_KMOD_LALT, FREERDP_CLIENT_KBD_MOD_LMENU },
+		  { SDL_KMOD_RALT, FREERDP_CLIENT_KBD_MOD_RMENU },
+		  { SDL_KMOD_LCTRL, FREERDP_CLIENT_KBD_MOD_LCONTROL },
+		  { SDL_KMOD_RCTRL, FREERDP_CLIENT_KBD_MOD_RCONTROL },
+		  { SDL_KMOD_LGUI, FREERDP_CLIENT_KBD_MOD_LWIN },
+		  { SDL_KMOD_RGUI, FREERDP_CLIENT_KBD_MOD_RWIN } }
+	};
+
+	uint32_t modmask = FREERDP_CLIENT_KBD_MOD_NONE;
+	for (const auto& [sdl, rdp] : masks)
+	{
+		if ((mod & sdl) != 0)
+			modmask |= rdp;
+	}
+	return modmask;
 }
 
 bool sdlInput::keyboard_sync_state()
@@ -491,17 +516,6 @@ uint32_t sdlInput::prefToMask()
 
 	return "RDP_SCANCODE_UNKNOWN";
 }
-
-[[nodiscard]] static UINT32 sdl_rdp_scancode_val(const char* scancodeName)
-{
-	for (const auto& cur : map)
-	{
-		if (strcmp(cur.rdp_name, scancodeName) == 0)
-			return cur.rdp;
-	}
-
-	return RDP_SCANCODE_UNKNOWN;
-}
 #endif
 
 UINT32 sdlInput::scancode_to_rdp(Uint32 scancode)
@@ -559,8 +573,18 @@ bool sdlInput::extract(const std::string& token, uint32_t& key, uint32_t& value)
 
 bool sdlInput::handleEvent(const SDL_KeyboardEvent& ev)
 {
-	const UINT32 rdp_scancode = scancode_to_rdp(ev.scancode);
-	const SDL_Keymod mods = SDL_GetModState();
+	UINT32 rdp_scancode = scancode_to_rdp(ev.scancode);
+#if defined(_WIN32)
+	/* CJK IMEs on Windows may set the extended bit for Right Shift, producing
+	 * the invalid scan code E0 36. SDL maps that event to SDL_SCANCODE_UNKNOWN,
+	 * so normalize it in the same way as the native Windows client. */
+	if ((rdp_scancode == RDP_SCANCODE_UNKNOWN) && (ev.raw == 0xE036))
+		rdp_scancode = RDP_SCANCODE_RSHIFT;
+#endif
+	/* The modifiers held when this key was pressed: SDL_GetModState() is the state after every
+	 * event already queued, so a hotkey could be missed, or fire on a plain key typed just
+	 * before a modifier. */
+	const SDL_Keymod mods = ev.mod;
 
 	if (_hotkeysEnabled && (mods & _hotkeyModmask) == _hotkeyModmask)
 	{
@@ -597,7 +621,7 @@ bool sdlInput::handleEvent(const SDL_KeyboardEvent& ev)
 				           masktostr(_hotkeyModmask).c_str(), sdl_scancode_name(_hotkeyDisconnect));
 				if (!keyboard_sync_state())
 					return false;
-				freerdp_abort_connect_context(_sdl->context());
+				std::ignore = _sdl->abortConnect();
 				return true;
 			}
 			if (ev.scancode == _hotkeyMinimize)
@@ -632,6 +656,18 @@ bool sdlInput::handleEvent(const SDL_KeyboardEvent& ev)
 		           ev.scancode, scancode, sc, ex ? " extended" : "");
 	}
 #endif
+	if (freerdp_settings_get_bool(_sdl->context()->settings, FreeRDP_UnicodeInput))
+	{
+		/* With key_event false the keycode follows the layout, also for non-Latin ones, where key
+		 * events carry the QWERTY letter (SDL_HINT_KEYCODE_OPTIONS). */
+		const auto key = SDL_GetKeyFromScancode(ev.scancode, mods, false);
+		std::array<char, 5> str = {};
+		if ((key >= 0x20) && (key != SDLK_DELETE) && (key <= 0x10FFFF))
+			std::ignore = SDL_UCS4ToUTF8(key, str.data());
+		return freerdp_client_send_key_as_unicode(
+		    _sdl->common(), (ev.type == SDL_EVENT_KEY_DOWN) ? 0 : KBD_FLAGS_RELEASE, str.data(),
+		    scancode, sdl_get_kbd_modmask(mods));
+	}
 	return freerdp_input_send_keyboard_event_ex(_sdl->context()->input,
 	                                            ev.type == SDL_EVENT_KEY_DOWN, ev.repeat, scancode);
 }
@@ -656,10 +692,10 @@ bool sdlInput::mouse_focus(Uint32 windowID)
 	{
 		_lastWindowID = windowID;
 		auto window = _sdl->getWindowForId(windowID);
-		if (!window)
-			return false;
-
-		window->raise();
+		if (window)
+			window->raise();
+		else
+			return _sdl->getRailChannelContext().ownsWindow(windowID);
 	}
 	return true;
 }

@@ -5,7 +5,18 @@ disable_warnings_for_directory(${CMAKE_CURRENT_BINARY_DIR})
 
 set(${MODULE_PREFIX}_DRIVER ${MODULE_NAME}.c)
 
-set(${MODULE_PREFIX}_TESTS
+set(${MODULE_PREFIX}_TESTS TestPathShell.c TestPathMakePath.c)
+
+if(NOT WIN32)
+  list(APPEND ${MODULE_PREFIX}_TESTS TestPathRemoveDirectoryRecursive.c)
+endif()
+
+if(NOT WITHOUT_WINPR_3x_DEPRECATED)
+  list(
+    APPEND
+    ${MODULE_PREFIX}_TESTS
+    TestPathIsUNCEx.c
+    TestPathAllocCombine.c
     TestPathCchAddBackslash.c
     TestPathCchRemoveBackslash.c
     TestPathCchAddBackslashEx.c
@@ -13,36 +24,36 @@ set(${MODULE_PREFIX}_TESTS
     TestPathCchAddExtension.c
     TestPathCchAppend.c
     TestPathCchAppendEx.c
-    TestPathCchCanonicalize.c
-    TestPathCchCanonicalizeEx.c
-    TestPathAllocCanonicalize.c
     TestPathCchCombine.c
     TestPathCchCombineEx.c
-    TestPathAllocCombine.c
     TestPathCchFindExtension.c
     TestPathCchRenameExtension.c
     TestPathCchRemoveExtension.c
     TestPathCchIsRoot.c
-    TestPathIsUNCEx.c
     TestPathCchSkipRoot.c
     TestPathCchStripToRoot.c
     TestPathCchStripPrefix.c
     TestPathCchRemoveFileSpec.c
-    TestPathShell.c
-    TestPathMakePath.c
-)
+  )
+
+  if(NOT WIN32)
+    list(APPEND ${MODULE_PREFIX}_TESTS TestPathCchCanonicalize.c TestPathCchCanonicalizeEx.c
+         TestPathAllocCanonicalize.c
+    )
+  endif()
+endif()
 
 create_test_sourcelist(${MODULE_PREFIX}_SRCS ${${MODULE_PREFIX}_DRIVER} ${${MODULE_PREFIX}_TESTS})
 
 add_executable(${MODULE_NAME} ${${MODULE_PREFIX}_SRCS})
 
-target_link_libraries(${MODULE_NAME} winpr)
+target_link_libraries(${MODULE_NAME} PRIVATE winpr)
 
 set_target_properties(${MODULE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TESTING_OUTPUT_DIRECTORY}")
 
 foreach(test ${${MODULE_PREFIX}_TESTS})
   get_filename_component(TestName ${test} NAME_WE)
-  add_test(${TestName} ${TESTING_OUTPUT_DIRECTORY}/${MODULE_NAME} ${TestName})
+  add_test(NAME ${TestName} COMMAND ${MODULE_NAME} ${TestName})
 endforeach()
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "WinPR/Test")

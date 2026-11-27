@@ -25,9 +25,19 @@ if(WITH_DEBUG_UTILS_CMDLINE_DUMP)
   winpr_definition_add(WITH_DEBUG_UTILS_CMDLINE_DUMP)
 endif()
 
-option(WITH_STREAMPOOL_DEBUG "build with extensive streampool logging" OFF)
+set(STREAMPOOL_SIZE_LIMIT "0x1000000"
+    CACHE STRING "Size limit in bytes enforced for streams returned to the pool. Larger streams are shrunk"
+)
+winpr_definition_add(-DSTREAMPOOL_SIZE_LIMIT=${STREAMPOOL_SIZE_LIMIT})
+
+option(WITH_DEBUG_STREAMPOOL "build with extensive streampool logging" OFF)
 if(WITH_STREAMPOOL_DEBUG)
-  winpr_definition_add(WITH_STREAMPOOL_DEBUG)
+  message(WARNING "WITH_STREAMPOOL_DEBUG was renamed to WITH_DEBUG_STREAMPOOL")
+  set(WITH_DEBUG_STREAMPOOL ON CACHE BOOL "" FORCE)
+endif()
+
+if(WITH_DEBUG_STREAMPOOL)
+  winpr_definition_add(WITH_DEBUG_STREAMPOOL)
 endif()
 
 option(WITH_LODEPNG "build WinPR with PNG support" OFF)
@@ -54,22 +64,32 @@ endif()
 
 option(WINPR_UTILS_IMAGE_WEBP "Add WebP <--> BMP conversion support to clipboard" OFF)
 if(WINPR_UTILS_IMAGE_WEBP)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(WEBP libwebp REQUIRED)
-  winpr_pc_add_requires_private("libwebp")
+  find_package(WebP)
+  if(WebP_FOUND)
+    set_target_properties(WebP::webp PROPERTIES IMPORTED_GLOBAL TRUE)
+    winpr_library_add_private(WebP::webp)
+  else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(WebP REQUIRED IMPORTED_TARGET GLOBAL libwebp)
 
-  winpr_system_include_directory_add(${WEBP_INCLUDE_DIRS})
-  winpr_library_add_private(${WEBP_LIBRARIES})
+    winpr_library_add_private(PkgConfig::WebP)
+  endif()
+  winpr_pc_add_requires_private("libwebp")
 endif()
 
 option(WINPR_UTILS_IMAGE_JPEG "Add Jpeg <--> BMP conversion support to clipboard" OFF)
 if(WINPR_UTILS_IMAGE_JPEG)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(JPEG libjpeg REQUIRED)
-  winpr_pc_add_requires_private("libjpeg")
+  find_package(libjpeg-turbo QUIET)
+  if(libjpeg-turbo_FOUND)
+    set_target_properties(libjpeg-turbo::jpeg PROPERTIES IMPORTED_GLOBAL TRUE)
+    winpr_library_add_private(libjpeg-turbo::jpeg)
+  else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(jpeg REQUIRED IMPORTED_TARGET GLOBAL libjpeg)
 
-  winpr_system_include_directory_add(${JPEG_INCLUDE_DIRS})
-  winpr_library_add_private(${JPEG_LIBRARIES})
+    winpr_library_add_private(PkgConfig::jpeg)
+  endif()
+  winpr_pc_add_requires_private("libjpeg")
 endif()
 
 set(COLLECTIONS_SRCS
@@ -99,12 +119,10 @@ option(WITH_SYSTEMD "allows to export wLog to systemd journal" ${libsystemd_FOUN
 if(WITH_SYSTEMD)
   find_package(libsystemd REQUIRED)
   winpr_pc_add_requires_private("libsystemd")
-  set(WINPR_HAVE_JOURNALD_H TRUE)
+  winpr_definition_add(WINPR_HAVE_JOURNALD_H)
   set(JOURNALD_SRCS wlog/JournaldAppender.c wlog/JournaldAppender.h)
   winpr_system_include_directory_add(${LIBSYSTEMD_INCLUDE_DIR})
   winpr_library_add_private(${LIBSYSTEMD_LIBRARY})
-else()
-  unset(WINPR_HAVE_JOURNALD_H)
 endif()
 
 set(WLOG_SRCS
@@ -140,6 +158,7 @@ set(ASN1_SRCS asn1/asn1.c)
 
 set(SRCS
     atexit.c
+    i18n.c
     ini.c
     sam.c
     ntlm.c
@@ -152,7 +171,20 @@ set(SRCS
     winpr.c
     cmdline.c
     ssl.c
+    config-readers.c
 )
+
+option(WITH_WINPR_I18N "Enable gettext localization support in WinPR" OFF)
+if(WITH_WINPR_I18N)
+  find_package(Intl REQUIRED)
+  if(TARGET Intl::Intl)
+    set_property(TARGET Intl::Intl PROPERTY IMPORTED_GLOBAL TRUE)
+    winpr_library_add_public(Intl::Intl)
+  else()
+    winpr_system_include_directory_add(${Intl_INCLUDE_DIRS})
+    winpr_library_add_public(${Intl_LIBRARIES})
+  endif()
+endif()
 
 if(ANDROID)
   list(APPEND SRCS android.h android.c)
@@ -247,6 +279,6 @@ if(WIN32)
   winpr_library_add_public(dbghelp)
 endif()
 
-if(BUILD_TESTING_INTERNAL OR BUILD_TESTING)
+if(BUILD_TESTING)
   add_subdirectory(test)
 endif()

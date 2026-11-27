@@ -61,21 +61,25 @@ static BOOL NamedPipeClientCloseHandle(HANDLE handle)
 	{
 		// WLOG_DBG(TAG, "closing clientfd %d", pNamedPipe->clientfd);
 		close(pNamedPipe->clientfd);
+		pNamedPipe->clientfd = -1;
 	}
 
 	if (pNamedPipe->serverfd != -1)
 	{
 		// WLOG_DBG(TAG, "closing serverfd %d", pNamedPipe->serverfd);
 		close(pNamedPipe->serverfd);
+		pNamedPipe->serverfd = -1;
 	}
 
 	if (pNamedPipe->pfnUnrefNamedPipe)
 		pNamedPipe->pfnUnrefNamedPipe(pNamedPipe);
 
 	free(pNamedPipe->lpFileName);
+	pNamedPipe->lpFileName = nullptr;
 	free(pNamedPipe->lpFilePath);
+	pNamedPipe->lpFilePath = nullptr;
 	free(pNamedPipe->name);
-	free(pNamedPipe);
+	pNamedPipe->name = nullptr;
 	return TRUE;
 }
 
@@ -116,12 +120,13 @@ static HANDLE_OPS ops = {
 	nullptr, /* FileGetFileInformationByHandle */
 };
 
-static HANDLE
-NamedPipeClientCreateFileA(LPCSTR lpFileName, WINPR_ATTR_UNUSED DWORD dwDesiredAccess,
-                           WINPR_ATTR_UNUSED DWORD dwShareMode,
-                           WINPR_ATTR_UNUSED LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-                           WINPR_ATTR_UNUSED DWORD dwCreationDisposition,
-                           DWORD dwFlagsAndAttributes, WINPR_ATTR_UNUSED HANDLE hTemplateFile)
+WINPR_ATTR_NODISCARD
+static HANDLE NamedPipeClientCreateFileA(LPCSTR lpFileName, WINPR_ATTR_UNUSED DWORD dwDesiredAccess,
+                                         WINPR_ATTR_UNUSED DWORD dwShareMode,
+                                         LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                                         WINPR_ATTR_UNUSED DWORD dwCreationDisposition,
+                                         DWORD dwFlagsAndAttributes,
+                                         WINPR_ATTR_UNUSED HANDLE hTemplateFile)
 {
 	int status = 0;
 	struct sockaddr_un s = WINPR_C_ARRAY_INIT;
@@ -177,6 +182,12 @@ NamedPipeClientCreateFileA(LPCSTR lpFileName, WINPR_ATTR_UNUSED DWORD dwDesiredA
 	pNamedPipe->clientfd = socket(PF_LOCAL, SOCK_STREAM, 0);
 	if (pNamedPipe->clientfd < 0)
 		goto fail;
+
+	{
+		const BOOL inherit = lpSecurityAttributes && lpSecurityAttributes->bInheritHandle;
+		if (!winpr_set_cloexec(pNamedPipe->clientfd, !inherit))
+			goto fail;
+	}
 
 	pNamedPipe->serverfd = -1;
 	pNamedPipe->ServerMode = FALSE;

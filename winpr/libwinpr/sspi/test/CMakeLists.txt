@@ -12,7 +12,8 @@ set(${MODULE_PREFIX}_TESTS
     TestAcquireCredentialsHandle.c
     TestCredSSP.c
     #TestSchannel.c
-    TestNTLM.c
+    TestSspiNTLM.c
+    TestSspiPasswordHash.c
     TestCredentialZeroing.c
 )
 
@@ -28,7 +29,7 @@ if(WIN32)
   set(${MODULE_PREFIX}_LIBS ${${MODULE_PREFIX}_LIBS} secur32 crypt32)
 endif()
 
-target_link_libraries(${MODULE_NAME} ${${MODULE_PREFIX}_LIBS} winpr)
+target_link_libraries(${MODULE_NAME} PRIVATE ${${MODULE_PREFIX}_LIBS} winpr)
 
 include(AddFuzzerTest)
 add_fuzzer_test("${FUZZERS}" "winpr")
@@ -37,7 +38,7 @@ set_target_properties(${MODULE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST
 
 foreach(test ${${MODULE_PREFIX}_TESTS})
   get_filename_component(TestName ${test} NAME_WE)
-  add_test(${TestName} ${TESTING_OUTPUT_DIRECTORY}/${MODULE_NAME} ${TestName})
+  add_test(NAME ${TestName} COMMAND ${MODULE_NAME} ${TestName})
 endforeach()
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "WinPR/Test")

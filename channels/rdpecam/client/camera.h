@@ -73,6 +73,7 @@ typedef struct
 	UINT32 version;
 	wHashTable* devices;
 
+	BOOL connected;
 } CameraPlugin;
 
 typedef struct
@@ -85,18 +86,30 @@ typedef struct
 typedef struct
 {
 	BOOL streaming;
+	/* The protocol stream can remain active while the capture device is released. */
+	BOOL captureRunning;
 	CAM_MEDIA_FORMAT_INFO formats;
 	CAM_MEDIA_TYPE_DESCRIPTION currMediaType;
 
 	GENERIC_CHANNEL_CALLBACK* hSampleReqChannel;
 	CRITICAL_SECTION lock;
 	volatile LONG samplesRequested;
+	/* GetTickCount64() of the last SampleRequest, or of the stream start */
+	UINT64 lastSampleRequestTime;
 	wStream* pendingSample;
 	volatile BOOL haveSample;
 	wStream* sampleRespBuffer;
 
 	FREERDP_VIDEO_CONTEXT* video;
 } CameraDeviceStream;
+
+/* Internal callback result asking a request-driven HAL to release the capture device. */
+#define ECAM_SAMPLE_CAPTURE_DRAINED 0x00010000u
+
+/* Release the capture device once the server stopped requesting samples for this long (ms).
+ * Windows requests samples one at a time, so a zero request count between two requests is
+ * normal and must not close the device. */
+#define ECAM_CAPTURE_IDLE_TIMEOUT_MS 2000ULL
 
 WINPR_ATTR_NODISCARD
 static inline CAM_MEDIA_FORMAT streamInputFormat(CameraDeviceStream* stream)
@@ -135,6 +148,9 @@ typedef UINT (*ICamHalSampleCapturedCallback)(CameraDevice* dev, size_t streamIn
 /** @brief interface to implement for the camera HAL*/
 struct s_ICamHal
 {
+	/* The HAL can release capture when there are no sample requests and restart it later. */
+	BOOL RequestDrivenCapture;
+
 	/** callback to enumerate available camera calling callback for each found item
 	 *
 	 * @param ihal the hal interface

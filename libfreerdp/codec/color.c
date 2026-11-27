@@ -52,10 +52,13 @@ static BOOL freerdp_image_copy_from_pointer_data_int(
 #if defined(WITH_CURSOR_DUMP)
 #include <winpr/path.h>
 #include <winpr/image.h>
+
+WINPR_ATTR_MALLOC(free, 1)
 static char* get_dump_name(char* prefix, size_t len)
 {
 	static uint64_t count = 0;
-	_snprintf(prefix, len, "cursor_dump_%08" PRIx64, count++);
+	if (_snprintf(prefix, len, "cursor_dump_%08" PRIx64, count++) < 0)
+		return nullptr;
 
 	return GetCombinedPath(CURSOR_DUMP_DIR, prefix);
 }
@@ -269,7 +272,7 @@ BYTE* freerdp_glyph_convert_ex(UINT32 width, UINT32 height, const BYTE* WINPR_RE
 
 	WINPR_ASSERT(data);
 
-	BYTE* dstData = (BYTE*)winpr_aligned_malloc(1ull * width * height, 16);
+	BYTE* dstData = (BYTE*)winpr_aligned_calloc(width, height, 16);
 
 	if (!dstData)
 		return nullptr;
@@ -302,6 +305,8 @@ BOOL freerdp_image_copy_from_monochrome(BYTE* WINPR_RESTRICT pDstData, UINT32 Ds
                                         UINT32 backColor, UINT32 foreColor,
                                         const gdiPalette* WINPR_RESTRICT palette)
 {
+	if (FreeRDPGetBitsPerPixel(DstFormat) == 0)
+		return FALSE;
 	const UINT32 dstBytesPerPixel = FreeRDPGetBytesPerPixel(DstFormat);
 
 	if (!pDstData || !pSrcData || !palette)
@@ -309,6 +314,9 @@ BOOL freerdp_image_copy_from_monochrome(BYTE* WINPR_RESTRICT pDstData, UINT32 Ds
 
 	if (nDstStep == 0)
 		nDstStep = dstBytesPerPixel * nWidth;
+
+	WINPR_ASSERT(1ull * nXDst + nWidth <= UINT32_MAX);
+	WINPR_ASSERT(nDstStep / FreeRDPGetBytesPerPixel(DstFormat) >= nXDst + nWidth);
 
 	const UINT32 monoStep = (nWidth + 7) / 8;
 
@@ -409,6 +417,10 @@ BOOL freerdp_image_copy_from_icon_data(BYTE* WINPR_RESTRICT pDstData, UINT32 Dst
 
 	if ((nWidth == 0) || (nHeight == 0))
 		return TRUE;
+	if (FreeRDPGetBitsPerPixel(DstFormat) == 0)
+		return FALSE;
+
+	WINPR_ASSERT((nDstStep == 0) || (nDstStep / FreeRDPGetBytesPerPixel(DstFormat) >= nWidth));
 
 	/*
 	 * Color formats used by icons are DIB bitmap formats (2-bit format
@@ -451,10 +463,10 @@ BOOL freerdp_image_copy_from_icon_data(BYTE* WINPR_RESTRICT pDstData, UINT32 Dst
 	}
 
 	/* Ensure we have enough source data bytes for image copy. */
-	if (cbBitsColor < nWidth * nHeight * FreeRDPGetBytesPerPixel(format))
+	if ((1ul * cbBitsColor) / nHeight < (1ul * FreeRDPGetBytesPerPixel(format) * nWidth))
 	{
 		WLog_ERR(TAG,
-		         "cbBitsColor{%" PRIu32 "} < nWidth{%" PRIu32 "} * nHeight{%" PRIu32
+		         "cbBitsColor{%" PRIu16 "} < nWidth{%" PRIu16 "} * nHeight{%" PRIu16
 		         "} * bpp{%" PRIu32 "}",
 		         cbBitsColor, nWidth, nHeight, FreeRDPGetBytesPerPixel(format));
 		return FALSE;
@@ -465,8 +477,8 @@ BOOL freerdp_image_copy_from_icon_data(BYTE* WINPR_RESTRICT pDstData, UINT32 Dst
 	                                   bitsColor, format, 0, 0, 0, &palette, FREERDP_FLIP_VERTICAL))
 		return FALSE;
 
-	/* apply alpha mask */
-	if (FreeRDPColorHasAlpha(DstFormat) && (cbBitsMask > 0))
+	/* apply alpha mask, skip if we already got alpha in the bitmap */
+	if (FreeRDPColorHasAlpha(DstFormat) && !FreeRDPColorHasAlpha(format) && (cbBitsMask > 0))
 	{
 		BYTE* dstBuf = pDstData;
 		UINT32 dstBpp = FreeRDPGetBytesPerPixel(DstFormat);
@@ -477,11 +489,11 @@ BOOL freerdp_image_copy_from_icon_data(BYTE* WINPR_RESTRICT pDstData, UINT32 Dst
 		 * a multiple of 4 bytes.
 		 */
 		const size_t stride = round_up(div_ceil(nWidth, 8), 4);
-		if (cbBitsMask < stride * (nHeight - 1ULL))
+		const size_t maskSize = stride * (nHeight - 1ULL) + div_ceil(nWidth, 8);
+		if (cbBitsMask < maskSize)
 		{
-			WLog_ERR(TAG,
-			         "cbBitsMask{%" PRIu32 "} < stride{%" PRIuz "} * (nHeight{%" PRIu32 "} - 1)",
-			         cbBitsMask, stride, nHeight);
+			WLog_ERR(TAG, "cbBitsMask{%" PRIu32 "} < required mask size{%" PRIuz "}", cbBitsMask,
+			         maskSize);
 			return FALSE;
 		}
 
@@ -758,13 +770,17 @@ BOOL freerdp_image_copy_from_pointer_data_int(
     const BYTE* WINPR_RESTRICT andMask, UINT32 andMaskLength, UINT32 xorBpp,
     const gdiPalette* WINPR_RESTRICT palette)
 {
-	UINT32 dstBitsPerPixel = 0;
-	UINT32 dstBytesPerPixel = 0;
-	dstBitsPerPixel = FreeRDPGetBitsPerPixel(DstFormat);
-	dstBytesPerPixel = FreeRDPGetBytesPerPixel(DstFormat);
+	if (FreeRDPGetBitsPerPixel(DstFormat) == 0)
+		return FALSE;
 
+	UINT32 dstBitsPerPixel = FreeRDPGetBitsPerPixel(DstFormat);
+	UINT32 dstBytesPerPixel = FreeRDPGetBytesPerPixel(DstFormat);
+
+	WINPR_ASSERT(1ull * nXDst + nWidth <= UINT32_MAX);
 	if (nDstStep <= 0)
-		nDstStep = dstBytesPerPixel * nWidth;
+		nDstStep = dstBytesPerPixel * (1ull * nXDst + nWidth);
+
+	WINPR_ASSERT(nDstStep / FreeRDPGetBytesPerPixel(DstFormat) >= (1ull * nXDst + nWidth));
 
 	for (UINT32 y = nYDst; y < nHeight; y++)
 	{
@@ -820,10 +836,12 @@ static inline BOOL overlapping(const BYTE* pDstData, UINT32 nYDst, UINT32 nDstSt
 	const uintptr_t dststart = dst + 1ULL * nDstStep * nYDst;
 	const uintptr_t dstend = dststart + 1ULL * nDstStep * nHeight;
 
-	if ((dststart >= srcstart) && (dststart <= srcend))
+	WINPR_ASSERT(nDstStep > 0);
+	WINPR_ASSERT(nSrcStep > 0);
+	if ((dststart >= srcstart) && (dststart < srcend))
 		return TRUE;
 
-	if ((dstend >= srcstart) && (dstend <= srcend))
+	if ((dstend > srcstart) && (dstend <= srcend))
 		return TRUE;
 
 	return FALSE;
@@ -996,6 +1014,18 @@ BOOL freerdp_image_copy_overlap(BYTE* pDstData, DWORD DstFormat, UINT32 nDstStep
 	int64_t dstVOffset = 0;
 	int64_t dstVMultiplier = 1;
 
+	if ((nWidth == 0) || (nHeight == 0))
+		return TRUE;
+
+	if (FreeRDPGetBitsPerPixel(SrcFormat) == 0)
+		return FALSE;
+	if (FreeRDPGetBitsPerPixel(DstFormat) == 0)
+		return FALSE;
+
+	WINPR_ASSERT(1ull * nXDst + nWidth <= UINT32_MAX);
+	WINPR_ASSERT(1ull * nXSrc + nWidth <= UINT32_MAX);
+	WINPR_ASSERT(nDstStep / FreeRDPGetBytesPerPixel(DstFormat) >= nXDst + nWidth);
+	WINPR_ASSERT(nSrcStep / FreeRDPGetBytesPerPixel(SrcFormat) >= nXSrc + nWidth);
 	WINPR_ASSERT(overlapping(pDstData, nYDst, nDstStep, pSrcData, nYSrc, nSrcStep, nHeight));
 
 	if ((nWidth == 0) || (nHeight == 0))
@@ -1008,10 +1038,10 @@ BOOL freerdp_image_copy_overlap(BYTE* pDstData, DWORD DstFormat, UINT32 nDstStep
 		return FALSE;
 
 	if (nDstStep == 0)
-		nDstStep = nWidth * FreeRDPGetBytesPerPixel(DstFormat);
+		nDstStep = (nXDst + nWidth) * FreeRDPGetBytesPerPixel(DstFormat);
 
 	if (nSrcStep == 0)
-		nSrcStep = nWidth * FreeRDPGetBytesPerPixel(SrcFormat);
+		nSrcStep = (nXSrc + nWidth) * FreeRDPGetBytesPerPixel(SrcFormat);
 
 	if (vSrcVFlip)
 	{
@@ -1128,11 +1158,21 @@ BOOL freerdp_image_copy(BYTE* pDstData, DWORD DstFormat, UINT32 nDstStep, UINT32
 	if ((nWidth == 0) || (nHeight == 0))
 		return TRUE;
 
+	if (FreeRDPGetBitsPerPixel(SrcFormat) == 0)
+		return FALSE;
+	if (FreeRDPGetBitsPerPixel(DstFormat) == 0)
+		return FALSE;
+
+	WINPR_ASSERT(1ull * nXDst + nWidth <= UINT32_MAX);
+	WINPR_ASSERT(1ull * nXSrc + nWidth <= UINT32_MAX);
 	if (nDstStep == 0)
-		nDstStep = nWidth * FreeRDPGetBytesPerPixel(DstFormat);
+		nDstStep = (nXDst + nWidth) * FreeRDPGetBytesPerPixel(DstFormat);
 
 	if (nSrcStep == 0)
-		nSrcStep = nWidth * FreeRDPGetBytesPerPixel(SrcFormat);
+		nSrcStep = (nXSrc + nWidth) * FreeRDPGetBytesPerPixel(SrcFormat);
+
+	WINPR_ASSERT(nDstStep / FreeRDPGetBytesPerPixel(DstFormat) >= nXDst + nWidth);
+	WINPR_ASSERT(nSrcStep / FreeRDPGetBytesPerPixel(SrcFormat) >= nXSrc + nWidth);
 
 	const BOOL ovl = overlapping(pDstData, nYDst, nDstStep, pSrcData, nYSrc, nSrcStep, nHeight);
 	if (ovl)
@@ -1149,13 +1189,19 @@ BOOL freerdp_image_fill(BYTE* WINPR_RESTRICT pDstData, DWORD DstFormat, UINT32 n
 {
 	if ((nWidth == 0) || (nHeight == 0))
 		return TRUE;
+
+	if (FreeRDPGetBitsPerPixel(DstFormat) == 0)
+		return FALSE;
+
 	const UINT32 bpp = FreeRDPGetBytesPerPixel(DstFormat);
 	BYTE* WINPR_RESTRICT pFirstDstLine = nullptr;
 	BYTE* WINPR_RESTRICT pFirstDstLineXOffset = nullptr;
 
+	WINPR_ASSERT(1ull * nXDst + nWidth <= UINT32_MAX);
 	if (nDstStep == 0)
 		nDstStep = (nXDst + nWidth) * FreeRDPGetBytesPerPixel(DstFormat);
 
+	WINPR_ASSERT(nDstStep / FreeRDPGetBytesPerPixel(DstFormat) >= nXDst + nWidth);
 	pFirstDstLine = &pDstData[1ULL * nYDst * nDstStep];
 	pFirstDstLineXOffset = &pFirstDstLine[1ULL * nXDst * bpp];
 
@@ -1179,6 +1225,13 @@ BOOL freerdp_image_fill_ex(BYTE* WINPR_RESTRICT pDstData, DWORD DstFormat, UINT3
                            UINT32 nXDst, UINT32 nYDst, UINT32 nWidth, UINT32 nHeight, UINT32 color,
                            UINT32 flags)
 {
+	if (FreeRDPGetBitsPerPixel(DstFormat) == 0)
+		return FALSE;
+
+	WINPR_ASSERT(pDstData);
+	WINPR_ASSERT(1ull * nXDst + nWidth <= UINT32_MAX);
+	WINPR_ASSERT(nDstStep / FreeRDPGetBytesPerPixel(DstFormat) >= nXDst + nWidth);
+
 	if (FreeRDPColorHasAlpha(DstFormat) && ((flags & FREERDP_IMAGE_FILL_IGNORE_ALPHA) != 0))
 	{
 		const UINT32 bpp = FreeRDPGetBytesPerPixel(DstFormat);
@@ -1236,16 +1289,27 @@ BOOL freerdp_image_scale(BYTE* WINPR_RESTRICT pDstData, DWORD DstFormat, UINT32 
                          UINT32 nXSrc, UINT32 nYSrc, UINT32 nSrcWidth, UINT32 nSrcHeight)
 {
 	BOOL rc = FALSE;
+	if (FreeRDPGetBitsPerPixel(SrcFormat) == 0)
+		return FALSE;
+	if (FreeRDPGetBitsPerPixel(DstFormat) == 0)
+		return FALSE;
 
+	WINPR_ASSERT(1ull * nXDst + nDstWidth <= UINT32_MAX);
+	WINPR_ASSERT(1ull * nXSrc + nSrcWidth <= UINT32_MAX);
 	if (nDstStep == 0)
-		nDstStep = nDstWidth * FreeRDPGetBytesPerPixel(DstFormat);
+		nDstStep = (nXDst + nDstWidth) * FreeRDPGetBytesPerPixel(DstFormat);
 
 	if (nSrcStep == 0)
-		nSrcStep = nSrcWidth * FreeRDPGetBytesPerPixel(SrcFormat);
+		nSrcStep = (nXSrc + nSrcWidth) * FreeRDPGetBytesPerPixel(SrcFormat);
+
+	WINPR_ASSERT(nDstStep / FreeRDPGetBytesPerPixel(DstFormat) >= nXDst + nDstWidth);
+	WINPR_ASSERT(nSrcStep / FreeRDPGetBytesPerPixel(SrcFormat) >= nXSrc + nSrcWidth);
 
 #if defined(WITH_SWSCALE) || defined(WITH_CAIRO)
-	const BYTE* src = &pSrcData[nXSrc * FreeRDPGetBytesPerPixel(SrcFormat) + nYSrc * nSrcStep];
-	BYTE* dst = &pDstData[nXDst * FreeRDPGetBytesPerPixel(DstFormat) + nYDst * nDstStep];
+	const BYTE* src =
+	    &pSrcData[1ULL * nXSrc * FreeRDPGetBytesPerPixel(SrcFormat) + 1ULL * nYSrc * nSrcStep];
+	BYTE* dst =
+	    &pDstData[1ULL * nXDst * FreeRDPGetBytesPerPixel(DstFormat) + 1ULL * nYDst * nDstStep];
 #endif
 
 	/* direct copy is much faster than scaling, so check if we can simply copy... */
@@ -1271,6 +1335,19 @@ BOOL freerdp_image_scale(BYTE* WINPR_RESTRICT pDstData, DWORD DstFormat, UINT32 
 		if (!freerdp_swscale_available())
 		{
 			WLog_WARN(TAG, "swscale not available");
+			return FALSE;
+		}
+
+		/* swscale addresses lines as line * stride in int arithmetic, every byte of an image must
+		 * be addressable with a signed int (see av_image_check_size). For larger images the
+		 * offset wraps and the last lines are read or written 4GiB in front of the buffer. */
+		if ((1ULL * nSrcStep * nSrcHeight > INT32_MAX) ||
+		    (1ULL * nDstStep * nDstHeight > INT32_MAX))
+		{
+			WLog_ERR(TAG,
+			         "image too large to scale: source %" PRIu32 " x %" PRIu32
+			         " bytes, destination %" PRIu32 " x %" PRIu32 " bytes",
+			         nSrcStep, nSrcHeight, nDstStep, nDstHeight);
 			return FALSE;
 		}
 
@@ -1304,6 +1381,10 @@ BOOL freerdp_image_scale(BYTE* WINPR_RESTRICT pDstData, DWORD DstFormat, UINT32 
 			return FALSE;
 
 		if ((nDstWidth > INT_MAX) || (nDstHeight > INT_MAX) || (nDstStep > INT_MAX))
+			return FALSE;
+
+		/* cairo (pixman) addresses lines as line * stride in int arithmetic as well */
+		if ((1ULL * nSrcStep * nSrcHeight > INT_MAX) || (1ULL * nDstStep * nDstHeight > INT_MAX))
 			return FALSE;
 
 		csrc = cairo_image_surface_create_for_data((void*)src, CAIRO_FORMAT_ARGB32, (int)nSrcWidth,
@@ -1914,6 +1995,23 @@ BOOL freerdp_image_copy_no_overlap(BYTE* WINPR_RESTRICT pDstData, DWORD DstForma
 	if (!prims)
 		prims = primitives_get();
 
+	if (FreeRDPGetBitsPerPixel(SrcFormat) == 0)
+		return FALSE;
+	if (FreeRDPGetBitsPerPixel(DstFormat) == 0)
+		return FALSE;
+
+	if ((nWidth == 0) || (nHeight == 0))
+		return TRUE;
+
+	WINPR_ASSERT(1ull * nXDst + nWidth <= UINT32_MAX);
+	WINPR_ASSERT(1ull * nXSrc + nWidth <= UINT32_MAX);
+	if (nDstStep == 0)
+		nDstStep = (nXDst + nWidth) * FreeRDPGetBytesPerPixel(DstFormat);
+	if (nSrcStep == 0)
+		nSrcStep = (nXSrc + nWidth) * FreeRDPGetBytesPerPixel(SrcFormat);
+
+	WINPR_ASSERT(nDstStep / FreeRDPGetBytesPerPixel(DstFormat) >= nXDst + nWidth);
+	WINPR_ASSERT(nSrcStep / FreeRDPGetBytesPerPixel(SrcFormat) >= nXSrc + nWidth);
 	WINPR_ASSERT(!overlapping(pDstData, nYDst, nDstStep, pSrcData, nYSrc, nSrcStep, nHeight));
 	WINPR_ASSERT(prims);
 	WINPR_ASSERT(prims->copy_no_overlap);

@@ -29,6 +29,7 @@
 #ifdef _WIN32
 
 #include <stdio.h>
+#include <string.h>
 #include <io.h>
 #include <conio.h>
 #include <wincred.h>
@@ -52,6 +53,52 @@ int freerdp_interruptible_getc(rdpContext* context, FILE* f)
 const char* freerdp_passphrase_read(rdpContext* context, const char* prompt, char* buf,
                                     size_t bufsiz, int from_stdin)
 {
+	if (bufsiz == 0)
+	{
+		errno = EINVAL;
+		return nullptr;
+	}
+
+	/* When /from-stdin is requested, read the password from stdin. The Unix
+	 * counterpart (freerdp_passphrase_read_tty) does the same, suppressing
+	 * terminal echo via tcsetattr; suppress console echo here via SetConsoleMode
+	 * when stdin is an interactive console. On a pipe the echo bit is moot. */
+	if (from_stdin)
+	{
+		HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+		const BOOL isTty = _isatty(_fileno(stdin)) != 0;
+		DWORD origMode = 0;
+		BOOL echoSuppressed = FALSE;
+
+		if (isTty && hStdin && hStdin != INVALID_HANDLE_VALUE && GetConsoleMode(hStdin, &origMode))
+		{
+			if (SetConsoleMode(hStdin, origMode & ~(DWORD)ENABLE_ECHO_INPUT))
+				echoSuppressed = TRUE;
+		}
+
+		if (prompt)
+		{
+			(void)fputs(prompt, stdout);
+			(void)fflush(stdout);
+		}
+
+		WINPR_ASSERT(bufsiz <= INT32_MAX);
+		const char* rc = fgets(buf, (int)bufsiz, stdin);
+
+		if (echoSuppressed)
+		{
+			(void)SetConsoleMode(hStdin, origMode);
+			(void)fputc('\n', stdout);
+			(void)fflush(stdout);
+		}
+
+		if (!rc)
+			return nullptr;
+
+		buf[strcspn(buf, "\r\n")] = '\0';
+		return buf;
+	}
+
 	WCHAR UserNameW[CREDUI_MAX_USERNAME_LENGTH + 1] = { 'p', 'r', 'e', 'f', 'i',
 		                                                'l', 'l', 'e', 'd', '\0' };
 	WCHAR PasswordW[CREDUI_MAX_PASSWORD_LENGTH + 1] = WINPR_C_ARRAY_INIT;
@@ -65,6 +112,23 @@ const char* freerdp_passphrase_read(rdpContext* context, const char* prompt, cha
 	if (ConvertWCharNToUtf8(PasswordW, ARRAYSIZE(PasswordW), buf, bufsiz) < 0)
 		return nullptr;
 	return buf;
+}
+
+const char* freerdp_passphrase_from_env(WINPR_ATTR_UNUSED rdpContext* context,
+                                        WINPR_ATTR_UNUSED const char* prompt,
+                                        WINPR_ATTR_UNUSED char* buf,
+                                        WINPR_ATTR_UNUSED size_t bufsiz)
+{
+	return nullptr;
+}
+
+const char* freerdp_passphrase_read_tty(WINPR_ATTR_UNUSED rdpContext* context,
+                                        WINPR_ATTR_UNUSED const char* prompt,
+                                        WINPR_ATTR_UNUSED char* buf,
+                                        WINPR_ATTR_UNUSED size_t bufsiz,
+                                        WINPR_ATTR_UNUSED int from_stdin)
+{
+	return nullptr;
 }
 
 #elif !defined(ANDROID)
@@ -133,8 +197,8 @@ static void replace_char(char* buffer, WINPR_ATTR_UNUSED size_t buffer_len, cons
 	}
 }
 
-static const char* freerdp_passphrase_read_tty(rdpContext* context, const char* prompt, char* buf,
-                                               size_t bufsiz, int from_stdin)
+const char* freerdp_passphrase_read_tty(rdpContext* context, const char* prompt, char* buf,
+                                        size_t bufsiz, int from_stdin)
 {
 	BOOL terminal_needs_reset = FALSE;
 	char term_name[L_ctermid] = WINPR_C_ARRAY_INIT;
@@ -190,8 +254,11 @@ static const char* freerdp_passphrase_read_tty(rdpContext* context, const char* 
 	if (!fp)
 		goto error;
 
-	(void)fprintf(fout, "%s", prompt);
-	(void)fflush(fout);
+	if (isatty(fileno(fp)))
+	{
+		(void)fprintf(fout, "%s", prompt);
+		(void)fflush(fout);
+	}
 
 	{
 		char* ptr = nullptr;
@@ -259,26 +326,34 @@ static const char* freerdp_passphrase_read_askpass(const char* prompt, char* buf
 	return buf;
 }
 
-const char* freerdp_passphrase_read(rdpContext* context, const char* prompt, char* buf,
-                                    size_t bufsiz, int from_stdin)
+const char* freerdp_passphrase_from_env(WINPR_ATTR_UNUSED rdpContext* context, const char* prompt,
+                                        char* buf, size_t bufsiz)
 {
 	// NOLINTNEXTLINE(concurrency-mt-unsafe)
 	const char* askpass_env = getenv("FREERDP_ASKPASS");
-
-	if (askpass_env)
-		return freerdp_passphrase_read_askpass(prompt, buf, bufsiz, askpass_env);
-	else
-		return freerdp_passphrase_read_tty(context, prompt, buf, bufsiz, from_stdin);
+	if (!askpass_env)
+		return nullptr;
+	return freerdp_passphrase_read_askpass(prompt, buf, bufsiz, askpass_env);
 }
 
-static BOOL set_termianl_nonblock(int ifd, BOOL nonblock);
+const char* freerdp_passphrase_read(rdpContext* context, const char* prompt, char* buf,
+                                    size_t bufsiz, int from_stdin)
+{
+	const char* askpass_env = freerdp_passphrase_from_env(context, prompt, buf, bufsiz);
+	if (askpass_env)
+		return askpass_env;
+
+	return freerdp_passphrase_read_tty(context, prompt, buf, bufsiz, from_stdin);
+}
+
+static BOOL set_terminal_nonblock(int ifd, BOOL nonblock);
 
 static void restore_terminal(void)
 {
-	(void)set_termianl_nonblock(-1, FALSE);
+	(void)set_terminal_nonblock(-1, FALSE);
 }
 
-BOOL set_termianl_nonblock(int ifd, BOOL nonblock)
+BOOL set_terminal_nonblock(int ifd, BOOL nonblock)
 {
 	static int fd = -1;
 	static bool registered = false;
@@ -290,6 +365,9 @@ BOOL set_termianl_nonblock(int ifd, BOOL nonblock)
 
 	if (fd < 0)
 		return FALSE;
+
+	if (!isatty(fd))
+		return TRUE;
 
 	if (nonblock)
 	{
@@ -355,7 +433,7 @@ int freerdp_interruptible_getc(rdpContext* context, FILE* stream)
 	int rc = EOF;
 	const int fd = fileno(stream);
 
-	(void)set_termianl_nonblock(fd, TRUE);
+	(void)set_terminal_nonblock(fd, TRUE);
 
 	do
 	{
@@ -378,7 +456,7 @@ int freerdp_interruptible_getc(rdpContext* context, FILE* stream)
 		}
 	} while (!freerdp_shall_disconnect_context(context));
 
-	(void)set_termianl_nonblock(fd, FALSE);
+	(void)set_terminal_nonblock(fd, FALSE);
 
 	return rc;
 }
@@ -394,6 +472,23 @@ const char* freerdp_passphrase_read(rdpContext* context, const char* prompt, cha
 int freerdp_interruptible_getc(rdpContext* context, FILE* f)
 {
 	return EOF;
+}
+
+const char* freerdp_passphrase_from_env(WINPR_ATTR_UNUSED rdpContext* context,
+                                        WINPR_ATTR_UNUSED const char* prompt,
+                                        WINPR_ATTR_UNUSED char* buf,
+                                        WINPR_ATTR_UNUSED size_t bufsiz)
+{
+	return nullptr;
+}
+
+const char* freerdp_passphrase_read_tty(WINPR_ATTR_UNUSED rdpContext* context,
+                                        WINPR_ATTR_UNUSED const char* prompt,
+                                        WINPR_ATTR_UNUSED char* buf,
+                                        WINPR_ATTR_UNUSED size_t bufsiz,
+                                        WINPR_ATTR_UNUSED int from_stdin)
+{
+	return nullptr;
 }
 #endif
 
@@ -442,7 +537,7 @@ SSIZE_T freerdp_interruptible_get_line(rdpContext* context, char** plineptr, siz
 	{
 		if (used + 2 >= len)
 		{
-			len += step;
+			len = used + step;
 			n = realloc(ptr, len);
 
 			if (!n)

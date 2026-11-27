@@ -20,6 +20,8 @@
 #include <freerdp/config.h>
 
 #include <winpr/wtypes.h>
+#include <winpr/i18n.h>
+#include <freerdp/freerdp.h>
 #include <freerdp/codec/audio.h>
 #include <freerdp/codec/dsp.h>
 
@@ -50,7 +52,6 @@ size_t server_audin_get_formats(AUDIO_FORMAT** dst_formats)
 		{ WAVE_FORMAT_AAC_MS, 2, 44100, 20000, 4, 16, 0, nullptr },
 		{ WAVE_FORMAT_AAC_MS, 2, 44100, 16000, 4, 16, 0, nullptr },
 		{ WAVE_FORMAT_AAC_MS, 2, 44100, 12000, 4, 16, 0, nullptr },
-		{ WAVE_FORMAT_PCM, 2, 44100, 176400, 4, 16, 0, nullptr },
 		{ WAVE_FORMAT_ADPCM, 2, 44100, 44359, 2048, 4, 32, adpcm_data_7 },
 		{ WAVE_FORMAT_DVI_ADPCM, 2, 44100, 44251, 2048, 4, 2, adpcm_dvi_data_7 },
 		{ WAVE_FORMAT_ALAW, 2, 22050, 44100, 2, 8, 0, nullptr },
@@ -235,4 +236,9 @@ void freerdp_server_warn_deprecated(int argc, char* argv[])
 	    " developers hang out in https://matrix.to/#/#FreeRDP:matrix.org?via=matrix.org "
 	    "- don't hesitate to ask some questions. (replies might take some time depending "
 	    "on your timezone)");
+}
+BOOL freerdp_server_enable_translation(const char* locale, const char* searchPath)
+{
+	return freerdp_enable_translation(locale, searchPath) &&
+	       winpr_i18n_bind_domain("freerdp-server", searchPath);
 }
