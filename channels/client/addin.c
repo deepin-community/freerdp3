@@ -164,24 +164,13 @@ static FREERDP_ADDIN** freerdp_channels_list_dynamic_addins(LPCSTR pszName, LPCS
                                                             WINPR_ATTR_UNUSED DWORD dwFlags)
 {
 	int nDashes = 0;
-	HANDLE hFind = nullptr;
-	DWORD nAddins = 0;
-	LPSTR pszPattern = nullptr;
-	size_t cchPattern = 0;
 	LPCSTR pszAddinPath = FREERDP_ADDIN_PATH;
 	LPCSTR pszInstallPrefix = FREERDP_INSTALL_PREFIX;
-	LPCSTR pszExtension = nullptr;
-	LPSTR pszSearchPath = nullptr;
-	size_t cchSearchPath = 0;
-	size_t cchAddinPath = 0;
-	size_t cchInstallPrefix = 0;
-	FREERDP_ADDIN** ppAddins = nullptr;
-	WIN32_FIND_DATAW FindData = WINPR_C_ARRAY_INIT;
-	cchAddinPath = strnlen(pszAddinPath, sizeof(FREERDP_ADDIN_PATH));
-	cchInstallPrefix = strnlen(pszInstallPrefix, sizeof(FREERDP_INSTALL_PREFIX));
-	pszExtension = PathGetSharedLibraryExtensionA(0);
-	cchPattern = 128 + strnlen(pszExtension, MAX_PATH) + 2;
-	pszPattern = (LPSTR)malloc(cchPattern + 1);
+	const size_t cchAddinPath = strnlen(pszAddinPath, sizeof(FREERDP_ADDIN_PATH));
+	const size_t cchInstallPrefix = strnlen(pszInstallPrefix, sizeof(FREERDP_INSTALL_PREFIX));
+	const char* pszExtension = PathGetSharedLibraryExtensionA(0);
+	const size_t cchPattern = 128 + strnlen(pszExtension, MAX_PATH) + 2;
+	char* pszPattern = calloc(cchPattern + 1, sizeof(char));
 
 	if (!pszPattern)
 	{
@@ -210,9 +199,9 @@ static FREERDP_ADDIN** freerdp_channels_list_dynamic_addins(LPCSTR pszName, LPCS
 		                pszExtension);
 	}
 
-	cchPattern = strnlen(pszPattern, cchPattern);
-	cchSearchPath = cchInstallPrefix + cchAddinPath + cchPattern + 3;
-	pszSearchPath = (LPSTR)calloc(cchSearchPath + 1, sizeof(char));
+	const size_t cchPattern2 = strnlen(pszPattern, cchPattern);
+	const size_t cchSearchPath = cchInstallPrefix + cchAddinPath + cchPattern2 + 3;
+	char* pszSearchPath = calloc(cchSearchPath + 1, sizeof(char));
 
 	if (!pszSearchPath)
 	{
@@ -223,21 +212,21 @@ static FREERDP_ADDIN** freerdp_channels_list_dynamic_addins(LPCSTR pszName, LPCS
 
 	CopyMemory(pszSearchPath, pszInstallPrefix, cchInstallPrefix);
 	pszSearchPath[cchInstallPrefix] = '\0';
-	const HRESULT hr1 = NativePathCchAppendA(pszSearchPath, cchSearchPath + 1, pszAddinPath);
-	const HRESULT hr2 = NativePathCchAppendA(pszSearchPath, cchSearchPath + 1, pszPattern);
+
+	char* result = GetCombinedPathV(pszSearchPath, "%s%c%s", pszAddinPath,
+	                                PathGetSeparatorA(PATH_STYLE_NATIVE), pszPattern);
 	free(pszPattern);
-
-	if (FAILED(hr1) || FAILED(hr2))
-	{
-		free(pszSearchPath);
-		return nullptr;
-	}
-
-	hFind = FindFirstFileUTF8(pszSearchPath, &FindData);
-
 	free(pszSearchPath);
-	nAddins = 0;
-	ppAddins = (FREERDP_ADDIN**)calloc(128, sizeof(FREERDP_ADDIN*));
+
+	if (!result)
+		return nullptr;
+
+	WIN32_FIND_DATAW FindData = WINPR_C_ARRAY_INIT;
+	HANDLE hFind = FindFirstFileUTF8(result, &FindData);
+	free(result);
+
+	DWORD nAddins = 0;
+	FREERDP_ADDIN** ppAddins = (FREERDP_ADDIN**)calloc(128, sizeof(FREERDP_ADDIN*));
 
 	if (!ppAddins)
 	{
@@ -525,6 +514,8 @@ typedef struct
 	rdpContext* ctx;
 	LPVOID userdata;
 	MsgHandler msg_handler;
+	BOOL firstFlagReceived;
+	UINT32 totalLength;
 } msg_proc_internals;
 
 static DWORD WINAPI channel_client_thread_proc(LPVOID userdata)
@@ -668,13 +659,18 @@ UINT channel_client_post_message(void* MsgsHandle, LPVOID pData, UINT32 dataLeng
 
 	if (dataFlags & CHANNEL_FLAG_FIRST)
 	{
+		if (internals->firstFlagReceived)
+			return ERROR_INVALID_DATA;
+		internals->firstFlagReceived = TRUE;
+
 		if (internals->data_in)
 		{
-			if (!Stream_EnsureCapacity(internals->data_in, totalLength))
+			if (!Stream_EnsureCapacity(internals->data_in, dataLength))
 				return CHANNEL_RC_NO_MEMORY;
 		}
 		else
-			internals->data_in = Stream_New(nullptr, totalLength);
+			internals->data_in = Stream_New(nullptr, dataLength);
+		internals->totalLength = totalLength;
 	}
 
 	if (!(data_in = internals->data_in))
@@ -692,14 +688,29 @@ UINT channel_client_post_message(void* MsgsHandle, LPVOID pData, UINT32 dataLeng
 
 	Stream_Write(data_in, pData, dataLength);
 
+	if ((Stream_GetPosition(data_in) > totalLength) || (internals->totalLength != totalLength))
+	{
+		Stream_Free(internals->data_in, TRUE);
+		internals->data_in = nullptr;
+		return ERROR_INVALID_DATA;
+	}
+
 	if (dataFlags & CHANNEL_FLAG_LAST)
 	{
-		if (Stream_Capacity(data_in) != Stream_GetPosition(data_in))
+		if (!internals->firstFlagReceived)
+			return ERROR_INVALID_DATA;
+		internals->firstFlagReceived = FALSE;
+
+		if (!data_in)
+			return ERROR_INVALID_DATA;
+
+		if (internals->totalLength != Stream_GetPosition(data_in))
 		{
 			WLog_ERR(TAG, "%s_plugin_process_received: read error", internals->channel_name);
 			return ERROR_INTERNAL_ERROR;
 		}
 
+		internals->totalLength = 0;
 		internals->data_in = nullptr;
 		Stream_SealLength(data_in);
 		Stream_ResetPosition(data_in);

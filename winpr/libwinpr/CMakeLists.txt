@@ -17,6 +17,7 @@
 
 include(CheckFunctionExists)
 include(JsonDetect)
+include(PackageConfigDependencies)
 
 set(WINPR_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(WINPR_SRCS "")
@@ -121,7 +122,9 @@ macro(winpr_library_add_link_directory)
   set(WINPR_LINK_DIRS ${WINPR_LINK_DIRS} PARENT_SCOPE)
 endmacro()
 
-set(CMAKE_REQUIRED_LIBRARIES rt)
+if(NOT OPENBSD)
+  set(CMAKE_REQUIRED_LIBRARIES rt)
+endif()
 
 find_package(uriparser)
 option(WITH_URIPARSER "use uriparser library to handle URIs" ${uriparser_FOUND})
@@ -131,10 +134,8 @@ if(WITH_URIPARSER)
     winpr_library_add_private(uriparser::uriparser)
   else()
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(uriparser REQUIRED liburiparser)
-    winpr_system_include_directory_add(${uriparser_INCLUDEDIR})
-    winpr_system_include_directory_add(${uriparser_INCLUDE_DIRS})
-    winpr_library_add_private(${uriparser_LIBRARIES})
+    pkg_check_modules(uriparser REQUIRED IMPORTED_TARGET GLOBAL liburiparser)
+    winpr_library_add_private(PkgConfig::uriparser)
   endif()
   add_compile_definitions("WITH_URIPARSER")
   winpr_pc_add_requires_private("liburiparser")
@@ -147,7 +148,13 @@ if(NOT IOS)
   check_function_exists(timer_gettime TIMER_GETTIME)
   if(TIMER_CREATE AND TIMER_DELETE AND TIMER_SETTIME AND TIMER_GETTIME)
     add_compile_definitions(WITH_POSIX_TIMER)
-    winpr_library_add_private(rt)
+    if(NOT OPENBSD)
+      winpr_library_add_private(rt)
+    endif()
+  endif()
+  check_function_exists(getexecpath GETEXECPATH)
+  if(GETEXECPATH)
+    add_compile_definitions(WITH_GETEXECPATH)
   endif()
 endif()
 
@@ -172,7 +179,6 @@ set(WINPR_CORE
     security
     environment
     crypto
-    registry
     path
     io
     memory
@@ -187,6 +193,10 @@ set(WINPR_CORE
     handle
     thread
 )
+
+if(NOT WITHOUT_WINPR_3x_DEPRECATED)
+  list(APPEND WINPR_CORE registry)
+endif()
 
 foreach(DIR ${WINPR_CORE})
   add_subdirectory(${DIR})
@@ -203,6 +213,7 @@ set(WINPR_LEVEL2
     wtsapi
     dsparse
     smartcard
+    ndr
     nt
     clipboard
 )
@@ -222,12 +233,24 @@ list(REMOVE_DUPLICATES WINPR_SYSTEM_INCLUDES)
 
 addtargetwithresourcefile(${MODULE_NAME} FALSE "${WINPR_VERSION}" WINPR_SRCS)
 
+# pipe2()/accept4() are only declared by glibc under _GNU_SOURCE (see the WINPR_HAVE_PIPE2/
+# WINPR_HAVE_ACCEPT4 detection in the top-level winpr/CMakeLists.txt, which probes for them with
+# _GNU_SOURCE forced on). Scope the define to exactly the files that call them instead of
+# enabling GNU extension visibility for the whole winpr target.
+if(WINPR_HAVE_PIPE2 OR WINPR_HAVE_ACCEPT4)
+  set_source_files_properties(pipe/pipe.c PROPERTIES COMPILE_DEFINITIONS _GNU_SOURCE)
+endif()
+if(WINPR_HAVE_PIPE2)
+  set_source_files_properties(synch/semaphore.c PROPERTIES COMPILE_DEFINITIONS _GNU_SOURCE)
+endif()
+
 if(WITH_RESOURCE_VERSIONING)
   target_compile_definitions(${MODULE_NAME} PRIVATE WITH_RESOURCE_VERSIONING)
 endif()
 if(WINPR_USE_VENDOR_PRODUCT_CONFIG_DIR)
   target_compile_definitions(${MODULE_NAME} PRIVATE WINPR_USE_VENDOR_PRODUCT_CONFIG_DIR)
 endif()
+target_compile_definitions(${MODULE_NAME} PRIVATE WINPR_THREAD_DEFAULT_STACK_SIZE=${WINPR_THREAD_DEFAULT_STACK_SIZE})
 
 if(APPLE)
   set_target_properties(${MODULE_NAME} PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
@@ -247,6 +270,9 @@ target_compile_options(${MODULE_NAME} PRIVATE ${WINPR_COMPILE_OPTIONS})
 target_compile_definitions(${MODULE_NAME} PRIVATE ${WINPR_DEFINITIONS})
 
 target_link_libraries(${MODULE_NAME} PRIVATE ${WINPR_LIBS_PRIVATE} PUBLIC ${WINPR_LIBS_PUBLIC})
+# here, where the imported targets winpr links are visible; WinPRConfig.cmake is made one level up
+package_config_dependencies(${MODULE_NAME} WINPR_CMAKE_FIND_DEPENDENCIES)
+set(WINPR_CMAKE_FIND_DEPENDENCIES "${WINPR_CMAKE_FIND_DEPENDENCIES}" PARENT_SCOPE)
 installwithrpath(
   TARGETS
   ${MODULE_NAME}

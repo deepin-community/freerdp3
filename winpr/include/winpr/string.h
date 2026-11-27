@@ -21,6 +21,7 @@
 #ifndef WINPR_CRT_STRING_H
 #define WINPR_CRT_STRING_H
 
+#include <stdarg.h>
 #include <wchar.h>
 #include <stdio.h>
 #include <string.h>
@@ -37,8 +38,68 @@ extern "C"
 {
 #endif
 
+	/** @brief implementation of strnstr for all platforms
+	 *
+	 * @param haystack the string to search in
+	 * @param needle the string to search for, must not be \b nullptr
+	 * @param hlen the string length of haystack
+	 *
+	 * @return A pointer into \ref haystack if found, nullptr otherwise
+	 *
+	 * @since version 3.28.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API char* winpr_strnstr(const char* haystack, const char* needle, size_t hlen);
+
 	WINPR_API WINPR_ATTR_MALLOC(free, 1) char* winpr_str_url_encode(const char* str, size_t len);
 	WINPR_API WINPR_ATTR_MALLOC(free, 1) char* winpr_str_url_decode(const char* str, size_t len);
+
+	/** @brief checks if a string is a valid URL
+	 *
+	 *  @param str The string to check
+	 *  @return \b TRUE if valid, \b FALSE otherwise
+	 *  @since version 3.29.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL winpr_str_is_valid_url(const char* str);
+
+	/** @brief checks if a string is a valid URL
+	 *
+	 *  @param str The string to check
+	 *  @param len The length of the string in bytes
+	 *  @return \b TRUE if valid, \b FALSE otherwise
+	 *  @since version 3.29.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL winpr_str_is_valid_urlN(const char* str, size_t len);
+
+	/** @brief checks if a string is a valid FQDN/hostname
+	 *
+	 *  @param str The string to check
+	 *  @return \b TRUE if valid, \b FALSE otherwise
+	 *  @since version 3.33.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL winpr_str_is_valid_hostname(const char* str);
+
+	/** @brief checks if a string is a valid FQDN/hostname
+	 *
+	 *  @param str The string to check
+	 *  @param len The length of the string in bytes
+	 *  @return \b TRUE if valid, \b FALSE otherwise
+	 *  @since version 3.33.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL winpr_str_is_valid_hostnameN(const char* str, size_t len);
+
+	/** @brief checks if a string contains newlines
+	 *
+	 *  @param str The string to check
+	 *  @return \b TRUE if it has newlines, \b FALSE otherwise
+	 *  @since version 3.29.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL winpr_str_has_newlines(const char* str);
 
 	WINPR_API BOOL winpr_str_append(const char* what, char* buffer, size_t size,
 	                                const char* separator);
@@ -93,11 +154,13 @@ extern "C"
 	WINPR_ATTR_NODISCARD
 	WINPR_API WCHAR* _wcsstr(const WCHAR* str, const WCHAR* strSearch);
 
-	WINPR_ATTR_NODISCARD
-	WINPR_API WCHAR* _wcschr(const WCHAR* str, WCHAR c);
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
+	WINPR_DEPRECATED_VAR("[since 3.32.0] use winpr_wcsnchr instead",
+	                     WINPR_ATTR_NODISCARD WINPR_API WCHAR* _wcschr(const WCHAR* str, WCHAR c));
 
-	WINPR_ATTR_NODISCARD
-	WINPR_API WCHAR* _wcsrchr(const WCHAR* str, WCHAR c);
+	WINPR_DEPRECATED_VAR("[since 3.32.0] use winpr_wcsnrchr instead",
+	                     WINPR_ATTR_NODISCARD WINPR_API WCHAR* _wcsrchr(const WCHAR* str, WCHAR c));
+#endif
 
 	WINPR_ATTR_NODISCARD
 	WINPR_API char* strtok_s(char* strToken, const char* strDelimit, char** context);
@@ -119,6 +182,28 @@ extern "C"
 #define _wcsncat wcsncat
 
 #endif /* _WIN32 */
+
+	/**! @brief _wcschr for non '\0' terminated strings
+	 *
+	 * @param str The string to search in (UTF-16LE)
+	 * @param charLen The length of the string in characters
+	 * @param c The character to search for (UTF-16LE)
+	 * @return A pointer to the first location found or NULL
+	 * @since version 3.32.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API WCHAR* winpr_wcsnchr(const WCHAR* str, size_t charLen, WCHAR c);
+
+	/**! @brief _wcrschr for non '\0' terminated strings
+	 *
+	 * @param str The string to search in (UTF-16LE)
+	 * @param charLen The length of the string in characters
+	 * @param c The character to search for (UTF-16LE)
+	 * @return A pointer to the first location found or NULL
+	 * @since version 3.32.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API WCHAR* winpr_wcsnrchr(const WCHAR* str, size_t charLen, WCHAR c);
 
 #if !defined(_WIN32) || defined(_UWP)
 
@@ -234,7 +319,8 @@ extern "C"
 	 *
 	 * The function does string conversions of any '\0' terminated input string
 	 *
-	 * Supplying len = 0 will return the required size of the buffer in characters.
+	 * Supplying len = 0 will return the required size of the buffer in characters excluding the
+	 * terminating '\0'.
 	 *
 	 * \warning Supplying a buffer length smaller than required will result in
 	 * platform dependent (=undefined) behaviour!
@@ -252,7 +338,8 @@ extern "C"
 	 * The function does string conversions of any input string of wlen (or less)
 	 * characters until it reaches the first '\0'.
 	 *
-	 * Supplying len = 0 will return the required size of the buffer in characters.
+	 * Supplying len = 0 will return the required size of the buffer in characters excluding the
+	 * terminating '\0'.
 	 *
 	 * \warning Supplying a buffer length smaller than required will result in
 	 * platform dependent (=undefined) behaviour!
@@ -271,7 +358,8 @@ extern "C"
 	 * The function does string conversions of any input string of wlen characters.
 	 * Any character in the buffer (including any '\0') is converted.
 	 *
-	 * Supplying len = 0 will return the required size of the buffer in characters.
+	 * Supplying len = 0 will return the required size of the buffer in characters excluding the
+	 * terminating '\0'.
 	 *
 	 * \warning Supplying a buffer length smaller than required will result in
 	 * platform dependent (=undefined) behaviour!
@@ -290,7 +378,8 @@ extern "C"
 	 *
 	 * The function does string conversions of any '\0' terminated input string
 	 *
-	 * Supplying wlen = 0 will return the required size of the buffer in characters.
+	 * Supplying wlen = 0 will return the required size of the buffer in characters excluding the
+	 * terminating '\0'.
 	 *
 	 * \warning Supplying a buffer length smaller than required will result in
 	 * platform dependent (=undefined) behaviour!
@@ -308,7 +397,8 @@ extern "C"
 	 * The function does string conversions of any input string of len (or less)
 	 * characters until it reaches the first '\0'.
 	 *
-	 * Supplying wlen = 0 will return the required size of the buffer in characters.
+	 * Supplying wlen = 0 will return the required size of the buffer in characters excluding the
+	 * terminating '\0'.
 	 *
 	 * \warning Supplying a buffer length smaller than required will result in
 	 * platform dependent (=undefined) behaviour!
@@ -327,7 +417,8 @@ extern "C"
 	 * The function does string conversions of any input string of len characters.
 	 * Any character in the buffer (including any '\0') is converted.
 	 *
-	 * Supplying wlen = 0 will return the required size of the buffer in characters.
+	 * Supplying wlen = 0 will return the required size of the buffer in characters excluding the
+	 * terminating '\0'.
 	 *
 	 * \warning Supplying a buffer length smaller than required will result in
 	 * platform dependent (=undefined) behaviour!

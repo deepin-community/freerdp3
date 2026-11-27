@@ -19,7 +19,7 @@ define_channel_client("audin")
 
 set(${MODULE_PREFIX}_SRCS audin_main.c audin_main.h)
 
-set(${MODULE_PREFIX}_LIBS freerdp winpr)
+set(${MODULE_PREFIX}_LIBS freerdp)
 
 include_directories(..)
 
@@ -35,6 +35,10 @@ endif()
 
 if(WITH_PULSE)
   add_channel_client_subsystem(${MODULE_PREFIX} ${CHANNEL_NAME} "pulse" "")
+endif()
+
+if(WITH_AAUDIO)
+  add_channel_client_subsystem(${MODULE_PREFIX} ${CHANNEL_NAME} "aaudio" "")
 endif()
 
 if(WITH_OPENSLES)
@@ -55,4 +59,8 @@ endif()
 
 if(WITH_IOSAUDIO)
   add_channel_client_subsystem(${MODULE_PREFIX} ${CHANNEL_NAME} "ios" "")
+endif()
+
+if(EMSCRIPTEN)
+  add_channel_client_subsystem(${MODULE_PREFIX} ${CHANNEL_NAME} "emscripten" "")
 endif()

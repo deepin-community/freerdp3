@@ -1,16 +1,17 @@
 #!/bin/sh -x
 isNaturalNumber(){
     case "$1" in
-        ''|*[!0-9]*) return 0;;
-        *) return 1;;
+        ''|*[!0-9]*) return 1;;
+        *) return 0;;
     esac
 }
 
-sudo systemctl start xrdp
+sudo adduser xrdp ssl-cert
+sudo systemctl restart xrdp
 # XXX: Is there a better way to get the port number other than by parsing the
 # configuration file?
 port=$(sed -n '/^port=[0123456789]/{s/port=//p;q;}' /etc/xrdp/xrdp.ini)
-if test ! isNaturalNumber "$port"; then
+if ! isNaturalNumber "$port"; then
     exit 1
 fi
 

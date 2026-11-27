@@ -41,6 +41,15 @@
 
 #include <limits.h>
 
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 202311L)
+#define WINPR_C23_ENUM_TYPE(x) : x /** 
+                               * @brief For C23 and up defines the type of the enum to the enclosed integer type
+                               * @since version 3.27.0
+*/
+#else
+#define WINPR_C23_ENUM_TYPE(x)
+#endif
+
 #if defined(_WIN32) || defined(__MINGW32__)
 #include <wtypes.h>
 
@@ -95,7 +104,7 @@ typedef int32_t BOOL;
 #include <TargetConditionals.h>
 
 /* ensure compatibility with objc libraries */
-#if OBJC_BOOL_IS_BOOL
+#if defined(OBJC_BOOL_IS_BOOL) && (OBJC_BOOL_IS_CHAR != 0)
 typedef bool BOOL;
 #else
 #define OBJC_BOOL_IS_CHAR 1

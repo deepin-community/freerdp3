@@ -123,7 +123,7 @@ WINPR_ATTR_NODISCARD
 FREERDP_LOCAL BOOL transport_accept_tls(rdpTransport* transport);
 
 WINPR_ATTR_NODISCARD
-FREERDP_LOCAL BOOL transport_accept_nla(rdpTransport* transport);
+FREERDP_LOCAL BOOL transport_accept_nla(rdpTransport* transport, BOOL ext);
 
 WINPR_ATTR_NODISCARD
 FREERDP_LOCAL BOOL transport_accept_rdstls(rdpTransport* transport);
@@ -137,6 +137,11 @@ FREERDP_LOCAL int transport_write(rdpTransport* transport, wStream* s);
 WINPR_ATTR_NODISCARD
 FREERDP_LOCAL BOOL transport_get_public_key(rdpTransport* transport, const BYTE** data,
                                             DWORD* length);
+
+/** The address of the server when the main connection runs directly over TCP. */
+WINPR_ATTR_NODISCARD
+FREERDP_LOCAL BOOL transport_get_peer_address(rdpTransport* transport,
+                                              struct sockaddr_storage* address, size_t* length);
 
 #if defined(WITH_FREERDP_DEPRECATED)
 FREERDP_LOCAL void transport_get_fds(rdpTransport* transport, void** rfds, int* rcount);

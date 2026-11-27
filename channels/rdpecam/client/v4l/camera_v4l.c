@@ -289,6 +289,61 @@ error:
 	return (INT16)formatIndex;
 }
 
+static bool cam_v4l_formats_supported(int fd, const struct v4l2_capability* cap, const char* device)
+{
+	WINPR_ASSERT(cap);
+	WINPR_ASSERT(device);
+	if (fd < 0)
+		return false;
+
+	struct v4l2_fmtdesc fmtdesc = WINPR_C_ARRAY_INIT;
+	fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+	size_t flen = 0;
+	char* formats = nullptr;
+	bool supported = false;
+	for (fmtdesc.index = 0; ioctl(fd, VIDIOC_ENUM_FMT, &fmtdesc) == 0; fmtdesc.index++)
+	{
+		char fmt[32] = WINPR_C_ARRAY_INIT;
+		memcpy(fmt, &fmtdesc.pixelformat, sizeof(fmtdesc.pixelformat));
+		if (formats)
+		{
+			char* tmp = nullptr;
+			size_t tlen = 0;
+			winpr_asprintf(&tmp, &tlen, "%s, %s [%s]", formats, fmtdesc.description, fmt);
+			free(formats);
+			formats = tmp;
+			flen = tlen;
+		}
+		else
+			winpr_asprintf(&formats, &flen, "%s [%s]", fmtdesc.description, fmt);
+
+		switch (fmtdesc.pixelformat)
+		{
+			case V4L2_PIX_FMT_H264:
+			case V4L2_PIX_FMT_MJPEG:
+			case V4L2_PIX_FMT_YUYV:
+			case V4L2_PIX_FMT_NV12:
+			case V4L2_PIX_FMT_YUV420:
+			case V4L2_PIX_FMT_RGB24:
+			case V4L2_PIX_FMT_RGB32:
+				supported = true;
+				break;
+			default:
+				break;
+		}
+	}
+
+	if (supported)
+		WLog_DBG(TAG, "Device %s (%s) selected, formats supported: {%s}", cap->card, device,
+		         formats);
+	else
+		WLog_DBG(TAG, "Device %s (%s) filtered, no formats supported: {%s}", cap->card, device,
+		         formats);
+	free(formats);
+	return supported;
+}
+
 /**
  * Function description
  *
@@ -309,7 +364,8 @@ static UINT cam_v4l_enumerate(WINPR_ATTR_UNUSED ICamHal* ihal, ICamHalEnumCallba
 			continue;
 
 		/* query device capabilities and make sure this is a video capture device */
-		if (ioctl(fd, VIDIOC_QUERYCAP, &cap) < 0 || !(cap.device_caps & V4L2_CAP_VIDEO_CAPTURE))
+		if (ioctl(fd, VIDIOC_QUERYCAP, &cap) < 0 || !(cap.device_caps & V4L2_CAP_VIDEO_CAPTURE) ||
+		    !cam_v4l_formats_supported(fd, &cap, device))
 		{
 			close(fd);
 			continue;
@@ -435,7 +491,9 @@ static DWORD WINAPI cam_v4l_stream_capture_thread(LPVOID param)
 	WINPR_ASSERT(stream);
 
 	int fd = stream->fd;
+	BOOL releaseDevice = FALSE;
 
+	BOOL streaming = TRUE;
 	do
 	{
 		int retVal = 0;
@@ -467,20 +525,29 @@ static DWORD WINAPI cam_v4l_stream_capture_thread(LPVOID param)
 		}
 
 		EnterCriticalSection(&stream->lock);
-		if (stream->streaming)
+		streaming = stream->streaming;
+		if (streaming)
 		{
 			struct v4l2_buffer buf = WINPR_C_ARRAY_INIT;
 			buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 			buf.memory = V4L2_MEMORY_MMAP;
 
 			/* dequeue buffers until empty, or until we are asked to stop */
-			while (stream->streaming && ioctl(fd, VIDIOC_DQBUF, &buf) != -1)
+			while (streaming && ioctl(fd, VIDIOC_DQBUF, &buf) != -1)
 			{
 				const UINT error =
 				    stream->sampleCallback(stream->dev, stream->streamIndex,
 				                           stream->buffers[buf.index].start, buf.bytesused);
-				if (error != CHANNEL_RC_OK)
+				if (error == ECAM_SAMPLE_CAPTURE_DRAINED)
+				{
+					streaming = stream->streaming = FALSE;
+					releaseDevice = TRUE;
+					break;
+				}
+				else if (error != CHANNEL_RC_OK)
+				{
 					WLog_ERR(TAG, "Failure in sampleCallback: %" PRIu32, error);
+				}
 
 				/* enqueue buffer back */
 				if (ioctl(fd, VIDIOC_QBUF, &buf) == -1)
@@ -493,7 +560,21 @@ static DWORD WINAPI cam_v4l_stream_capture_thread(LPVOID param)
 		}
 		LeaveCriticalSection(&stream->lock);
 
-	} while (stream->streaming);
+	} while (streaming);
+
+	if (releaseDevice)
+	{
+		enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		if (ioctl(stream->fd, VIDIOC_STREAMOFF, &type) < 0)
+		{
+			char buffer[64] = WINPR_C_ARRAY_INIT;
+			WLog_ERR(TAG, "Failure in VIDIOC_STREAMOFF, errno %s [%d]",
+			         winpr_strerror(errno, buffer, sizeof(buffer)), errno);
+		}
+
+		cam_v4l_stream_free_buffers(stream);
+		cam_v4l_stream_close_device(stream);
+	}
 
 	return CHANNEL_RC_OK;
 }
@@ -543,10 +624,12 @@ CamV4lStream* cam_v4l_stream_create(const char* deviceId, size_t streamIndex)
  */
 CAM_ERROR_CODE cam_v4l_stream_stop(CamV4lStream* stream)
 {
-	if (!stream || !stream->streaming)
+	if (!stream)
 		return CAM_ERROR_CODE_None;
 
+	EnterCriticalSection(&stream->lock);
 	stream->streaming = FALSE; /* this will terminate capture thread */
+	LeaveCriticalSection(&stream->lock);
 
 	if (stream->captureThread)
 	{
@@ -558,12 +641,15 @@ CAM_ERROR_CODE cam_v4l_stream_stop(CamV4lStream* stream)
 	EnterCriticalSection(&stream->lock);
 
 	/* stop streaming */
-	enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(stream->fd, VIDIOC_STREAMOFF, &type) < 0)
+	if (stream->fd != -1)
 	{
-		char buffer[64] = WINPR_C_ARRAY_INIT;
-		WLog_ERR(TAG, "Failure in VIDIOC_STREAMOFF, errno %s [%d]",
-		         winpr_strerror(errno, buffer, sizeof(buffer)), errno);
+		enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		if (ioctl(stream->fd, VIDIOC_STREAMOFF, &type) < 0)
+		{
+			char buffer[64] = WINPR_C_ARRAY_INIT;
+			WLog_ERR(TAG, "Failure in VIDIOC_STREAMOFF, errno %s [%d]",
+			         winpr_strerror(errno, buffer, sizeof(buffer)), errno);
+		}
 	}
 
 	cam_v4l_stream_free_buffers(stream);
@@ -590,11 +676,22 @@ static CAM_ERROR_CODE cam_v4l_stream_start(ICamHal* ihal, CameraDevice* dev, siz
 		return CAM_ERROR_CODE_UnexpectedError;
 	}
 
-	if (stream->streaming)
+	EnterCriticalSection(&stream->lock);
+	const BOOL streaming = stream->streaming;
+	LeaveCriticalSection(&stream->lock);
+
+	if (streaming)
 	{
 		WLog_ERR(TAG, "Streaming already in progress, device %s, streamIndex %" PRIuz,
 		         dev->deviceId, streamIndex);
 		return CAM_ERROR_CODE_UnexpectedError;
+	}
+
+	if (stream->captureThread)
+	{
+		(void)WaitForSingleObject(stream->captureThread, INFINITE);
+		(void)CloseHandle(stream->captureThread);
+		stream->captureThread = nullptr;
 	}
 
 	stream->dev = dev;
@@ -664,7 +761,9 @@ static CAM_ERROR_CODE cam_v4l_stream_start(ICamHal* ihal, CameraDevice* dev, siz
 		return CAM_ERROR_CODE_OutOfMemory;
 	}
 
+	EnterCriticalSection(&stream->lock);
 	stream->streaming = TRUE;
+	LeaveCriticalSection(&stream->lock);
 
 	/* start streaming */
 	enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -768,6 +867,7 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE v4l_freerdp_rdpecam_client_subsystem_entry(
 		return CHANNEL_RC_NO_MEMORY;
 
 	hal->iHal.Enumerate = cam_v4l_enumerate;
+	hal->iHal.RequestDrivenCapture = TRUE;
 	hal->iHal.GetMediaTypeDescriptions = cam_v4l_get_media_type_descriptions;
 	hal->iHal.Activate = cam_v4l_activate;
 	hal->iHal.Deactivate = cam_v4l_deactivate;

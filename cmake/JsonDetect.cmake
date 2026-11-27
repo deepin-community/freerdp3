@@ -3,7 +3,7 @@ function(detect_package name)
   set(oneValueArgs HEADER LIBRARY PKGCONFIG CMAKE VERSION VERSION_STR)
   cmake_parse_arguments(PARSE_ARGV 0 arg "${options}" "${oneValueArgs}" "${multiValueArgs}")
 
-  find_package(${name} ${arg_VERSION})
+  find_package(${name} ${arg_VERSION} QUIET)
   if(NOT ${name}_FOUND)
     # Fallback detection:
     # some distributions only ship pkg-config and skip CMake config files.
@@ -64,7 +64,7 @@ function(detect_package name)
 
     if(${name}_FOUND)
       # Create imported target cjson
-      add_library(${arg_CMAKE} SHARED IMPORTED)
+      add_library(${arg_CMAKE} UNKNOWN IMPORTED)
       set_property(TARGET ${arg_CMAKE} APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)
       set_target_properties(
         ${arg_CMAKE}

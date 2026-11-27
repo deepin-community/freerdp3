@@ -158,11 +158,12 @@ void gdi_video_data_uninit(WINPR_ATTR_UNUSED rdpGdi* gdi,
 
 VideoSurface* VideoClient_CreateCommonContext(size_t size, UINT32 x, UINT32 y, UINT32 w, UINT32 h)
 {
-	VideoSurface* ret = nullptr;
+	if ((w == 0) || (h == 0))
+		return nullptr;
 
 	WINPR_ASSERT(size >= sizeof(VideoSurface));
 
-	ret = calloc(1, size);
+	VideoSurface* ret = calloc(1, size);
 	if (!ret)
 		return nullptr;
 
@@ -175,7 +176,7 @@ VideoSurface* VideoClient_CreateCommonContext(size_t size, UINT32 x, UINT32 y, U
 	ret->alignedHeight = ret->h + 32 - ret->h % 16;
 
 	ret->scanline = ret->alignedWidth * FreeRDPGetBytesPerPixel(ret->format);
-	ret->data = winpr_aligned_malloc(1ull * ret->scanline * ret->alignedHeight, 64);
+	ret->data = winpr_aligned_calloc(ret->scanline, ret->alignedHeight, 64);
 	if (!ret->data)
 		goto fail;
 	return ret;

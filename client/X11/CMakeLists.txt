@@ -61,6 +61,8 @@ set(SRCS
     xf_channels.h
     xf_cliprdr.c
     xf_cliprdr.h
+    xf_reconnect.c
+    xf_reconnect.h
     xf_monitor.c
     xf_monitor.h
     xf_disp.c
@@ -79,6 +81,8 @@ set(SRCS
     xf_window.h
     xf_client.c
     xf_client.h
+    xf_cmdline.c
+    xf_cmdline.h
 )
 
 if(CHANNEL_TSMF_CLIENT)
@@ -183,15 +187,25 @@ endif()
 list(APPEND PUB_LIBS freerdp-client)
 
 list(APPEND PRIV_LIBS m)
-if(NOT APPLE)
+if(NOT APPLE AND NOT OPENBSD)
   list(APPEND PRIV_LIBS rt)
 endif()
 target_link_libraries(${PROJECT_NAME} PUBLIC ${PUB_LIBS})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PRIV_LIBS})
 
+option(WITH_X11_MULTITOUCH_EMULATION "[experimental] Emulate multitouch events with keypboard" OFF)
+if(WITH_X11_MULTITOUCH_EMULATION)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE WITH_X11_MULTITOUCH_EMULATION)
+endif()
+
 if(WITH_CLIENT_INTERFACE)
   installwithrpath(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libraries)
 endif()
+# the tests use internals of the client, exported only with EXPORT_ALL_SYMBOLS
+if(BUILD_TESTING_INTERNAL)
+  add_subdirectory(test)
+endif()
+
 add_subdirectory(cli)
 add_subdirectory(man)
 

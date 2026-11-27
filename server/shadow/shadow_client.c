@@ -35,8 +35,11 @@
 #include <freerdp/channels/drdynvc.h>
 
 #include "shadow.h"
+#include "shadow_rfx_dirty.h"
 
 #define TAG CLIENT_TAG("shadow")
+
+#define SHADOW_CLIENT_MAX_INVALID_RECTS 256
 
 typedef struct
 {
@@ -356,6 +359,35 @@ fail:
 	return FALSE;
 }
 
+/**
+ * Function description
+ * Union a rectangle into the client invalid region. client->lock must be held.
+ *
+ * region16_union_rect copies the whole region on every call, so its cost grows
+ * with the number of rectangles already in it. The rectangles come from the
+ * peer (Refresh Rect, Suppress Output) and pile up while the peer receives no
+ * graphics updates, so limit their number: the invalid region only tells what
+ * has to be sent again, replacing a too fragmented one by its extents is safe.
+ *
+ * @return TRUE on success
+ */
+WINPR_ATTR_NODISCARD
+static BOOL shadow_client_invalidate_rect(rdpShadowClient* client, const RECTANGLE_16* rect)
+{
+	WINPR_ASSERT(client);
+
+	REGION16* region = &(client->invalidRegion);
+	if (!region16_union_rect(region, region, rect))
+		return FALSE;
+
+	if (region16_n_rects(region) <= SHADOW_CLIENT_MAX_INVALID_RECTS)
+		return TRUE;
+
+	const RECTANGLE_16 extents = *region16_extents(region);
+	region16_clear(region);
+	return region16_union_rect(region, region, &extents);
+}
+
 static inline void shadow_client_mark_invalid(rdpShadowClient* client, UINT32 numRects,
                                               const RECTANGLE_16* rects)
 {
@@ -372,8 +404,7 @@ static inline void shadow_client_mark_invalid(rdpShadowClient* client, UINT32 nu
 	{
 		for (UINT32 index = 0; index < numRects; index++)
 		{
-			if (!region16_union_rect(&(client->invalidRegion), &(client->invalidRegion),
-			                         &rects[index]))
+			if (!shadow_client_invalidate_rect(client, &rects[index]))
 				goto fail;
 		}
 	}
@@ -384,7 +415,7 @@ static inline void shadow_client_mark_invalid(rdpShadowClient* client, UINT32 nu
 		WINPR_ASSERT(freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight) <= UINT16_MAX);
 		screenRegion.right = (UINT16)freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
 		screenRegion.bottom = (UINT16)freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
-		if (!region16_union_rect(&(client->invalidRegion), &(client->invalidRegion), &screenRegion))
+		if (!shadow_client_invalidate_rect(client, &screenRegion))
 			goto fail;
 	}
 fail:
@@ -581,7 +612,8 @@ static BOOL shadow_client_post_connect(freerdp_peer* peer)
 			return FALSE;
 	}
 
-	if (server->authentication && !freerdp_settings_get_bool(settings, FreeRDP_NlaSecurity))
+	if (server->authentication && !(freerdp_settings_get_bool(settings, FreeRDP_NlaSecurity) ||
+	                                freerdp_settings_get_bool(settings, FreeRDP_ExtSecurity)))
 	{
 		if (subsystem->Authenticate)
 		{
@@ -591,6 +623,12 @@ static BOOL shadow_client_post_connect(freerdp_peer* peer)
 		if (authStatus < 0)
 		{
 			WLog_ERR(TAG, "client authentication failure: %d", authStatus);
+			/* Say why before the connection goes, or the client takes it for a network
+			 * failure and keeps reconnecting with the same wrong password. */
+			freerdp_set_error_info(peer->context->rdp, ERRINFO_SERVER_INSUFFICIENT_PRIVILEGES);
+			WINPR_ASSERT(peer->Close);
+			if (!peer->Close(peer))
+				WLog_WARN(TAG, "failed to send the disconnect sequence to the client");
 			return FALSE;
 		}
 	}
@@ -825,6 +863,8 @@ static inline void shadow_client_common_frame_acknowledge(rdpShadowClient* clien
 	WINPR_ASSERT(client);
 	WINPR_ASSERT(client->encoder);
 	client->encoder->lastAckframeId = frameId;
+	client->encoder->lastAckTick = GetTickCount64();
+	client->encoder->everAcked = TRUE;
 }
 
 WINPR_ATTR_NODISCARD
@@ -867,10 +907,24 @@ static BOOL shadow_are_caps_filtered(const rdpSettings* settings, UINT32 caps)
 #if defined(WITH_GFX_AV1)
 		RDPGFX_CAPVERSION_FRDP_1,
 #endif
-		RDPGFX_CAPVERSION_8,       RDPGFX_CAPVERSION_81,  RDPGFX_CAPVERSION_10,
-		RDPGFX_CAPVERSION_101,     RDPGFX_CAPVERSION_102, RDPGFX_CAPVERSION_103,
-		RDPGFX_CAPVERSION_104,     RDPGFX_CAPVERSION_105, RDPGFX_CAPVERSION_106,
-		RDPGFX_CAPVERSION_106_ERR, RDPGFX_CAPVERSION_107
+		RDPGFX_CAPVERSION_8,
+		RDPGFX_CAPVERSION_81,
+		RDPGFX_CAPVERSION_10,
+		RDPGFX_CAPVERSION_101,
+		RDPGFX_CAPVERSION_102,
+		RDPGFX_CAPVERSION_103,
+		RDPGFX_CAPVERSION_104,
+		RDPGFX_CAPVERSION_105,
+		RDPGFX_CAPVERSION_106,
+		RDPGFX_CAPVERSION_106_ERR,
+		RDPGFX_CAPVERSION_107
+#if defined(WITH_GFX_AZURE)
+		,
+		RDPGFX_CAPVERSION_111,
+		RDPGFX_CAPVERSION_112,
+		RDPGFX_CAPVERSION_113,
+		RDPGFX_CAPVERSION_115
+#endif
 	};
 
 	WINPR_ASSERT(settings);
@@ -883,6 +937,18 @@ static BOOL shadow_are_caps_filtered(const rdpSettings* settings, UINT32 caps)
 	}
 
 	return TRUE;
+}
+
+/* The 8.1 capability set turns AVC420 on with a flag; from 10.0 on AVC420 is part of the set
+ * unless the AVC codecs are disabled (the 8.1 flag is not defined there, so a 10.x client never
+ * sets it). */
+WINPR_ATTR_NODISCARD
+static BOOL shadow_client_caps_allow_avc420(const RDPGFX_CAPSET* caps)
+{
+	WINPR_ASSERT(caps);
+	if (caps->version == RDPGFX_CAPVERSION_81)
+		return (caps->flags & RDPGFX_CAPS_FLAG_AVC420_ENABLED) != 0;
+	return (caps->flags & RDPGFX_CAPS_FLAG_AVC_DISABLED) == 0;
 }
 
 WINPR_ATTR_NODISCARD
@@ -920,9 +986,11 @@ static UINT shadow_client_send_caps_confirm(RdpgfxServerContext* context, rdpSha
 		                                                               FREERDP_CODEC_AVC444) >= 0);
 		if (h264)
 		{
+			/* the server's own setting (-gfx-avc420) still counts */
 			if (!freerdp_settings_set_bool(
 			        clientSettings, FreeRDP_GfxH264,
-			        (pdu->capsSet->flags & RDPGFX_CAPS_FLAG_AVC420_ENABLED) != 0))
+			        shadow_client_caps_allow_avc420(pdu->capsSet) &&
+			            freerdp_settings_get_bool(clientSettings, FreeRDP_GfxH264)))
 				return rc;
 		}
 		else
@@ -1091,6 +1159,10 @@ static UINT shadow_client_rdpgfx_caps_advertise(RdpgfxServerContext* context,
 #if defined(WITH_GFX_AV1)
 		RDPGFX_CAPVERSION_FRDP_1,
 #endif
+#if defined(WITH_GFX_AZURE)
+		RDPGFX_CAPVERSION_115,    RDPGFX_CAPVERSION_113, RDPGFX_CAPVERSION_112,
+		RDPGFX_CAPVERSION_111,
+#endif
 		RDPGFX_CAPVERSION_107,    RDPGFX_CAPVERSION_106, RDPGFX_CAPVERSION_106_ERR,
 		RDPGFX_CAPVERSION_105,    RDPGFX_CAPVERSION_104, RDPGFX_CAPVERSION_103,
 		RDPGFX_CAPVERSION_102,    RDPGFX_CAPVERSION_101, RDPGFX_CAPVERSION_10,
@@ -1221,9 +1293,17 @@ static inline UINT32 rdpgfx_estimate_h264_avc420(RDPGFX_AVC420_BITMAP_STREAM* ha
 
 #if defined(WITH_GFX_AV1)
 WINPR_ATTR_NODISCARD
+static BOOL shadow_client_av1_enabled(const rdpShadowClient* client)
+{
+	WINPR_ASSERT(client);
+	return freerdp_settings_get_bool(client->context.settings, FreeRDP_GfxCodecAV1) &&
+	       (client->confirmedCaps.version == RDPGFX_CAPVERSION_FRDP_1);
+}
+
+WINPR_ATTR_NODISCARD
 static BOOL shadow_client_send_av1(rdpShadowClient* client, const BYTE* pSrcData, UINT32 nSrcStep,
                                    UINT32 SrcFormat, UINT16 nWidth, UINT16 nHeight,
-                                   RDPGFX_SURFACE_COMMAND* cmd,
+                                   const RECTANGLE_16* damage, RDPGFX_SURFACE_COMMAND* cmd,
                                    const RDPGFX_START_FRAME_PDU* cmdstart,
                                    const RDPGFX_END_FRAME_PDU* cmdend)
 {
@@ -1235,7 +1315,6 @@ static BOOL shadow_client_send_av1(rdpShadowClient* client, const BYTE* pSrcData
 	UINT error = CHANNEL_RC_OK;
 	INT32 rc = 0;
 	RDPGFX_AVC420_BITMAP_STREAM avc420 = WINPR_C_ARRAY_INIT;
-	RECTANGLE_16 regionRect = WINPR_C_ARRAY_INIT;
 
 	UINT32 flags = FREERDP_CODEC_AV1_I444;
 	if ((client->confirmedCaps.flags & RDPGFX_CAPS_FLAG_AV1_I444_DISABLED) != 0)
@@ -1247,16 +1326,10 @@ static BOOL shadow_client_send_av1(rdpShadowClient* client, const BYTE* pSrcData
 		return FALSE;
 	}
 
-	WINPR_ASSERT(cmd->left <= UINT16_MAX);
-	WINPR_ASSERT(cmd->top <= UINT16_MAX);
-	WINPR_ASSERT(cmd->right <= UINT16_MAX);
-	WINPR_ASSERT(cmd->bottom <= UINT16_MAX);
-	regionRect.left = (UINT16)cmd->left;
-	regionRect.top = (UINT16)cmd->top;
-	regionRect.right = (UINT16)cmd->right;
-	regionRect.bottom = (UINT16)cmd->bottom;
-	rc = freerdp_av1_compress(encoder->av1, pSrcData, SrcFormat, nSrcStep, nWidth, nHeight,
-	                          &regionRect, &avc420.data, &avc420.length, &avc420.meta);
+	/* The whole surface is encoded, but only the damaged part needs converting to YUV. */
+	WINPR_ASSERT(damage);
+	rc = freerdp_av1_compress(encoder->av1, pSrcData, SrcFormat, nSrcStep, nWidth, nHeight, damage,
+	                          &avc420.data, &avc420.length, &avc420.meta);
 	if (rc < 0)
 	{
 		WLog_ERR(TAG, "freerdp_av1_compress failed");
@@ -1420,7 +1493,6 @@ static BOOL shadow_client_send_rfx(rdpShadowClient* client, const BYTE* pSrcData
 
 	UINT error = CHANNEL_RC_OK;
 	BOOL rc = 0;
-	RFX_RECT rect = WINPR_C_ARRAY_INIT;
 
 	if (shadow_encoder_prepare(encoder, FREERDP_CODEC_REMOTEFX) < 0)
 	{
@@ -1443,12 +1515,53 @@ static BOOL shadow_client_send_rfx(rdpShadowClient* client, const BYTE* pSrcData
 	WINPR_ASSERT(cmd->top <= UINT16_MAX);
 	WINPR_ASSERT(cmd->right <= UINT16_MAX);
 	WINPR_ASSERT(cmd->bottom <= UINT16_MAX);
-	rect.x = (UINT16)cmd->left;
-	rect.y = (UINT16)cmd->top;
-	rect.width = WINPR_ASSERTING_INT_CAST(UINT16, cmd->right - cmd->left);
-	rect.height = WINPR_ASSERTING_INT_CAST(UINT16, cmd->bottom - cmd->top);
 
-	rc = rfx_compose_message(encoder->rfx, s, &rect, 1, pSrcData, nWidth, nHeight, nSrcStep);
+	/* GFX RFX dirty tile skipping: split the dirty rect onto the 64x64
+	 * surface tile grid and compare each tile against the encoder snapshot
+	 * of the last encoded content (shadow_rfx_dirty.c). Only tiles whose
+	 * content changed are passed to the RFX encoder. A missing or
+	 * mismatching snapshot (first frame, ResetGraphics, resize, new client)
+	 * treats every tile as changed and degrades to full encoding. */
+	{
+		UINT16 numRects = 0;
+		RFX_RECT* rects = nullptr;
+
+		if (shadow_rfx_plan_tiles(encoder, pSrcData, nSrcStep, cmd, nWidth, nHeight, &rects,
+		                          &numRects) < 0)
+		{
+			WLog_ERR(TAG, "shadow_rfx_plan_tiles failed");
+			Stream_Free(s, TRUE);
+			free(rects);
+			return FALSE;
+		}
+
+		if (numRects == 0)
+		{
+			/* Every tile of this frame is byte-identical to the last encoded
+			 * content: skip the whole frame (no surface command: StartFrame/
+			 * EndFrame are sent paired with SurfaceFrameCommand, so no
+			 * dangling frame semantics). Give the frame id back to the
+			 * encoder: skipped frames are never acknowledged by the client,
+			 * not returning it would permanently inflate the in-flight depth
+			 * and stall the preferred_fps backpressure. */
+			encoder->frameId--;
+			Stream_Free(s, TRUE);
+			free(rects);
+			return TRUE;
+		}
+
+		rc = rfx_compose_message(encoder->rfx, s, rects, numRects, pSrcData, nWidth, nHeight,
+		                         nSrcStep);
+
+		if (rc)
+		{
+			const size_t pos = Stream_GetPosition(s);
+			shadow_rfx_commit_tiles(encoder, pSrcData, nSrcStep, rects, numRects,
+			                        WINPR_ASSERTING_INT_CAST(UINT32, pos));
+		}
+
+		free(rects);
+	}
 
 	if (!rc)
 	{
@@ -1600,11 +1713,31 @@ static BOOL shadow_client_send_uncompressed(rdpShadowClient* client, const BYTE*
                                             const RDPGFX_END_FRAME_PDU* cmdend)
 {
 	WINPR_ASSERT(client);
+	WINPR_ASSERT(cmd);
+	WINPR_ASSERT(pSrcData);
+	WINPR_ASSERT(cmdstart);
+	WINPR_ASSERT(cmdend);
 
 	UINT error = CHANNEL_RC_OK;
+
+	WINPR_ASSERT(cmd->right >= cmd->left);
+	WINPR_ASSERT(cmd->bottom >= cmd->top);
+
 	const UINT32 w = cmd->right - cmd->left;
 	const UINT32 h = cmd->bottom - cmd->top;
-	const UINT32 length = w * 4 * h;
+	if ((w == 0) || (h == 0) || (w > UINT32_MAX / 4 / h))
+	{
+		WLog_ERR(TAG, "input width=%" PRIu32 " x height=%" PRIu32 " is 0 or exceeds UINT32_MAX", w,
+		         h);
+		return FALSE;
+	}
+	const UINT32 length = w * 4ul * h;
+
+	if (length == 0)
+	{
+		WLog_ERR(TAG, "input length == 0");
+		return FALSE;
+	}
 
 	BYTE* data = malloc(length);
 	if (!data)
@@ -1647,6 +1780,12 @@ static BOOL shadow_avc444_enabled(const rdpShadowClient* client)
 		case RDPGFX_CAPVERSION_105:
 		case RDPGFX_CAPVERSION_106:
 		case RDPGFX_CAPVERSION_107:
+#if defined(WITH_GFX_AZURE)
+		case RDPGFX_CAPVERSION_111:
+		case RDPGFX_CAPVERSION_112:
+		case RDPGFX_CAPVERSION_113:
+		case RDPGFX_CAPVERSION_115:
+#endif
 			return (client->confirmedCaps.flags & RDPGFX_CAPS_FLAG_AVC_DISABLED) == 0;
 
 		default:
@@ -1672,7 +1811,9 @@ static BOOL shadow_avc420_enabled(const rdpShadowClient* client)
 WINPR_ATTR_NODISCARD
 static BOOL shadow_client_send_surface_gfx(rdpShadowClient* client, const BYTE* pSrcData,
                                            UINT32 nSrcStep, UINT32 SrcFormat, UINT16 nXSrc,
-                                           UINT16 nYSrc, UINT16 nWidth, UINT16 nHeight)
+                                           UINT16 nYSrc, UINT16 nWidth, UINT16 nHeight,
+                                           UINT16 srcWidth, UINT16 srcHeight,
+                                           const RECTANGLE_16* damage)
 {
 	const rdpContext* context = (const rdpContext*)client;
 	RDPGFX_SURFACE_COMMAND cmd = WINPR_C_ARRAY_INIT;
@@ -1680,7 +1821,7 @@ static BOOL shadow_client_send_surface_gfx(rdpShadowClient* client, const BYTE* 
 	RDPGFX_END_FRAME_PDU cmdend = WINPR_C_ARRAY_INIT;
 	SYSTEMTIME sTime = WINPR_C_ARRAY_INIT;
 
-	if (!context || !pSrcData)
+	if (!context || !pSrcData || !damage)
 		return FALSE;
 
 	const rdpSettings* settings = context->settings;
@@ -1696,6 +1837,10 @@ static BOOL shadow_client_send_surface_gfx(rdpShadowClient* client, const BYTE* 
 			if (!rfx_context_reset(encoder->rfx, nWidth, nHeight))
 				return FALSE;
 		}
+		/* After ResetGraphics the client surface has no dependable state:
+		 * invalidate the RFX dirty skip snapshot so the next frame is
+		 * encoded in full. */
+		shadow_rfx_invalidate_snapshot(encoder);
 		client->first_frame = FALSE;
 	}
 
@@ -1714,13 +1859,10 @@ static BOOL shadow_client_send_surface_gfx(rdpShadowClient* client, const BYTE* 
 	cmd.height = nHeight;
 
 #if defined(WITH_GFX_AV1)
-	if (freerdp_settings_get_bool(settings, FreeRDP_GfxCodecAV1))
+	if (shadow_client_av1_enabled(client))
 	{
-		if (client->confirmedCaps.version == RDPGFX_CAPVERSION_FRDP_1)
-		{
-			return shadow_client_send_av1(client, pSrcData, nSrcStep, SrcFormat, nWidth, nHeight,
-			                              &cmd, &cmdstart, &cmdend);
-		}
+		return shadow_client_send_av1(client, pSrcData, nSrcStep, SrcFormat, nWidth, nHeight,
+		                              damage, &cmd, &cmdstart, &cmdend);
 	}
 #endif
 
@@ -1746,10 +1888,13 @@ static BOOL shadow_client_send_surface_gfx(rdpShadowClient* client, const BYTE* 
 	}
 
 #endif
-	    if (freerdp_settings_get_bool(settings, FreeRDP_RemoteFxCodec) && (id != 0))
+	if (freerdp_settings_get_bool(settings, FreeRDP_RemoteFxCodec) && (id != 0))
 	{
-		return shadow_client_send_rfx(client, pSrcData, nSrcStep, SrcFormat, nWidth, nHeight, &cmd,
-		                              &cmdstart, &cmdend);
+		/* The RFX source image dims must be the whole surface: the tile grid
+		 * is aligned to absolute surface coordinates and edge tiles are
+		 * truncated at the surface bounds. */
+		return shadow_client_send_rfx(client, pSrcData, nSrcStep, SrcFormat, srcWidth, srcHeight,
+		                              &cmd, &cmdstart, &cmdend);
 	}
 
 	if (freerdp_settings_get_bool(settings, FreeRDP_GfxProgressive))
@@ -2293,9 +2438,32 @@ static BOOL shadow_client_send_surface_update(rdpShadowClient* client, SHADOW_GF
 	{
 		if (pStatus->gfxOpened && client->areGfxCapsReady)
 		{
-			/* GFX/h264 always full screen encoded */
-			nWidth = freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
-			nHeight = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
+			/* Only codecs that need constant full-frame dimensions (SPS/PPS
+			 * bind the resolution, AV1 the sequence header) must encode the
+			 * whole desktop. rfx and progressive interpret nWidth/nHeight as
+			 * source image dims with the cmd rect as the dirty region, and
+			 * planar/uncompressed encode the cmd rect directly, so those may
+			 * keep the dirty extents. */
+			const RECTANGLE_16 damage = { .left = WINPR_ASSERTING_INT_CAST(UINT16, nXSrc),
+				                          .top = WINPR_ASSERTING_INT_CAST(UINT16, nYSrc),
+				                          .right = WINPR_ASSERTING_INT_CAST(UINT16, nXSrc + nWidth),
+				                          .bottom =
+				                              WINPR_ASSERTING_INT_CAST(UINT16, nYSrc + nHeight) };
+			const BOOL fullframegfx =
+#if defined(WITH_GFX_AV1)
+			    shadow_client_av1_enabled(client) ||
+#endif
+			    freerdp_settings_get_bool(settings, FreeRDP_GfxH264) ||
+			    freerdp_settings_get_bool(settings, FreeRDP_GfxAVC444) ||
+			    freerdp_settings_get_bool(settings, FreeRDP_GfxAVC444v2) ||
+			    (freerdp_settings_get_bool(settings, FreeRDP_RemoteFxCodec) &&
+			     (freerdp_settings_get_uint32(settings, FreeRDP_RemoteFxCodecId) != 0)) ||
+			    freerdp_settings_get_bool(settings, FreeRDP_GfxProgressive);
+			if (fullframegfx)
+			{
+				nWidth = freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
+				nHeight = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
+			}
 
 			/* Create primary surface if have not */
 			if (!pStatus->gfxSurfaceCreated)
@@ -2314,8 +2482,10 @@ static BOOL shadow_client_send_surface_update(rdpShadowClient* client, SHADOW_GF
 			WINPR_ASSERT(nWidth <= UINT16_MAX);
 			WINPR_ASSERT(nHeight >= 0);
 			WINPR_ASSERT(nHeight <= UINT16_MAX);
-			ret = shadow_client_send_surface_gfx(client, pSrcData, nSrcStep, SrcFormat, 0, 0,
-			                                     (UINT16)nWidth, (UINT16)nHeight);
+			ret = shadow_client_send_surface_gfx(
+			    client, pSrcData, nSrcStep, SrcFormat, fullframegfx ? 0 : (UINT16)nXSrc,
+			    fullframegfx ? 0 : (UINT16)nYSrc, (UINT16)nWidth, (UINT16)nHeight,
+			    (UINT16)surface->width, (UINT16)surface->height, &damage);
 		}
 		else
 		{
@@ -2543,7 +2713,10 @@ static int shadow_client_subsystem_process_message(rdpShadowClient* client, wMes
 
 			WINPR_ASSERT(msg);
 
-			if (client->activated && client->rdpsnd && client->rdpsnd->Activated)
+			/* Samples that arrive before the client agreed on a format (or when it
+			 * agreed on none) are dropped */
+			if (client->activated && client->rdpsnd && client->rdpsnd->Activated &&
+			    (client->rdpsnd->selected_client_format < client->rdpsnd->num_client_formats))
 			{
 				client->rdpsnd->src_format = msg->audio_format;
 
@@ -2551,7 +2724,10 @@ static int shadow_client_subsystem_process_message(rdpShadowClient* client, wMes
 				    IFCALLRESULT(CHANNEL_RC_OK, client->rdpsnd->SendSamples, client->rdpsnd,
 				                 msg->buf, msg->nFrames, msg->wTimestamp);
 				if (CHANNEL_RC_OK != error)
+				{
+					shadow_client_free_queued_message(message);
 					return -1;
+				}
 			}
 
 			break;
@@ -2580,6 +2756,72 @@ static int shadow_client_subsystem_process_message(rdpShadowClient* client, wMes
 
 	shadow_client_free_queued_message(message);
 	return 1;
+}
+
+/* A client that has never acknowledged a frame (and did not suspend the acknowledgements) still
+ * gets one frame this often, so it is not frozen. A client that acknowledges is held at the limit:
+ * one that stops reading for longer than TcpAckTimeout (9 s) is disconnected by TCP anyway. */
+#define SHADOW_GFX_ACK_STALL_MS 2000u
+
+/* GFX flow control: TRUE when this round's frame must wait. The server sent every damaged frame
+ * however far the client was behind, and on a slow link the frames queued up in TCP for seconds:
+ * the client showed old pictures, the sound and the pointer came late. Like xrdp, at most
+ * maxInFlight frames go out without an acknowledgement; the damage of the rounds in between
+ * waits in the client's region and goes out in one frame when an acknowledgement comes. */
+WINPR_ATTR_NODISCARD
+static BOOL shadow_client_gfx_must_wait(rdpShadowClient* client, const SHADOW_GFX_STATUS* status)
+{
+	WINPR_ASSERT(client);
+	WINPR_ASSERT(status);
+	rdpShadowEncoder* encoder = client->encoder;
+	WINPR_ASSERT(encoder);
+
+	if ((encoder->maxInFlight == 0) || !status->gfxOpened || !client->areGfxCapsReady ||
+	    !freerdp_settings_get_bool(client->context.settings, FreeRDP_SupportGraphicsPipeline))
+		return FALSE;
+
+	/* 0 when the client suspended its acknowledgements */
+	const UINT32 inFlight = shadow_encoder_inflight_frames(encoder);
+	encoder->statsMaxInFlight = MAX(encoder->statsMaxInFlight, inFlight);
+	if (inFlight < encoder->maxInFlight)
+		return FALSE;
+
+	const UINT64 now = GetTickCount64();
+	if (!encoder->everAcked && (now - encoder->lastAckTick >= SHADOW_GFX_ACK_STALL_MS))
+	{
+		if (!encoder->warnedNoAck)
+		{
+			encoder->warnedNoAck = TRUE;
+			WLog_WARN(TAG,
+			          "gfx: the client acknowledges no frame, one frame every %u ms (%" PRIu32
+			          " in flight)",
+			          SHADOW_GFX_ACK_STALL_MS, inFlight);
+		}
+		/* the next one after another stall period */
+		encoder->lastAckTick = now;
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/* the 5 s line for the flow control, at debug level */
+static void shadow_client_gfx_stats(rdpShadowClient* client)
+{
+	WINPR_ASSERT(client);
+	rdpShadowEncoder* encoder = client->encoder;
+	WINPR_ASSERT(encoder);
+
+	const UINT64 now = GetTickCount64();
+	if (now - encoder->statsLogged < 5000)
+		return;
+	if (encoder->statsLogged != 0)
+		WLog_DBG(TAG,
+		         "gfx: at most %" PRIu32 " of %" PRIu32 " frames in flight, %" PRIu64
+		         " round(s) waited",
+		         encoder->statsMaxInFlight, encoder->maxInFlight, encoder->statsHeld);
+	encoder->statsMaxInFlight = 0;
+	encoder->statsHeld = 0;
+	encoder->statsLogged = now;
 }
 
 WINPR_ATTR_NODISCARD
@@ -2641,14 +2883,6 @@ static DWORD WINAPI shadow_client_thread(LPVOID arg)
 	if ((!client->vcm) || (!subsystem->updateEvent))
 		goto out;
 
-	UpdateSubscriber = shadow_multiclient_get_subscriber(subsystem->updateEvent);
-
-	if (!UpdateSubscriber)
-		goto out;
-
-	UpdateEvent = shadow_multiclient_getevent(UpdateSubscriber);
-	WINPR_ASSERT(UpdateEvent);
-
 	ChannelEvent = WTSVirtualChannelManagerGetEventHandle(client->vcm);
 	WINPR_ASSERT(ChannelEvent);
 
@@ -2664,7 +2898,30 @@ static DWORD WINAPI shadow_client_thread(LPVOID arg)
 	{
 		HANDLE events[MAXIMUM_WAIT_OBJECTS] = WINPR_C_ARRAY_INIT;
 		DWORD nCount = 0;
-		events[nCount++] = UpdateEvent;
+
+		/* The subsystem and all other clients wait until every subscriber has
+		 * consumed the current frame. Only subscribe once the connection sequence
+		 * is done: peer->CheckFileDescriptor blocks this thread during the TLS
+		 * and NLA handshake for as long as the (not yet authenticated) peer wants,
+		 * and before activation there is nothing to send anyway. */
+		if (!UpdateSubscriber && client->activated)
+		{
+			UpdateSubscriber = shadow_multiclient_get_subscriber(subsystem->updateEvent);
+
+			if (!UpdateSubscriber)
+				goto fail;
+
+			UpdateEvent = shadow_multiclient_getevent(UpdateSubscriber);
+			WINPR_ASSERT(UpdateEvent);
+
+			/* The full screen refresh requested by shadow_client_activate may
+			 * already have been published without us, request it again */
+			if (!shadow_client_refresh_request(client))
+				goto fail;
+		}
+
+		if (UpdateEvent)
+			events[nCount++] = UpdateEvent;
 		{
 			DWORD tmp = peer->GetEventHandles(peer, &events[nCount], 64 - nCount);
 
@@ -2686,12 +2943,14 @@ static DWORD WINAPI shadow_client_thread(LPVOID arg)
 			events[nCount++] = gfxevent;
 #endif
 
-		status = WaitForMultipleObjects(nCount, events, FALSE, INFINITE);
+		/* a frame that waits for an acknowledgement also goes out after a stall */
+		const DWORD timeout = client->encoder->gfxHeld ? 100 : INFINITE;
+		status = WaitForMultipleObjects(nCount, events, FALSE, timeout);
 
 		if (status == WAIT_FAILED)
 			goto fail;
 
-		if (WaitForSingleObject(UpdateEvent, 0) == WAIT_OBJECT_0)
+		if (UpdateEvent && (WaitForSingleObject(UpdateEvent, 0) == WAIT_OBJECT_0))
 		{
 			/* The UpdateEvent means to start sending current frame. It is
 			 * triggered from subsystem implementation and it should ensure
@@ -2714,6 +2973,17 @@ static DWORD WINAPI shadow_client_thread(LPVOID arg)
 						break;
 					}
 				}
+				else if (shadow_client_gfx_must_wait(client, &gfxstatus))
+				{
+					/* the client is behind: keep the damage for when it caught up */
+					if (!shadow_client_no_surface_update(client, &gfxstatus))
+					{
+						WLog_ERR(TAG, "Failed to handle surface update");
+						break;
+					}
+					client->encoder->gfxHeld = TRUE;
+					client->encoder->statsHeld++;
+				}
 				else
 				{
 					/* Send frame */
@@ -2722,6 +2992,7 @@ static DWORD WINAPI shadow_client_thread(LPVOID arg)
 						WLog_ERR(TAG, "Failed to send surface update");
 						break;
 					}
+					client->encoder->gfxHeld = FALSE;
 				}
 			}
 			else
@@ -2825,6 +3096,21 @@ static DWORD WINAPI shadow_client_thread(LPVOID arg)
 			}
 		}
 #endif
+
+		/* an acknowledgement (or a stall) let the waiting damage go: one frame of the surface as
+		 * it is now, not the frames that were skipped */
+		if (client->encoder->gfxHeld && client->activated && !client->suppressOutput &&
+		    !shadow_client_gfx_must_wait(client, &gfxstatus))
+		{
+			if (!shadow_client_send_surface_update(client, &gfxstatus))
+			{
+				WLog_ERR(TAG, "Failed to send surface update");
+				goto fail;
+			}
+			client->encoder->gfxHeld = FALSE;
+		}
+		if (client->activated)
+			shadow_client_gfx_stats(client);
 
 		if (WaitForSingleObject(MessageQueue_Event(MsgQueue), 0) == WAIT_OBJECT_0)
 		{

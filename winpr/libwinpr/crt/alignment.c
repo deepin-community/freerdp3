@@ -191,8 +191,17 @@ WINPR_ATTR_NODISCARD static inline size_t cMIN(size_t a, size_t b)
 void* winpr_aligned_offset_recalloc(void* memblock, size_t num, size_t size, size_t alignment,
                                     size_t offset)
 {
-	char* newMemblock = nullptr;
+	void* newMemblock = nullptr;
 	WINPR_ALIGNED_MEM* pNewMem = nullptr;
+
+	if ((num == 0) || (size == 0))
+	{
+		winpr_aligned_free(memblock);
+		return nullptr;
+	}
+
+	if (num > SIZE_MAX / size - alignment)
+		return nullptr;
 
 	if (!memblock)
 	{
@@ -209,10 +218,7 @@ void* winpr_aligned_offset_recalloc(void* memblock, size_t num, size_t size, siz
 
 	WINPR_ALIGNED_MEM* pMem = get_aligned_mem_block(memblock);
 	if (!pMem)
-		goto fail;
-
-	if ((num == 0) || (size == 0))
-		goto fail;
+		return nullptr;
 
 	if (pMem->size > (1ull * num * size) + alignment)
 		return memblock;
@@ -220,15 +226,15 @@ void* winpr_aligned_offset_recalloc(void* memblock, size_t num, size_t size, siz
 	newMemblock = winpr_aligned_offset_malloc(size * num, alignment, offset);
 
 	if (!newMemblock)
-		goto fail;
+		return nullptr;
 
 	pNewMem = WINPR_ALIGNED_MEM_STRUCT_FROM_PTR(newMemblock);
 	{
 		const size_t csize = cMIN(pMem->size, pNewMem->size);
 		memcpy(newMemblock, memblock, csize);
-		ZeroMemory(newMemblock + csize, pNewMem->size - csize);
+		ZeroMemory(((char*)newMemblock) + csize, pNewMem->size - csize);
 	}
-fail:
+
 	winpr_aligned_free(memblock);
 	return newMemblock;
 }

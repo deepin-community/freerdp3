@@ -36,6 +36,7 @@
 #include "message.h"
 #include <freerdp/buildflags.h>
 #include "gateway/rpc_fault.h"
+#include "../cache/cache.h"
 
 #include <winpr/assert.h>
 
@@ -45,6 +46,7 @@
 #include <winpr/wtsapi.h>
 #include <winpr/ssl.h>
 #include <winpr/debug.h>
+#include <winpr/i18n.h>
 
 #include <freerdp/freerdp.h>
 #include <freerdp/streamdump.h>
@@ -62,6 +64,11 @@
 
 #define TAG FREERDP_TAG("core")
 
+BOOL freerdp_enable_translation(const char* locale, const char* searchPath)
+{
+	return winpr_i18n_enable_translation(locale) && winpr_i18n_bind_domain("freerdp", searchPath);
+}
+
 static void sig_abort_connect(int signum, const char* signame, void* ctx)
 {
 	rdpContext* context = (rdpContext*)ctx;
@@ -69,7 +76,10 @@ static void sig_abort_connect(int signum, const char* signame, void* ctx)
 	WLog_INFO(TAG, "Signal %s [%d], terminating session %p", signame, signum,
 	          WINPR_CXX_COMPAT_CAST(const void*, context));
 	if (context)
+	{
+		freerdp_set_last_error(context, FREERDP_ERROR_CONNECT_CANCELLED);
 		freerdp_abort_connect_context(context);
+	}
 }
 
 /** Creates a new connection based on the settings found in the "instance" parameter
@@ -640,9 +650,12 @@ BOOL freerdp_disconnect(freerdp* instance)
 	}
 
 	IFCALL(instance->PostDisconnect, instance);
+	cache_free(instance->context->cache);
+	instance->context->cache = nullptr;
 
 	if (up)
 	{
+		update_dump_stats(rdp->update);
 		if (up->pcap_rfx)
 		{
 			up->dump_rfx = FALSE;
@@ -790,7 +803,9 @@ static wEventType FreeRDP_Events[] = {
 	DEFINE_EVENT_ENTRY(ConnectionResult),    DEFINE_EVENT_ENTRY(ChannelConnected),
 	DEFINE_EVENT_ENTRY(ChannelDisconnected), DEFINE_EVENT_ENTRY(MouseEvent),
 	DEFINE_EVENT_ENTRY(Activated),           DEFINE_EVENT_ENTRY(Timer),
-	DEFINE_EVENT_ENTRY(GraphicsReset),       DEFINE_EVENT_ENTRY(UserNotification)
+	DEFINE_EVENT_ENTRY(GraphicsReset),       DEFINE_EVENT_ENTRY(UserNotification),
+	DEFINE_EVENT_ENTRY(ChannelInitialized),  DEFINE_EVENT_ENTRY(ChannelTerminated),
+	DEFINE_EVENT_ENTRY(StateChanged)
 };
 
 /** Allocator function for a rdp context.
@@ -1213,30 +1228,27 @@ const char* freerdp_get_logon_error_info_type(UINT32 type)
 		CASE_ENTRY(ERROR_CODE_ACCESS_DENIED);
 
 		default:
-			return "UNKNOWN";
+			return NtStatus2Tag((NTSTATUS)type);
 	}
 #undef CASE_ENTRY
 }
 
 const char* freerdp_get_logon_error_info_data(UINT32 data)
 {
+#define CASE_ENTRY(x) \
+	case x:           \
+		return #x
 	switch (data)
 	{
-		case LOGON_FAILED_BAD_PASSWORD:
-			return "LOGON_FAILED_BAD_PASSWORD";
-
-		case LOGON_FAILED_UPDATE_PASSWORD:
-			return "LOGON_FAILED_UPDATE_PASSWORD";
-
-		case LOGON_FAILED_OTHER:
-			return "LOGON_FAILED_OTHER";
-
-		case LOGON_WARNING:
-			return "LOGON_WARNING";
+		CASE_ENTRY(LOGON_FAILED_BAD_PASSWORD);
+		CASE_ENTRY(LOGON_FAILED_UPDATE_PASSWORD);
+		CASE_ENTRY(LOGON_FAILED_OTHER);
+		CASE_ENTRY(LOGON_WARNING);
 
 		default:
 			return "SESSION_ID";
 	}
+#undef CASE_ENTRY
 }
 
 const char* freerdp_get_logon_error_info_data_ex(UINT32 data, char* buffer, size_t size)
@@ -1251,8 +1263,10 @@ const char* freerdp_get_logon_error_info_data_ex(UINT32 data, char* buffer, size
  */
 freerdp* freerdp_new(void)
 {
-	freerdp* instance = nullptr;
-	instance = (freerdp*)calloc(1, sizeof(freerdp));
+	if (!utils_set_umask())
+		return nullptr;
+
+	freerdp* instance = (freerdp*)calloc(1, sizeof(freerdp));
 
 	if (!instance)
 		return nullptr;

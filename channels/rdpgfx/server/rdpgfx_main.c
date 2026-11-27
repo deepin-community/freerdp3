@@ -329,7 +329,7 @@ rdpgfx_send_reset_graphics_pdu(RdpgfxServerContext* context, const RDPGFX_RESET_
 		Stream_Free(s, TRUE);
 		return ERROR_INVALID_DATA;
 	}
-	if (!Stream_SafeSeek(s, RDPGFX_RESET_GRAPHICS_PDU_SIZE - pos))
+	if (!Stream_SafeZero(s, RDPGFX_RESET_GRAPHICS_PDU_SIZE - pos))
 	{
 		Stream_Free(s, TRUE);
 		return ERROR_INVALID_DATA;
@@ -656,7 +656,7 @@ WINPR_ATTR_NODISCARD static UINT rdpgfx_write_h264_metablock(wLog* log, wStream*
 	UINT error = CHANNEL_RC_OK;
 
 	WINPR_ASSERT(meta);
-	if (!Stream_EnsureRemainingCapacity(s, 4 + meta->numRegionRects * 10))
+	if (!Stream_EnsureRemainingCapacity(s, 4ull + meta->numRegionRects * 10ull))
 		return ERROR_OUTOFMEMORY;
 
 	Stream_Write_UINT32(s, meta->numRegionRects); /* numRegionRects (4 bytes) */
@@ -747,7 +747,7 @@ WINPR_ATTR_NODISCARD static UINT rdpgfx_write_surface_command(wLog* log, wStream
 	if (cmd->codecId == RDPGFX_CODECID_CAPROGRESSIVE ||
 	    cmd->codecId == RDPGFX_CODECID_CAPROGRESSIVE_V2)
 	{
-		if (!Stream_EnsureRemainingCapacity(s, 13 + cmd->length))
+		if (!Stream_EnsureRemainingCapacity(s, 13ull + cmd->length))
 			return ERROR_INTERNAL_ERROR;
 		/* Write RDPGFX_CMDID_WIRETOSURFACE_2 format for CAPROGRESSIVE */
 		Stream_Write_UINT16(
@@ -952,7 +952,10 @@ rdpgfx_send_surface_frame_command(RdpgfxServerContext* context, const RDPGFX_SUR
 
 		if (!rdpgfx_write_start_frame_pdu(s, startFrame) ||
 		    !rdpgfx_server_packet_complete_header(s, position))
+		{
+			error = ERROR_INTERNAL_ERROR;
 			goto error;
+		}
 	}
 
 	/* Write RDPGFX_CMDID_WIRETOSURFACE_1 or RDPGFX_CMDID_WIRETOSURFACE_2 */
@@ -977,7 +980,10 @@ rdpgfx_send_surface_frame_command(RdpgfxServerContext* context, const RDPGFX_SUR
 		}
 
 		if (!rdpgfx_server_packet_complete_header(s, pos))
+		{
+			error = ERROR_INTERNAL_ERROR;
 			goto error;
+		}
 	}
 
 	/* Write end frame if exists */
@@ -995,7 +1001,10 @@ rdpgfx_send_surface_frame_command(RdpgfxServerContext* context, const RDPGFX_SUR
 
 		if (!rdpgfx_write_end_frame_pdu(s, endFrame) ||
 		    !rdpgfx_server_packet_complete_header(s, position))
+		{
+			error = ERROR_INTERNAL_ERROR;
 			goto error;
+		}
 	}
 
 	return rdpgfx_server_packet_send(context, s);
@@ -1539,22 +1548,27 @@ rdpgfx_send_map_surface_to_scaled_output_pdu(RdpgfxServerContext* context,
  *
  * @return 0 on success, otherwise a Win32 error code
  */
-WINPR_ATTR_NODISCARD static UINT rdpgfx_server_receive_pdu(RdpgfxServerContext* context, wStream* s)
+WINPR_ATTR_NODISCARD static UINT rdpgfx_server_receive_pdu(RdpgfxServerContext* context,
+                                                           wStream* data)
 {
-	size_t end = 0;
+	size_t packetlen = 0;
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
 	RDPGFX_HEADER header = WINPR_C_ARRAY_INIT;
 	UINT error = CHANNEL_RC_OK;
-	size_t beg = Stream_GetPosition(s);
 
 	WINPR_ASSERT(context);
 	WINPR_ASSERT(context->priv);
 
-	if ((error = rdpgfx_read_header(context->priv->log, s, &header)))
+	if ((error = rdpgfx_read_header(context->priv->log, data, &header, &packetlen)))
 	{
 		WLog_Print(context->priv->log, WLOG_ERROR,
 		           "rdpgfx_read_header failed with error %" PRIu32 "!", error);
 		return error;
 	}
+
+	/* Limit the PDU parsers to the data of this PDU, the stream might contain more of them */
+	wStream* s = Stream_StaticConstInit(&sbuffer, Stream_ConstPointer(data), packetlen);
+	Stream_Seek(data, packetlen);
 
 	WLog_Print(context->priv->log, WLOG_TRACE,
 	           "cmdId: %s (0x%04" PRIX16 ") flags: 0x%04" PRIX16 " pduLength: %" PRIu32 "",
@@ -1612,15 +1626,13 @@ WINPR_ATTR_NODISCARD static UINT rdpgfx_server_receive_pdu(RdpgfxServerContext* 
 		return error;
 	}
 
-	end = Stream_GetPosition(s);
+	const size_t end = Stream_GetPosition(s);
 
-	if (end != (beg + header.pduLength))
+	if (end != packetlen)
 	{
 		WLog_Print(context->priv->log, WLOG_ERROR,
 		           "Unexpected gfx pdu end: Actual: %" PRIuz ", Expected: %" PRIuz "", end,
-		           (beg + header.pduLength));
-		if (!Stream_SetPosition(s, (beg + header.pduLength)))
-			return ERROR_INVALID_DATA;
+		           packetlen);
 	}
 
 	return error;

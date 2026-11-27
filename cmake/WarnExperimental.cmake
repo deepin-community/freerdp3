@@ -1,5 +1,3 @@
-set(WARN_EXPERIMENTAL_LIST_PRIVATE "" CACHE INTERNAL "dependencies")
-
 function(warn_experimental name)
   set(CUR_NAMES ${name})
   if(ARGN)
@@ -14,6 +12,7 @@ endfunction()
 
 function(warn_experimental_print)
   if(WARN_EXPERIMENTAL_LIST_PRIVATE)
+    list(REMOVE_DUPLICATES WARN_EXPERIMENTAL_LIST_PRIVATE)
     foreach(_lib ${WARN_EXPERIMENTAL_LIST_PRIVATE})
       message(WARNING "[experimental] ${_lib}")
     endforeach()
@@ -23,7 +22,7 @@ function(warn_experimental_print)
     string(
       APPEND
       MESSAGE
-      "\n[experimental] If problems occur please check https://github.com/FreeRDP/FreeRDP/issues for known issues, but be prepared to fix them on your own!"
+      "\n[experimental] If problems occur please check ${PROJECT_ISSUE_URL} for known issues, but be prepared to fix them on your own!"
     )
     string(APPEND MESSAGE
            "\n[experimental] Developers hang out in https://matrix.to/#/#FreeRDP:matrix.org?via=matrix.org"

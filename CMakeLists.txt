@@ -23,7 +23,11 @@ cmake_minimum_required(VERSION 3.13)
 if(POLICY CMP0091)
   cmake_policy(SET CMP0091 NEW)
 endif()
+if(POLICY CMP0177)
+  cmake_policy(SET CMP0177 NEW)
+endif()
 project(FreeRDP LANGUAGES C)
+set(PROJECT_ISSUE_URL https://github.com/FreeRDP/FreeRDP/issues)
 
 add_custom_target(fuzzers COMMENT "Build fuzzers")
 
@@ -149,6 +153,12 @@ if(WITH_FREERDP_3x_DEPRECATED)
   set(WITHOUT_FREERDP_3x_DEPRECATED OFF)
 endif()
 
+if(NOT WITHOUT_FREERDP_3x_DEPRECATED)
+  option(WITH_OPAQUE_SETTINGS "Hide rdpSettings struct definition, only allow getter/setter access" OFF)
+else()
+  set(WITH_OPAQUE_SETTINGS ON CACHE INTERNAL "NOT WITHOUT_FREERDP_3x_DEPRECATED")
+endif()
+
 option(WITH_FREERDP_DEPRECATED_COMMANDLINE "Build FreeRDP deprecated command line options" OFF)
 if(WITH_FREERDP_DEPRECATED_COMMANDLINE)
   add_compile_definitions(WITH_FREERDP_DEPRECATED_COMMANDLINE)
@@ -239,17 +249,6 @@ add_compile_definitions(FREERDP_EXPORTS)
 
 # Mac OS X
 if(APPLE)
-  if(IOS)
-    if(NOT FREERDP_IOS_EXTERNAL_SSL_PATH)
-      message(
-        STATUS
-          "FREERDP_IOS_EXTERNAL_SSL_PATH not set! Required if openssl is not found in the iOS SDK (which usually isn't"
-      )
-    endif()
-    set(CMAKE_FIND_ROOT_PATH ${CMAKE_FIND_ROOT_PATH} ${FREERDP_IOS_EXTERNAL_SSL_PATH})
-    set_property(GLOBAL PROPERTY XCODE_ATTRIBUTE_SKIP_INSTALL YES)
-  endif(IOS)
-
   # Temporarily disabled, causes the cmake script to be reexecuted, causing the compilation to fail.
   # Workaround: specify the parameter in the command-line
   #	if(WITH_CLANG)
@@ -346,6 +345,10 @@ set(AOM_FEATURE_TYPE "OPTIONAL")
 set(AOM_FEATURE_PURPOSE "codec")
 set(AOM_FEATURE_DESCRIPTION "AOM AV1 encoder/decoder library")
 
+set(DAV1D_FEATURE_TYPE "OPTIONAL")
+set(DAV1D_FEATURE_PURPOSE "codec")
+set(DAV1D_FEATURE_DESCRIPTION "dav1d AV1 decoder library")
+
 set(YUV_FEATURE_TYPE "OPTIONAL")
 set(YUV_FEATURE_PURPOSE "codec")
 set(YUV_FEATURE_DESCRIPTION "YUV encoder/decoder library")
@@ -391,6 +394,10 @@ else()
   find_feature(MbedTLS ${MBEDTLS_FEATURE_TYPE} ${MBEDTLS_FEATURE_PURPOSE} ${MBEDTLS_FEATURE_DESCRIPTION})
 endif()
 
+option(WITH_TLS_DATA_LIMIT "Enforce TLS AEAD data limit (RFC 8446 5.5): rekey on TLS 1.3, cut if a TLS 1.3 rekey fails"
+       OFF
+)
+
 find_feature(PCSC ${PCSC_FEATURE_TYPE} ${PCSC_FEATURE_PURPOSE} ${PCSC_FEATURE_DESCRIPTION})
 
 if(WITH_DSP_FFMPEG OR WITH_VIDEO_FFMPEG OR WITH_FFMPEG)
@@ -404,6 +411,7 @@ find_feature(FAAD2 ${FAAD2_FEATURE_TYPE} ${FAAD2_FEATURE_PURPOSE} ${FAAD2_FEATUR
 find_feature(FAAC ${FAAC_FEATURE_TYPE} ${FAAC_FEATURE_PURPOSE} ${FAAC_FEATURE_DESCRIPTION})
 find_feature(soxr ${SOXR_FEATURE_TYPE} ${SOXR_FEATURE_PURPOSE} ${SOXR_FEATURE_DESCRIPTION})
 find_feature(aom ${AOM_FEATURE_TYPE} ${AOM_FEATURE_PURPOSE} ${AOM_FEATURE_DESCRIPTION})
+find_feature(dav1d ${DAV1D_FEATURE_TYPE} ${DAV1D_FEATURE_PURPOSE} ${DAV1D_FEATURE_DESCRIPTION})
 find_feature(yuv ${YUV_FEATURE_TYPE} ${YUV_FEATURE_PURPOSE} ${YUV_FEATURE_DESCRIPTION})
 
 option(WITH_OPENCL "[experimental] enable OpenCL support for primitives" OFF)
@@ -450,7 +458,9 @@ if(MBEDTLS_FOUND)
   add_compile_definitions("WITH_MBEDTLS")
 endif()
 
-if(WITH_OPENH264 OR WITH_MEDIA_FOUNDATION OR WITH_VIDEO_FFMPEG OR WITH_MEDIACODEC)
+if(WITH_OPENH264 OR WITH_MEDIA_FOUNDATION OR WITH_VIDEO_FFMPEG OR WITH_MEDIACODEC OR WITH_APPLE_VIDEOTOOLBOX
+   OR WITH_H264_WEBCODECS
+)
   set(WITH_GFX_H264 ON)
 else()
   set(WITH_GFX_H264 OFF)
@@ -471,13 +481,17 @@ if(NOT WITH_ABSOLUTE_PLUGIN_LOAD_PATHS)
     set(FREERDP_INSTALL_PREFIX ".")
   endif()
   set(FREERDP_LIBRARY_PATH ".")
+  set(FREERDP_LIBEXEC_REL_PATH ".")
+  set(FREERDP_LIBEXEC_PATH ".")
   set(FREERDP_PLUGIN_PATH ".")
 else()
   set(FREERDP_DATA_PATH "${CMAKE_INSTALL_PREFIX}/share/${FREERDP_MAJOR_DIR}")
   if(NOT FREERDP_INSTALL_PREFIX)
     set(FREERDP_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
   endif()
+  set(FREERDP_LIBEXEC_PATH "${CMAKE_INSTALL_LIBEXECDIR}")
   set(FREERDP_LIBRARY_PATH "${CMAKE_INSTALL_LIBDIR}")
+  file(RELATIVE_PATH FREERDP_LIBEXEC_REL_PATH "${CMAKE_INSTALL_FULL_BINDIR}" "${CMAKE_INSTALL_FULL_LIBEXECDIR}")
   if(WIN32)
     set(FREERDP_PLUGIN_PATH "${CMAKE_INSTALL_BINDIR}/${FREERDP_MAJOR_DIR}")
   else()
@@ -503,7 +517,7 @@ endif()
 
 include(CTest)
 
-if(BUILD_TESTING_INTERNAL OR BUILD_TESTING)
+if(BUILD_TESTING)
   enable_testing()
 
   if(MSVC)

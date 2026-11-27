@@ -65,7 +65,8 @@ static const char* openh264_library_names[] = {
 #elif defined(__APPLE__)
 	"libopenh264.dylib"
 #else
-	"libopenh264.so.7",     "libopenh264.so.2.5.0", "libopenh264.so.2.4.1", "libopenh264.so.2.4.0",
+	"libopenh264.so.8",     "libopenh264.so.2.6.0", "libopenh264.so.7",
+	"libopenh264.so.2.5.0", "libopenh264.so.2.4.1", "libopenh264.so.2.4.0",
 	"libopenh264.so.2.3.1", "libopenh264.so.2.3.0", "libopenh264.so",
 
 #endif
@@ -103,6 +104,13 @@ static int openh264_decompress(H264_CONTEXT* WINPR_RESTRICT h264,
 
 	if (!sys->pDecoder)
 		return -2001;
+
+	/* DecodeFrame2 takes the size as int */
+	if (SrcSize > INT32_MAX)
+	{
+		WLog_Print(h264->log, WLOG_WARN, "SrcSize %" PRIu32 " exceeds INT32_MAX", SrcSize);
+		return -2007;
+	}
 
 	/*
 	 * Decompress the image.  The RDP host only seems to send I420 format.
@@ -177,6 +185,12 @@ static int openh264_decompress(H264_CONTEXT* WINPR_RESTRICT h264,
 	if (!pYUVData[0] || !pYUVData[1] || !pYUVData[2])
 		return -2005;
 
+	if ((pSystemBuffer->iWidth <= 0) || (pSystemBuffer->iHeight <= 0))
+		return -2006;
+
+	h264->YUVWidth = WINPR_ASSERTING_INT_CAST(UINT32, pSystemBuffer->iWidth);
+	h264->YUVHeight = WINPR_ASSERTING_INT_CAST(UINT32, pSystemBuffer->iHeight);
+
 	return 1;
 }
 
@@ -220,11 +234,11 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
 		WINPR_ASSERT((*sys->pEncoder)->GetDefaultParams);
 		status = (*sys->pEncoder)->GetDefaultParams(sys->pEncoder, &sys->EncParamExt);
 
-		if (status < 0)
+		if (status != cmResultSuccess)
 		{
 			WLog_Print(h264->log, WLOG_ERROR,
 			           "Failed to get OpenH264 default parameters (status=%d)", status);
-			return status;
+			return status > 0 ? -status : status;
 		}
 
 		EUsageType usageType = SCREEN_CONTENT_REAL_TIME;
@@ -292,11 +306,11 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
 		WINPR_ASSERT((*sys->pEncoder)->InitializeExt);
 		status = (*sys->pEncoder)->InitializeExt(sys->pEncoder, &sys->EncParamExt);
 
-		if (status < 0)
+		if (status != cmResultSuccess)
 		{
 			WLog_Print(h264->log, WLOG_ERROR, "Failed to initialize OpenH264 encoder (status=%d)",
 			           status);
-			return status;
+			return status > 0 ? -status : status;
 		}
 
 		WINPR_ASSERT((*sys->pEncoder)->GetOption);
@@ -304,11 +318,11 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
 		    (*sys->pEncoder)
 		        ->GetOption(sys->pEncoder, ENCODER_OPTION_SVC_ENCODE_PARAM_EXT, &sys->EncParamExt);
 
-		if (status < 0)
+		if (status != cmResultSuccess)
 		{
 			WLog_Print(h264->log, WLOG_ERROR,
 			           "Failed to get initial OpenH264 encoder parameters (status=%d)", status);
-			return status;
+			return status > 0 ? -status : status;
 		}
 	}
 	else
@@ -328,11 +342,11 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
 					status = (*sys->pEncoder)
 					             ->SetOption(sys->pEncoder, ENCODER_OPTION_BITRATE, &bitrate);
 
-					if (status < 0)
+					if (status != cmResultSuccess)
 					{
 						WLog_Print(h264->log, WLOG_ERROR,
 						           "Failed to set encoder bitrate (status=%d)", status);
-						return status;
+						return status > 0 ? -status : status;
 					}
 				}
 
@@ -346,11 +360,11 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
 					             ->SetOption(sys->pEncoder, ENCODER_OPTION_FRAME_RATE,
 					                         &sys->EncParamExt.fMaxFrameRate);
 
-					if (status < 0)
+					if (status != cmResultSuccess)
 					{
 						WLog_Print(h264->log, WLOG_ERROR,
 						           "Failed to set encoder framerate (status=%d)", status);
-						return status;
+						return status > 0 ? -status : status;
 					}
 				}
 
@@ -366,11 +380,11 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
 					             ->SetOption(sys->pEncoder, ENCODER_OPTION_SVC_ENCODE_PARAM_EXT,
 					                         &sys->EncParamExt);
 
-					if (status < 0)
+					if (status != cmResultSuccess)
 					{
 						WLog_Print(h264->log, WLOG_ERROR,
 						           "Failed to set encoder parameters (status=%d)", status);
-						return status;
+						return status > 0 ? -status : status;
 					}
 				}
 
@@ -393,10 +407,10 @@ static int openh264_compress(H264_CONTEXT* WINPR_RESTRICT h264,
 	WINPR_ASSERT((*sys->pEncoder)->EncodeFrame);
 	status = (*sys->pEncoder)->EncodeFrame(sys->pEncoder, &pic, &info);
 
-	if (status < 0)
+	if (status != cmResultSuccess)
 	{
 		WLog_Print(h264->log, WLOG_ERROR, "Failed to encode frame (status=%d)", status);
-		return status;
+		return status > 0 ? -status : status;
 	}
 
 	*ppDstData = info.sLayerInfo[0].pBsBuf;

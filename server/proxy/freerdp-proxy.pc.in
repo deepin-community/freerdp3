@@ -6,7 +6,7 @@ libs=-lfreerdp-server-proxy@FREERDP_API_VERSION@
 
 Name: FreeRDP proxy
 Description: FreeRDP: A Remote Desktop Protocol Implementation
-URL: http://www.freerdp.com/
+URL: https://freerdp.com/
 Version: @FREERDP_VERSION@
 Requires: @FREERDP_PROXY_PC_REQUIRES@
 Requires.private: @FREERDP_PROXY_PC_REQUIRES_PRIVATE@

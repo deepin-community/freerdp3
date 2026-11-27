@@ -68,6 +68,9 @@ static UINT irp_complete(IRP* irp)
 	rdpdrPlugin* rdpdr = (rdpdrPlugin*)irp->devman->plugin;
 	WINPR_ASSERT(rdpdr);
 
+	if (rdpdr->clearing)
+		return irp->Discard(irp);
+
 	UINT error = ERROR_INVALID_DATA;
 
 	const size_t pos = Stream_GetPosition(irp->output);
@@ -116,7 +119,7 @@ IRP* irp_new(DEVMAN* devman, wStreamPool* pool, wStream* s, wLog* log, UINT* err
 
 	if (!irp)
 	{
-		WLog_Print(log, WLOG_ERROR, "_aligned_malloc failed!");
+		WLog_Print(log, WLOG_ERROR, "winpr_aligned_calloc failed!");
 		if (error)
 			*error = CHANNEL_RC_NO_MEMORY;
 		return nullptr;

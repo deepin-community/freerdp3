@@ -124,7 +124,8 @@ static BOOL register_input_events(xfContext* xfc, Window window)
 					break;
 				case XIButtonClass:
 				{
-					const XIButtonClassInfo* t = (const XIButtonClassInfo*)c_class;
+					const XIButtonClassInfo* t =
+					    WINPR_PACKED_ALIGN_CAST(const XIButtonClassInfo*, c_class);
 					WLog_DBG(TAG, "%s button device (id: %d, mode: %d)", dev->name, dev->deviceid,
 					         t->num_buttons);
 					XISetMask(masks[nmasks], XI_ButtonPress);
@@ -139,7 +140,8 @@ static BOOL register_input_events(xfContext* xfc, Window window)
 					if (!log)
 						log = WLog_Get(TAG);
 
-					const XIValuatorClassInfo* t = (const XIValuatorClassInfo*)c_class;
+					const XIValuatorClassInfo* t =
+					    WINPR_PACKED_ALIGN_CAST(const XIValuatorClassInfo*, c_class);
 					char* name =
 					    t->label ? Safe_XGetAtomName(log, xfc->display, t->label) : nullptr;
 
@@ -739,15 +741,6 @@ static int xf_input_pens_unhover(xfContext* xfc)
 	return 0;
 }
 
-bool xf_use_rel_mouse(xfContext* xfc)
-{
-	if (!freerdp_client_use_relative_mouse_events(&xfc->common))
-		return false;
-	if (!xfc->isCursorHidden)
-		return false;
-	return true;
-}
-
 int xf_input_event(xfContext* xfc, WINPR_ATTR_UNUSED const XEvent* xevent, XIDeviceEvent* event,
                    int evtype)
 {
@@ -935,4 +928,13 @@ int xf_input_handle_event(xfContext* xfc, const XEvent* event)
 #else
 	return 0;
 #endif
+}
+
+bool xf_use_rel_mouse(xfContext* xfc)
+{
+	if (!freerdp_client_use_relative_mouse_events(&xfc->common))
+		return false;
+	if (!xfc->isCursorHidden)
+		return false;
+	return true;
 }

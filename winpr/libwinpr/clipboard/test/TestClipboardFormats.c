@@ -3,6 +3,624 @@
 #include <winpr/print.h>
 #include <winpr/image.h>
 #include <winpr/clipboard.h>
+#include <winpr/stream.h>
+#include <winpr/user.h>
+#include <winpr/file.h>
+#include <winpr/shell.h>
+#include <winpr/path.h>
+
+#define test_log(fmt, ...) test_log_fn(__FILE__, __func__, __LINE__, (fmt), ##__VA_ARGS__)
+static void test_log_fn(const char* file, const char* func, size_t line, const char* fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+
+	char* fstr = nullptr;
+	size_t fslen = 0;
+	winpr_vasprintf(&fstr, &fslen, fmt, ap);
+	(void)fprintf(stderr, "[%" PRIu32 ":%s]: %s\n", line, func, fstr);
+	free(fstr);
+	va_end(ap);
+}
+
+#define test_ClipboardSetData(clipboard, formatId, data, size) \
+	test_ClipboardSetDataFn(__FILE__, __func__, __LINE__, (clipboard), (formatId), (data), (size))
+
+WINPR_ATTR_NODISCARD
+static BOOL test_ClipboardSetDataFn(const char* file, const char* func, size_t line,
+                                    wClipboard* clipboard, UINT32 formatId, const void* data,
+                                    UINT32 size)
+{
+	const BOOL rc = ClipboardSetData(clipboard, formatId, data, size);
+	if (!rc)
+	{
+		test_log_fn(file, func, line, "ClipboardSetData %s[0x%04" PRIx32 "][%" PRIu32 "] failed",
+		            ClipboardGetFormatName(clipboard, formatId), formatId, size);
+	}
+	return rc;
+}
+
+#define test_ClipboardGetData(clipboard, formatId, size) \
+	test_ClipboardGetDataFn(__FILE__, __func__, __LINE__, (clipboard), (formatId), (size))
+
+WINPR_ATTR_NODISCARD
+static void* test_ClipboardGetDataFn(const char* file, const char* func, size_t line,
+                                     wClipboard* clipboard, UINT32 formatId, UINT32* pSize)
+{
+	void* rc = ClipboardGetData(clipboard, formatId, pSize);
+	if (!rc)
+	{
+		test_log_fn(file, func, line, "ClipboardGetData %s[0x%04" PRIx32 "] failed",
+		            ClipboardGetFormatName(clipboard, formatId), formatId);
+	}
+	return rc;
+}
+
+WINPR_ATTR_NODISCARD
+static BOOL test_dib_to_bmp(const BYTE* dib, size_t dibSize, size_t expectedOffset)
+{
+	BOOL rc = FALSE;
+
+	wClipboard* clipboard = ClipboardCreate();
+	if (!clipboard)
+	{
+		test_log("ClipboardCreate failed");
+		return FALSE;
+	}
+
+	const UINT32 bmpId = ClipboardRegisterFormat(clipboard, "image/bmp");
+	if (bmpId == 0)
+	{
+		test_log("bmpId == 0");
+		goto fail;
+	}
+	if (dibSize > UINT32_MAX)
+	{
+		test_log("dibSize %" PRIuz " > UINT32_MAX failed");
+		goto fail;
+	}
+	if (!test_ClipboardSetData(clipboard, CF_DIB, dib, (UINT32)dibSize))
+		goto fail;
+
+	UINT32 bmpSize = 0;
+	BYTE* bmp = test_ClipboardGetData(clipboard, bmpId, &bmpSize);
+	if (!bmp)
+		goto fail;
+
+	/* The synthesized BMP must also be readable by the image conversion code. */
+	wImage* image = winpr_image_new();
+	if (!image)
+	{
+		test_log("winpr_image_new failed");
+		goto fail_bmp;
+	}
+	rc = (winpr_image_read_buffer(image, bmp, bmpSize) > 0);
+	if (!rc)
+		test_log("winpr_image_read_buffer failed");
+	winpr_image_free(image, TRUE);
+
+fail_bmp:
+	free(bmp);
+fail:
+	ClipboardDestroy(clipboard);
+	return rc;
+}
+
+static void write_dib_info_header(wStream* s, UINT32 size, UINT16 bpp, UINT32 compression)
+{
+	WINPR_ASSERT(s);
+
+	Stream_Write_UINT32(s, size);
+	Stream_Write_INT32(s, 1);  /* width */
+	Stream_Write_INT32(s, 1);  /* height */
+	Stream_Write_UINT16(s, 1); /* planes */
+	Stream_Write_UINT16(s, bpp);
+	Stream_Write_UINT32(s, compression);
+	Stream_Write_UINT32(s, 4); /* image size */
+	Stream_Zero(s, 16);        /* resolution and palette metadata */
+}
+
+WINPR_ATTR_NODISCARD
+static BOOL test_dib_offsets(void)
+{
+	BYTE v4[sizeof(BITMAPV4HEADER) + 4] = WINPR_C_ARRAY_INIT;
+	wStream sbuffer = WINPR_C_ARRAY_INIT;
+	wStream* s = Stream_StaticInit(&sbuffer, v4, sizeof(v4));
+	if (!s)
+		return FALSE;
+	write_dib_info_header(s, sizeof(BITMAPV4HEADER), 32, BI_BITFIELDS);
+
+	Stream_Write_UINT32(s, 0x00FF0000); /* red mask */
+	Stream_Write_UINT32(s, 0x0000FF00); /* green mask */
+	Stream_Write_UINT32(s, 0x000000FF); /* blue mask */
+	Stream_Write_UINT32(s, 0xFF000000); /* alpha mask */
+	Stream_Zero(s, sizeof(BITMAPV4HEADER) - Stream_GetPosition(s));
+	Stream_Write_UINT32(s, 0xFF123456); /* pixel */
+	if (!test_dib_to_bmp(v4, sizeof(v4), sizeof(WINPR_BITMAP_FILE_HEADER) + sizeof(BITMAPV4HEADER)))
+		return FALSE;
+
+	BYTE bitfields[sizeof(BITMAPINFOHEADER) + 3 * sizeof(DWORD) + 4] = WINPR_C_ARRAY_INIT;
+	s = Stream_StaticInit(&sbuffer, bitfields, sizeof(bitfields));
+	if (!s)
+		return FALSE;
+	write_dib_info_header(s, sizeof(BITMAPINFOHEADER), 32, BI_BITFIELDS);
+	Stream_Write_UINT32(s, 0x00FF0000); /* red mask */
+	Stream_Write_UINT32(s, 0x0000FF00); /* green mask */
+	Stream_Write_UINT32(s, 0x000000FF); /* blue mask */
+	Stream_Write_UINT32(s, 0xFF123456); /* pixel */
+	if (!test_dib_to_bmp(bitfields, sizeof(bitfields),
+	                     sizeof(WINPR_BITMAP_FILE_HEADER) + sizeof(BITMAPINFOHEADER) +
+	                         3 * sizeof(DWORD)))
+		return FALSE;
+
+	BYTE paletted[sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD) + 4] = WINPR_C_ARRAY_INIT;
+	s = Stream_StaticInit(&sbuffer, paletted, sizeof(paletted));
+	if (!s)
+		return FALSE;
+	write_dib_info_header(s, sizeof(BITMAPINFOHEADER), 8, BI_RGB);
+	Stream_Zero(s, 256 * sizeof(RGBQUAD));
+	Stream_Write_UINT32(s, 0); /* pixel row */
+	return test_dib_to_bmp(paletted, sizeof(paletted),
+	                       sizeof(WINPR_BITMAP_FILE_HEADER) + sizeof(BITMAPINFOHEADER) +
+	                           256 * sizeof(RGBQUAD));
+}
+
+WINPR_ATTR_NODISCARD
+static BOOL test_text_leading_newline(void)
+{
+	const char* tests[][2] = { { "\nfoo", "\r\nfoo" }, { "\n", "\r\n" } };
+	BOOL rc = FALSE;
+
+	wClipboard* clipboard = ClipboardCreate();
+	if (!clipboard)
+	{
+		test_log("ClipboardCreate failed");
+		return FALSE;
+	}
+
+	const UINT32 textId = ClipboardRegisterFormat(clipboard, "text/plain");
+	for (size_t x = 0; x < ARRAYSIZE(tests); x++)
+	{
+		const char** cur = tests[x];
+		/* local text/plain is set without a terminator */
+		if (!test_ClipboardSetData(clipboard, textId, cur[0], (UINT32)strlen(cur[0])))
+			goto fail;
+
+		UINT32 size = 0;
+		WCHAR* wstr = test_ClipboardGetData(clipboard, CF_UNICODETEXT, &size);
+		char* str = ConvertWCharNToUtf8Alloc(wstr, size / sizeof(WCHAR), nullptr);
+		const BOOL match = str && (strcmp(str, cur[1]) == 0);
+		if (!match)
+		{
+			test_log("text/plain to CF_UNICODETEXT failed for case %" PRIuz "[%s (%" PRIu32
+			         ") %p : expect %s (%" PRIuz ") : from %s (" PRIuz ")]",
+			         x, str, size, wstr, cur[1], strlen(cur[1]), cur[0], strlen(cur[0]));
+		}
+		free(wstr);
+		free(str);
+		if (!match)
+			goto fail;
+	}
+	rc = TRUE;
+
+fail:
+	ClipboardDestroy(clipboard);
+	return rc;
+}
+
+WINPR_ATTR_NODISCARD
+static BOOL test_text_conversion(void)
+{
+	wClipboard* clipboard = ClipboardCreate();
+	if (!clipboard)
+		return FALSE;
+
+	typedef struct
+	{
+		UINT32 srcFormat;
+		UINT32 dstFormat;
+		const char* src;
+		size_t srcLen;
+		const char* expect;
+		size_t expectLen;
+	} test_case_t;
+
+	/* text/plain is UTF-8 on Windows, and ASCII with \u escapes for other characters elsewhere */
+	const test_case_t tests[] = {
+#if defined(_WIN32)
+		{ ClipboardRegisterFormat(clipboard, "text/plain"),
+		  ClipboardRegisterFormat(clipboard, "text/plain;charset=utf-8"), "a\nb\ncሴ՞", 10,
+		  "a\nb\ncሴ՞", 11 },
+		{ ClipboardRegisterFormat(clipboard, "text/plain;charset=utf-8"),
+		  ClipboardRegisterFormat(clipboard, "text/plain"), "a\r\nb\nc՞՞", 10, "a\r\nb\nc՞՞", 11 },
+		{ ClipboardRegisterFormat(clipboard, "text/plain"), CF_UNICODETEXT, "a\nb\ncሴ՞", 10,
+		  "\x61\x00\x0d\x00\x0a\x00\x62\x00\x0d\x0\x0a\x00\x63\x00\x34\x12\x5e\x05\x00\x00\x00",
+		  20 },
+		{ CF_UNICODETEXT, ClipboardRegisterFormat(clipboard, "text/plain"),
+		  "\x61\x00\x0d\x00\x0a\x00\x62\x00\x0d\x0\x0a\x00\x63\x00\x34\x12\x5e\x05\x00\x00\x00", 18,
+		  "a\nb\ncሴ՞", 11 },
+		{ ClipboardRegisterFormat(clipboard, "text/plain"), CF_TEXT, "a\nb\ncሴ՞", 10,
+		  "a\nb\nc\\u1234\\u055e", 18 },
+		{ CF_TEXT, ClipboardRegisterFormat(clipboard, "text/plain"), "a\nb\nc\\u1234\\u055e", 17,
+		  "a\nb\ncሴ՞", 11 },
+		{ ClipboardRegisterFormat(clipboard, "text/plain"), CF_OEMTEXT, "a\nb\ncሴ՞", 10,
+		  "a\nb\nc\\u1234\\u055e", 18 },
+		{ CF_OEMTEXT, ClipboardRegisterFormat(clipboard, "text/plain"), "a\nb\rc\\u1234\\u055e", 17,
+		  "a\nb\ncሴ՞", 11 },
+#else
+		{ ClipboardRegisterFormat(clipboard, "text/plain"),
+		  ClipboardRegisterFormat(clipboard, "text/plain;charset=utf-8"), "a\nb\rc\\u1234\\u055e",
+		  17, "a\nb\ncሴ՞", 11 },
+		{ ClipboardRegisterFormat(clipboard, "text/plain;charset=utf-8"),
+		  ClipboardRegisterFormat(clipboard, "text/plain"), "a\r\nb\nc՞՞", 10,
+		  "a\r\nb\nc\\u055e\\u055e", 19 },
+		{ ClipboardRegisterFormat(clipboard, "text/plain"), CF_UNICODETEXT, "a\nb\rc\\u1234\\u055e",
+		  17, "\x61\x00\x0d\x00\x0a\x00\x62\x00\x0d\x0\x0a\x00\x63\x00\x34\x12\x5e\x05\x00\x00\x00",
+		  20 },
+		{ CF_UNICODETEXT, ClipboardRegisterFormat(clipboard, "text/plain"),
+		  "\x61\x00\x0d\x00\x0a\x00\x62\x00\x0d\x0\x0a\x00\x63\x00\x34\x12\x5e\x05\x00\x00\x00", 18,
+		  "a\nb\nc\\u1234\\u055e", 18 },
+		{ ClipboardRegisterFormat(clipboard, "text/plain"), CF_TEXT, "a\nb\rc\\u1234\\u055e", 17,
+		  "a\nb\nc\\u1234\\u055e", 18 },
+		{ CF_TEXT, ClipboardRegisterFormat(clipboard, "text/plain"), "a\nb\nc\\u1234\\u055e", 17,
+		  "a\nb\nc\\u1234\\u055e", 18 },
+		{ ClipboardRegisterFormat(clipboard, "text/plain"), CF_OEMTEXT, "a\nb\rc\\u1234\\u055e", 17,
+		  "a\nb\nc\\u1234\\u055e", 18 },
+		{ CF_OEMTEXT, ClipboardRegisterFormat(clipboard, "text/plain"), "a\nb\rc\\u1234\\u055e", 17,
+		  "a\nb\nc\\u1234\\u055e", 18 },
+#endif
+		/* UTF-8 set with its terminator */
+		{ ClipboardRegisterFormat(clipboard, "text/plain;charset=utf-8"),
+		  ClipboardRegisterFormat(clipboard, "UTF8_STRING"), "ab", 3, "ab", 3 },
+		{ ClipboardRegisterFormat(clipboard, "text/plain;charset=utf-8"), CF_UNICODETEXT, "ab", 3,
+		  "\x61\x00\x62\x00\x00\x00", 6 }
+	};
+
+	BOOL rc = FALSE;
+
+	for (size_t x = 0; x < ARRAYSIZE(tests); x++)
+	{
+		const test_case_t* cur = &tests[x];
+
+		/* local text/plain is set without a terminator */
+		if (!test_ClipboardSetData(clipboard, cur->srcFormat, cur->src, cur->srcLen))
+			goto fail;
+
+		UINT32 dstSize = 0;
+		BYTE* data = test_ClipboardGetData(clipboard, cur->dstFormat, &dstSize);
+		if (dstSize != cur->expectLen)
+		{
+			winpr_znfree(data, dstSize);
+			goto fail;
+		}
+		if (dstSize != 0)
+		{
+			if (!data)
+			{
+				winpr_znfree(data, dstSize);
+				goto fail;
+			}
+			const int rc = memcmp(cur->expect, data, cur->expectLen);
+			winpr_znfree(data, dstSize);
+			if (rc != 0)
+				goto fail;
+		}
+		else
+			winpr_znfree(data, dstSize);
+	}
+	rc = TRUE;
+
+fail:
+	ClipboardDestroy(clipboard);
+	return rc;
+}
+
+WINPR_ATTR_NODISCARD
+static BOOL set_descriptor_name(FILEDESCRIPTORW* dsc, const char* name, const char* trailing)
+{
+	BOOL rc = TRUE;
+	/* what follows the '\0' of cFileName is garbage the converter must ignore */
+	memset(dsc->cFileName, 0xff, sizeof(dsc->cFileName));
+	const size_t len = strlen(name);
+	if (ConvertUtf8NToWChar(name, len + 1, dsc->cFileName, ARRAYSIZE(dsc->cFileName)) < 0)
+		rc = FALSE;
+	else if (trailing && (ConvertUtf8NToWChar(trailing, strlen(trailing), &dsc->cFileName[len],
+	                                          ARRAYSIZE(dsc->cFileName) - len - 1) < 0))
+		rc = FALSE;
+	if (!rc)
+		test_log("set_descriptor_name(%s, %s) failed", name, trailing);
+	return TRUE;
+}
+
+WINPR_ATTR_NODISCARD
+static BOOL test_file_descriptors_to_uri_list(void)
+{
+	BOOL rc = FALSE;
+	char* basePath = GetKnownSubPath(KNOWN_PATH_TEMP, "frdp-test");
+	if (!basePath)
+		return FALSE;
+	char* uris = nullptr;
+
+	struct
+	{
+		UINT32 count;
+		FILEDESCRIPTORW dsc[4];
+	} data = WINPR_C_ARRAY_INIT;
+
+	char* cmpdir = nullptr;
+	char* cmpa = nullptr;
+	wClipboard* clipboard = ClipboardCreate();
+	if (!clipboard)
+		goto fail;
+
+	HRESULT hr = PathCchConvertStyleA(basePath, strlen(basePath), PATH_STYLE_UNIX);
+	if (FAILED(hr))
+		goto fail;
+
+	wClipboardDelegate* delegate = ClipboardGetDelegate(clipboard);
+	if (!delegate)
+		goto fail;
+	delegate->basePath = basePath;
+
+	size_t len = 0;
+	winpr_asprintf(&cmpdir, &len, "file://%s/dir\r\n", basePath);
+	winpr_asprintf(&cmpa, &len, "file://%s/a.txt", basePath);
+	if (!cmpdir || !cmpa)
+		goto fail;
+
+	/* data must be little endian */
+	winpr_Data_Write_UINT32(&data.count, ARRAYSIZE(data.dsc));
+	winpr_Data_Write_UINT32(&data.dsc[0].dwFileAttributes, FILE_ATTRIBUTE_DIRECTORY);
+	if (!set_descriptor_name(&data.dsc[0], "dir", nullptr))
+		goto fail;
+	if (!set_descriptor_name(&data.dsc[1], "dir\\b.txt", nullptr))
+		goto fail;
+	/* a stale '\' after the name must not make a top level file look nested */
+	if (!set_descriptor_name(&data.dsc[2], "a.txt", "old\\name"))
+		goto fail;
+	if (!set_descriptor_name(&data.dsc[3], "a.txt", "old\\"))
+		goto fail;
+
+	{
+		const UINT32 srcId = ClipboardRegisterFormat(clipboard, "FileGroupDescriptorW");
+		const UINT32 dstId = ClipboardRegisterFormat(clipboard, "text/uri-list");
+		if (!test_ClipboardSetData(clipboard, srcId, &data, sizeof(data)))
+			goto fail;
+
+		UINT32 size = 0;
+		uris = test_ClipboardGetData(clipboard, dstId, &size);
+		if (!uris)
+			goto fail;
+		test_log("text/uri-list: '%s'", uris);
+
+		if (!strstr(uris, cmpdir))
+		{
+			test_log("strstr(%s, %s) failed", uris, cmpdir);
+			goto fail;
+		}
+		if (strstr(uris, "b.txt"))
+		{
+			test_log("strstr(%s, %s) failed", uris, "b.txt");
+			goto fail;
+		}
+	}
+
+	rc = TRUE;
+fail:
+	if (!rc)
+		test_log("FileGroupDescriptorW -> text/uri-list conversion failed");
+	free(uris);
+	free(cmpdir);
+	free(cmpa);
+	free(basePath);
+	ClipboardDestroy(clipboard);
+	return rc;
+}
+
+/* image/bmp from the clipboard has a plain BITMAPINFOHEADER and is stored bottom-up */
+WINPR_ATTR_NODISCARD
+static BOOL test_is_plain_bmp(const BYTE* bmp, size_t size)
+{
+	if ((size < 54) || (bmp[0] != 'B') || (bmp[1] != 'M'))
+		return FALSE;
+
+	const UINT32 biSize = winpr_Data_Get_UINT32(&bmp[14]);
+	const INT32 biHeight = winpr_Data_Get_INT32(&bmp[22]);
+	const UINT32 biCompression = winpr_Data_Get_UINT32(&bmp[30]);
+	if ((biSize != 40) || (biHeight <= 0) || (biCompression != BI_RGB))
+	{
+		test_log("not a plain bottom-up BMP: biSize=%" PRIu32 " biHeight=%" PRId32
+		         " biCompression=%" PRIu32,
+		         biSize, biHeight, biCompression);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/* convert the clipboard content to dstMime and compare the image with the expected one */
+WINPR_ATTR_NODISCARD
+static BOOL test_convert_image(wClipboard* clipboard, const char* dstMime, const wImage* expected)
+{
+	BOOL rc = FALSE;
+	UINT32 size = 0;
+	wImage* img = winpr_image_new();
+	BYTE* data =
+	    test_ClipboardGetData(clipboard, ClipboardRegisterFormat(clipboard, dstMime), &size);
+	if (!img || !data)
+		goto fail;
+
+	if (winpr_image_read_buffer(img, data, size) <= 0)
+	{
+		test_log("can not read %s", dstMime);
+		goto fail;
+	}
+
+	if (!winpr_image_equal(expected, img,
+	                       WINPR_IMAGE_CMP_IGNORE_DEPTH | WINPR_IMAGE_CMP_IGNORE_ALPHA |
+	                           WINPR_IMAGE_CMP_FUZZY))
+	{
+		test_log("%s differs from the source image", dstMime);
+		goto fail;
+	}
+
+	if ((strcmp(dstMime, "image/bmp") == 0) && !test_is_plain_bmp(data, size))
+		goto fail;
+
+	rc = TRUE;
+fail:
+	free(data);
+	winpr_image_free(img, TRUE);
+	return rc;
+}
+
+/* image formats convert into each other directly, without going through CF_DIB first */
+WINPR_ATTR_NODISCARD
+static BOOL test_image_to_image(void)
+{
+	BOOL rc = FALSE;
+	void* data = nullptr;
+	size_t size = 0;
+	wClipboard* clipboard = ClipboardCreate();
+	wImage* img = winpr_image_new();
+	if (!clipboard || !img)
+		goto fail;
+
+	if (winpr_image_read(img, TEST_CLIP_BMP) <= 0)
+		goto fail;
+
+	data = winpr_image_write_buffer(img, WINPR_IMAGE_BITMAP, &size);
+	if (!data || !test_ClipboardSetData(clipboard, ClipboardRegisterFormat(clipboard, "image/bmp"),
+	                                    data, (UINT32)size))
+		goto fail;
+	free(data);
+	data = nullptr;
+
+	if (!test_convert_image(clipboard, "image/x-bmp", img))
+		goto fail;
+#if defined(WINPR_UTILS_IMAGE_PNG)
+	if (!test_convert_image(clipboard, "image/png", img))
+		goto fail;
+
+	data = winpr_image_write_buffer(img, WINPR_IMAGE_PNG, &size);
+	if (!data || !test_ClipboardSetData(clipboard, ClipboardRegisterFormat(clipboard, "image/png"),
+	                                    data, (UINT32)size))
+		goto fail;
+
+	if (!test_convert_image(clipboard, "image/bmp", img))
+		goto fail;
+#endif
+
+	rc = TRUE;
+fail:
+	free(data);
+	winpr_image_free(img, TRUE);
+	ClipboardDestroy(clipboard);
+	return rc;
+}
+
+/* text/plain is UTF-8 on Windows and ASCII with \u escapes elsewhere; both convert back */
+WINPR_ATTR_NODISCARD
+static BOOL test_text_plain(void)
+{
+	BOOL rc = FALSE;
+	const char utf8[] = "A\xe4\xb8\xad\xe6\x96\x87\xc3\xa9"; /* A, two CJK characters, e acute */
+	const size_t utf8len = strlen(utf8);
+	char* plain = nullptr;
+	WCHAR* wstr = nullptr;
+	char* back = nullptr;
+	UINT32 size = 0;
+
+	wClipboard* clipboard = ClipboardCreate();
+	if (!clipboard)
+		goto fail;
+
+	const UINT32 idUtf8 = ClipboardRegisterFormat(clipboard, "text/plain;charset=utf-8");
+	const UINT32 idPlain = ClipboardRegisterFormat(clipboard, "text/plain");
+	if (!test_ClipboardSetData(clipboard, idUtf8, utf8, (UINT32)utf8len))
+		goto fail;
+
+	plain = test_ClipboardGetData(clipboard, idPlain, &size);
+	if (!plain)
+		goto fail;
+
+#if defined(_WIN32)
+	if ((size < utf8len) || (memcmp(plain, utf8, utf8len) != 0))
+	{
+		test_log("text/plain is not UTF-8");
+		goto fail;
+	}
+#else
+	for (UINT32 x = 0; x < size; x++)
+	{
+		if ((BYTE)plain[x] > 0x7f)
+		{
+			test_log("text/plain is not ASCII");
+			goto fail;
+		}
+	}
+#endif
+
+	if (!test_ClipboardSetData(clipboard, idPlain, plain, size))
+		goto fail;
+
+	wstr = test_ClipboardGetData(clipboard, CF_UNICODETEXT, &size);
+	if (!wstr)
+		goto fail;
+
+	{
+		size_t backlen = 0;
+		back = ConvertWCharNToUtf8Alloc(wstr, size / sizeof(WCHAR), &backlen);
+		if (!back || (backlen < utf8len) || (memcmp(back, utf8, utf8len) != 0))
+		{
+			test_log("text/plain does not convert back to the original text");
+			goto fail;
+		}
+	}
+
+	rc = TRUE;
+fail:
+	free(back);
+	free(wstr);
+	free(plain);
+	ClipboardDestroy(clipboard);
+	return rc;
+}
+
+static BOOL test_cf_locale(void)
+{
+	BOOL rc = FALSE;
+	wClipboard* cb = ClipboardCreate();
+	if (!cb)
+		return FALSE;
+
+	const UINT32 formats[] = { CF_OEMTEXT, CF_TEXT, CF_UNICODETEXT,
+		                       ClipboardRegisterFormat(cb, "text/plain"),
+		                       ClipboardRegisterFormat(cb, "text/plain;charset=utf-8") };
+
+	for (size_t x = 0; x < ARRAYSIZE(formats); x++)
+	{
+		const UINT32 format = formats[x];
+
+		const char text[] = "some test string";
+		if (!test_ClipboardSetData(cb, format, text, sizeof(text)))
+			goto fail;
+		UINT32 size = 0;
+		void* locale = test_ClipboardGetData(cb, CF_LOCALE, &size);
+		if (!locale || (size != 4))
+		{
+			free(locale);
+			goto fail;
+		}
+		const UINT32 loc = *(UINT32*)locale;
+		free(locale);
+		if (loc != 0x409)
+			goto fail;
+	}
+	rc = TRUE;
+fail:
+	ClipboardDestroy(cb);
+	return rc;
+}
 
 int TestClipboardFormats(int argc, char* argv[])
 {
@@ -10,23 +628,35 @@ int TestClipboardFormats(int argc, char* argv[])
 	UINT32 count = 0;
 	UINT32* pFormatIds = nullptr;
 	const char* formatName = nullptr;
-	wClipboard* clipboard = nullptr;
 	UINT32 utf8StringFormatId = 0;
 
 	WINPR_UNUSED(argc);
 	WINPR_UNUSED(argv);
 
-	clipboard = ClipboardCreate();
+	if (!test_cf_locale())
+		return -1;
+	if (!test_text_leading_newline())
+		return -1;
+
+	if (!test_text_conversion())
+		return -1;
+
+	if (!test_file_descriptors_to_uri_list())
+		return -1;
+
+	wClipboard* clipboard = ClipboardCreate();
 	if (!clipboard)
 		return -1;
 
-	const char* mime_types[] = { "text/html", "text/html",  "image/bmp",
-		                         "image/png", "image/webp", "image/jpeg" };
+	const char* mime_types[] = { "text/plain", "text/plain;charset=utf-8",
+		                         "text/html",  "image/bmp",
+		                         "image/png",  "image/webp",
+		                         "image/jpeg" };
 	for (size_t x = 0; x < ARRAYSIZE(mime_types); x++)
 	{
 		const char* mime = mime_types[x];
 		UINT32 id = ClipboardRegisterFormat(clipboard, mime);
-		(void)fprintf(stderr, "ClipboardRegisterFormat(%s) -> 0x%08" PRIx32 "\n", mime, id);
+		test_log("ClipboardRegisterFormat(%s) -> 0x%08" PRIx32 "", mime, id);
 		if (id == 0)
 			goto fail;
 	}
@@ -39,40 +669,42 @@ int TestClipboardFormats(int argc, char* argv[])
 	{
 		UINT32 formatId = pFormatIds[index];
 		formatName = ClipboardGetFormatName(clipboard, formatId);
-		(void)fprintf(stderr, "Format: 0x%08" PRIX32 " %s\n", formatId, formatName);
+		test_log("Format: 0x%08" PRIX32 " %s", formatId, formatName);
 	}
 
 	free(pFormatIds);
 
 	if (1)
 	{
-		BOOL bSuccess = 0;
-		UINT32 SrcSize = 0;
-		UINT32 DstSize = 0;
 		const char pSrcData[] = "this is a test string";
 		char* pDstData = nullptr;
 
-		SrcSize = (UINT32)(strnlen(pSrcData, ARRAYSIZE(pSrcData)) + 1);
-		bSuccess = ClipboardSetData(clipboard, utf8StringFormatId, pSrcData, SrcSize);
-		(void)fprintf(stderr, "ClipboardSetData: %" PRId32 "\n", bSuccess);
-		DstSize = 0;
-		pDstData = (char*)ClipboardGetData(clipboard, utf8StringFormatId, &DstSize);
-		(void)fprintf(stderr, "ClipboardGetData: %s\n", pDstData);
-		free(pDstData);
-	}
+		UINT32 SrcSize = (UINT32)(strnlen(pSrcData, ARRAYSIZE(pSrcData)) + 1);
+		const BOOL bSuccess =
+		    test_ClipboardSetData(clipboard, utf8StringFormatId, pSrcData, SrcSize);
+		if (!bSuccess)
+			goto fail;
 
-	if (1)
-	{
 		UINT32 DstSize = 0;
-		char* pSrcData = nullptr;
-		WCHAR* pDstData = nullptr;
-		DstSize = 0;
-		pDstData = (WCHAR*)ClipboardGetData(clipboard, CF_UNICODETEXT, &DstSize);
-		pSrcData = ConvertWCharNToUtf8Alloc(pDstData, DstSize / sizeof(WCHAR), nullptr);
-
-		(void)fprintf(stderr, "ClipboardGetData (synthetic): %s\n", pSrcData);
+		pDstData = (char*)test_ClipboardGetData(clipboard, utf8StringFormatId, &DstSize);
+		const BOOL equal = (SrcSize == DstSize) && (strncmp(pSrcData, pDstData, SrcSize) == 0);
 		free(pDstData);
-		free(pSrcData);
+		if (!equal)
+			goto fail;
+		{
+			UINT32 WDstSize = 0;
+			WCHAR* pDstData = (WCHAR*)test_ClipboardGetData(clipboard, CF_UNICODETEXT, &WDstSize);
+
+			size_t cmpSrcSize = 0;
+			char* pCmpData =
+			    ConvertWCharNToUtf8Alloc(pDstData, WDstSize / sizeof(WCHAR), &cmpSrcSize);
+			const BOOL equal2 =
+			    (SrcSize == cmpSrcSize + 1ull) && (strncmp(pCmpData, pSrcData, SrcSize) == 0);
+			free(pDstData);
+			free(pCmpData);
+			if (!equal2)
+				goto fail;
+		}
 	}
 
 	pFormatIds = nullptr;
@@ -82,7 +714,7 @@ int TestClipboardFormats(int argc, char* argv[])
 	{
 		UINT32 formatId = pFormatIds[index];
 		formatName = ClipboardGetFormatName(clipboard, formatId);
-		(void)fprintf(stderr, "Format: 0x%08" PRIX32 " %s\n", formatId, formatName);
+		test_log("Format: 0x%08" PRIX32 " %s", formatId, formatName);
 	}
 
 	if (1)
@@ -103,8 +735,7 @@ int TestClipboardFormats(int argc, char* argv[])
 
 		size_t bmpsize = 0;
 		void* data = winpr_image_write_buffer(img, WINPR_IMAGE_BITMAP, &bmpsize);
-		bSuccess = ClipboardSetData(clipboard, idBmp, data, bmpsize);
-		(void)fprintf(stderr, "ClipboardSetData: %" PRId32 "\n", bSuccess);
+		bSuccess = test_ClipboardSetData(clipboard, idBmp, data, bmpsize);
 
 		free(data);
 		winpr_image_free(img, TRUE);
@@ -115,12 +746,10 @@ int TestClipboardFormats(int argc, char* argv[])
 			UINT32 id = CF_DIB;
 
 			UINT32 DstSize = 0;
-			void* pDstData = ClipboardGetData(clipboard, id, &DstSize);
-			(void)fprintf(stderr, "ClipboardGetData: [CF_DIB] %p [%" PRIu32 "]\n", pDstData,
-			              DstSize);
+			void* pDstData = test_ClipboardGetData(clipboard, id, &DstSize);
 			if (!pDstData)
 				goto fail;
-			bSuccess = ClipboardSetData(clipboard, id, pDstData, DstSize);
+			bSuccess = test_ClipboardSetData(clipboard, id, pDstData, DstSize);
 			free(pDstData);
 			if (!bSuccess)
 				goto fail;
@@ -128,7 +757,7 @@ int TestClipboardFormats(int argc, char* argv[])
 		{
 			const uint32_t id = ClipboardGetFormatId(clipboard, "HTML Format");
 			UINT32 DstSize = 0;
-			void* pDstData = ClipboardGetData(clipboard, id, &DstSize);
+			void* pDstData = test_ClipboardGetData(clipboard, id, &DstSize);
 			if (!pDstData)
 				goto fail;
 			{
@@ -145,9 +774,7 @@ int TestClipboardFormats(int argc, char* argv[])
 			UINT32 id = ClipboardRegisterFormat(clipboard, "image/bmp");
 
 			UINT32 DstSize = 0;
-			void* pDstData = ClipboardGetData(clipboard, id, &DstSize);
-			(void)fprintf(stderr, "ClipboardGetData: [image/bmp] %p [%" PRIu32 "]\n", pDstData,
-			              DstSize);
+			void* pDstData = test_ClipboardGetData(clipboard, id, &DstSize);
 			if (!pDstData)
 				goto fail;
 			free(pDstData);
@@ -160,8 +787,7 @@ int TestClipboardFormats(int argc, char* argv[])
 			UINT32 id = ClipboardRegisterFormat(clipboard, "image/png");
 
 			UINT32 DstSize = 0;
-			void* pDstData = ClipboardGetData(clipboard, id, &DstSize);
-			(void)fprintf(stderr, "ClipboardGetData: [image/png] %p\n", pDstData);
+			void* pDstData = test_ClipboardGetData(clipboard, id, &DstSize);
 			if (!pDstData)
 				goto fail;
 			free(pDstData);
@@ -183,8 +809,7 @@ int TestClipboardFormats(int argc, char* argv[])
 
 			size_t bmpsize = 0;
 			void* data = winpr_image_write_buffer(img, WINPR_IMAGE_PNG, &bmpsize);
-			bSuccess = ClipboardSetData(clipboard, idBmp, data, bmpsize);
-			(void)fprintf(stderr, "ClipboardSetData: %" PRId32 "\n", bSuccess);
+			bSuccess = test_ClipboardSetData(clipboard, idBmp, data, bmpsize);
 
 			free(data);
 			winpr_image_free(img, TRUE);
@@ -195,12 +820,10 @@ int TestClipboardFormats(int argc, char* argv[])
 			UINT32 id = CF_DIB;
 
 			UINT32 DstSize = 0;
-			void* pDstData = ClipboardGetData(clipboard, id, &DstSize);
-			(void)fprintf(stderr, "ClipboardGetData: [CF_DIB] %p [%" PRIu32 "]\n", pDstData,
-			              DstSize);
+			void* pDstData = test_ClipboardGetData(clipboard, id, &DstSize);
 			if (!pDstData)
 				goto fail;
-			bSuccess = ClipboardSetData(clipboard, id, pDstData, DstSize);
+			bSuccess = test_ClipboardSetData(clipboard, id, pDstData, DstSize);
 			free(pDstData);
 			if (!bSuccess)
 				goto fail;
@@ -212,8 +835,7 @@ int TestClipboardFormats(int argc, char* argv[])
 			UINT32 id = ClipboardRegisterFormat(clipboard, "image/webp");
 
 			UINT32 DstSize = 0;
-			void* pDstData = ClipboardGetData(clipboard, id, &DstSize);
-			(void)fprintf(stderr, "ClipboardGetData: [image/webp] %p\n", pDstData);
+			void* pDstData = test_ClipboardGetData(clipboard, id, &DstSize);
 			if (!pDstData)
 				goto fail;
 			free(pDstData);
@@ -225,14 +847,22 @@ int TestClipboardFormats(int argc, char* argv[])
 			UINT32 id = ClipboardRegisterFormat(clipboard, "image/jpeg");
 
 			UINT32 DstSize = 0;
-			void* pDstData = ClipboardGetData(clipboard, id, &DstSize);
-			(void)fprintf(stderr, "ClipboardGetData: [image/jpeg] %p\n", pDstData);
+			void* pDstData = test_ClipboardGetData(clipboard, id, &DstSize);
 			if (!pDstData)
 				goto fail;
 			free(pDstData);
 		}
 #endif
 	}
+
+	if (!test_dib_offsets())
+		goto fail;
+
+	if (!test_image_to_image())
+		goto fail;
+
+	if (!test_text_plain())
+		goto fail;
 
 	rc = 0;
 

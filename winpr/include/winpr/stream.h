@@ -45,7 +45,7 @@ extern "C"
 		size_t length;
 		size_t capacity;
 
-		DWORD count;
+		volatile LONG count;
 		wStreamPool* pool;
 		BOOL isAllocatedStream;
 		BOOL isOwner;
@@ -77,7 +77,7 @@ extern "C"
 	WINPR_ATTR_NODISCARD
 	WINPR_API BOOL Stream_EnsureRemainingCapacity(wStream* s, size_t size);
 
-#define WINPR_STREAM_CAST(t, val) WINPR_CXX_COMPAT_CAST(t, val)
+#define WINPR_STREAM_CAST(t, val) WINPR_PACKED_ALIGN_CAST(t, val)
 
 #define Stream_CheckAndLogRequiredCapacityOfSize(tag, s, nmemb, size)                         \
 	Stream_CheckAndLogRequiredCapacityEx(tag, WLOG_WARN, s, nmemb, size, "%s(%s:%" PRIuz ")", \
@@ -162,10 +162,9 @@ extern "C"
 
 	static inline void Stream_Rewind(wStream* s, size_t _offset)
 	{
-		size_t cur = 0;
 		WINPR_ASSERT(s);
 		WINPR_ASSERT(s->buffer <= s->pointer);
-		cur = WINPR_STREAM_CAST(size_t, s->pointer - s->buffer);
+		const size_t cur = WINPR_ASSERTING_INT_CAST(size_t, s->pointer - s->buffer);
 		WINPR_ASSERT(cur >= _offset);
 		if (cur >= _offset)
 			s->pointer -= (_offset);
@@ -1242,6 +1241,27 @@ extern "C"
 		Stream_Fill(_s, '\0', _n);
 	}
 
+#define Stream_SafeZero(s, size) Stream_SafeZeroEx(s, size, __FILE__, __LINE__, __func__)
+
+	/** @brief Writes '\0' to the stream but aborts if there is not enough capacity available.
+	 *
+	 *  Prefer to use the macro \ref Stream_SafeZero which already fills out the caller location.
+	 *
+	 *  @param s The stream to write to.
+	 *  @param size The number of bytes to write to the stream
+	 *  @param file The name of the file this is called from
+	 *  @param line The file line number this is called from
+	 *  @param fkt The function this is called from
+	 *
+	 *  @return \b TRUE if writing was successful, \b FALSE if there was an error with the stream
+	 * reallocation
+	 *
+	 *  @since version 3.31.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL Stream_SafeZeroEx(wStream* s, size_t size, const char* file, size_t line,
+	                                 const char* fkt);
+
 	static inline void Stream_Copy(wStream* _src, wStream* _dst, size_t _n)
 	{
 		WINPR_ASSERT(_src);
@@ -1342,7 +1362,7 @@ extern "C"
 	{
 		WINPR_ASSERT(_s);
 		WINPR_ASSERT(_s->buffer <= _s->pointer);
-		return WINPR_STREAM_CAST(size_t, (_s->pointer - _s->buffer));
+		return WINPR_ASSERTING_INT_CAST(size_t, (_s->pointer - _s->buffer));
 	}
 
 	/** @brief helper to reset stream read/write position to beginning of stream.
@@ -1411,13 +1431,16 @@ extern "C"
 	/** \brief Writes a UTF-8 string UTF16 encoded to the stream. If the UTF-8
 	 *  string is short, the remaining characters are filled up with '\0'
 	 *
+	 *  \warning This function does not ensure '\0' termination in the resulting WCHAR string.
+	 *
 	 *  \param s The stream to write to
 	 *  \param wcharLength the length (in WCHAR characters) to write
 	 *  \param src The source data buffer with the UTF-8 data
 	 *  \param length The length in bytes of the UTF-8 buffer
 	 *  \param fill If \b TRUE fill the unused parts of the wcharLength with 0
 	 *
-	 *  \b return number of used characters for success, /b -1 for failure
+	 *  \return number of used characters for success, /b -1 for failure
+	 *  \since version 3.0.0
 	 */
 	WINPR_ATTR_NODISCARD
 	WINPR_API SSIZE_T Stream_Write_UTF16_String_From_UTF8(wStream* s, size_t wcharLength,

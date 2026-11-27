@@ -43,9 +43,9 @@ DEB_CMAKE_EXTRA_FLAGS = \
     -DWITH_SAMPLE=OFF \
     -DWITH_OPENSC_PKCS11_LINKED=OFF \
     -DWITH_VAAPI=OFF \
-    -DWITH_WINPR_UTILS_IMAGE_JPEG=ON \
-    -DWITH_WINPR_UTILS_IMAGE_PNG=ON \
-    -DWITH_WINPR_UTILS_IMAGE_WEBP=ON \
+    -DWINPR_UTILS_IMAGE_JPEG=ON \
+    -DWINPR_UTILS_IMAGE_PNG=ON \
+    -DWINPR_UTILS_IMAGE_WEBP=ON \
     -DWITH_SMARTCARD_EMULATE=ON \
     -DRDTK_FORCE_STATIC_BUILD=ON \
     -DUWAC_FORCE_STATIC_BUILD=ON \
@@ -53,23 +53,11 @@ DEB_CMAKE_EXTRA_FLAGS = \
     -DWITH_VERBOSE_WINPR_ASSERT=OFF \
     -DWITH_INSTALL_CLIENT_DESKTOP_FILES=ON \
     -DWITH_JSONC_REQUIRED=ON \
-    -DWITH_INTERNAL_MD4=ON \
     $(empty)
 
 ifneq (,$(filter armel,$(DEB_HOST_ARCH)))
     DEB_CMAKE_EXTRA_FLAGS += \
         -DWITH_NEON=OFF \
-        $(empty)
-endif
-
-ifneq (,$(filter armel armhf,$(DEB_HOST_ARCH)))
-# https://github.com/FreeRDP/FreeRDP/issues/10353
-# gcc/glibc does not provide _URC_NORMAL_STOP etc definitions in
-# <unwind.h> on armel armhf
-# it's proabbly be better to perform a build-time check instead
-# -DWITH_UNWIND=OFF does not work in version 3.6
-    DEB_CMAKE_EXTRA_FLAGS += \
-        -DWINPR_HAVE_UNWIND_H=OFF \
         $(empty)
 endif
 
@@ -81,13 +69,9 @@ ifneq (,$(filter linux,$(DEB_HOST_ARCH_OS)))
         -DWITH_VAAPI_H264_ENCODING=ON \
         -DCHANNEL_RDPECAM=ON \
         -DCHANNEL_RDPECAM_CLIENT=ON \
+        -DCHANNEL_RDPEWA=ON \
+        -DCHANNEL_RDPEWA_CLIENT=ON \
         -DWITH_SSO_MIB=ON \
-        $(empty)
-    # RDPEWA (WebAuthn) needs libcbor >= 0.10.2, but the archive only has
-    # 0.8.0; keep the channel off until libcbor gets bumped
-    DEB_CMAKE_EXTRA_FLAGS += \
-        -DCHANNEL_RDPEWA=OFF \
-        -DCHANNEL_RDPEWA_CLIENT=OFF \
         $(empty)
 else
     DEB_CMAKE_EXTRA_FLAGS += \
@@ -104,14 +88,13 @@ else
 endif
 
 # Ubuntu can't have ffmpeg in main
-# Ubuntu doesn't yet have cjson or pkcs11-helper
+# Ubuntu doesn't yet have cjson
 # or sso-mib or uriparser in main
 ifeq ($(shell dpkg-vendor --is Ubuntu && echo yes),yes)
     DEB_CMAKE_EXTRA_FLAGS += \
         -DWITH_FFMPEG=OFF \
         -DWITH_GSM=OFF \
         -DWITH_CAIRO=ON \
-        -DWITH_PKCS11=OFF \
         -DWITH_SSO_MIB=OFF \
         -DWITH_SWSCALE=OFF \
         -DWITH_URIPARSER=OFF \

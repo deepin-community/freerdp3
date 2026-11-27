@@ -37,6 +37,7 @@
 #include <freerdp/client/cmdline.h>
 #include <freerdp/client/cliprdr.h>
 #include <freerdp/client/channels.h>
+#include <freerdp/client/aad_helper.h>
 #include <freerdp/channels/channels.h>
 
 #include <winpr/crt.h>
@@ -65,10 +66,6 @@
 #endif
 
 #include <sdl_config.hpp>
-
-#if defined(WITH_WEBVIEW)
-#include <aad/sdl_webview.hpp>
-#endif
 
 #define SDL_TAG CLIENT_TAG("SDL")
 
@@ -1180,6 +1177,7 @@ static void sdl_post_disconnect(freerdp* instance)
 	                                      sdl_OnChannelDisconnectedEventHandler);
 	PubSub_UnsubscribeUserNotification(instance->context->pubSub,
 	                                   sdl_OnUserNotificationEventHandler);
+
 	gdi_free(instance);
 }
 
@@ -1478,12 +1476,7 @@ static BOOL sdl_client_new(freerdp* instance, rdpContext* context)
 	instance->PresentGatewayMessage = sdl_present_gateway_message;
 	instance->ChooseSmartcard = sdl_choose_smartcard;
 	instance->RetryDialog = sdl_retry_dialog;
-
-#if defined(WITH_WEBVIEW)
-	instance->GetAccessToken = sdl_webview_get_access_token;
-#else
-	instance->GetAccessToken = client_cli_get_access_token;
-#endif
+	instance->GetAccessToken = client_failsafe_get_access_token;
 	/* TODO: Client display set up */
 
 	return TRUE;
@@ -1789,4 +1782,9 @@ rdpContext* SdlContext::context() const
 rdpClientContext* SdlContext::common() const
 {
 	return reinterpret_cast<rdpClientContext*>(_context);
+}
+
+std::shared_ptr<SdlAadAuthHelper>& SdlContext::getAadAuthHelper()
+{
+	return _aadAuthHelper;
 }

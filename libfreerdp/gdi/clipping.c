@@ -88,21 +88,21 @@ BOOL gdi_ClipCoords(HGDI_DC hdc, INT32* x, INT32* y, INT32* w, INT32* h, INT32* 
 	if (hdc == nullptr)
 		return FALSE;
 
-	HGDI_BITMAP hBmp = (HGDI_BITMAP)hdc->selectedObject;
+	HGDI_BITMAP hBmp = WINPR_PACKED_ALIGN_CAST(HGDI_BITMAP, hdc->selectedObject);
 
 	if (hBmp != nullptr)
 	{
 		if (hdc->clip->null)
 		{
 			if (!gdi_CRgnToRect(0, 0, hBmp->width, hBmp->height, &clip))
-				return TRUE;
+				return FALSE;
 		}
 		else
 		{
 			if (!gdi_RgnToRect(hdc->clip, &clip))
-				return TRUE;
+				return FALSE;
 			if (!gdi_CRgnToRect(0, 0, hBmp->width, hBmp->height, &bmp))
-				return TRUE;
+				return FALSE;
 
 			if (clip.left < bmp.left)
 				clip.left = bmp.left;
@@ -120,11 +120,11 @@ BOOL gdi_ClipCoords(HGDI_DC hdc, INT32* x, INT32* y, INT32* w, INT32* h, INT32* 
 	else
 	{
 		if (!gdi_RgnToRect(hdc->clip, &clip))
-			return TRUE;
+			return FALSE;
 	}
 
 	if (!gdi_CRgnToRect(*x, *y, *w, *h, &coords))
-		return TRUE;
+		return FALSE;
 
 	if (coords.right >= clip.left && coords.left <= clip.right && coords.bottom >= clip.top &&
 	    coords.top <= clip.bottom)

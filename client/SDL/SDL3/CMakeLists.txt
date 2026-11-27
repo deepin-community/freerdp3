@@ -45,9 +45,80 @@ set(SRCS
     sdl_window.cpp
     sdl_clip.hpp
     sdl_clip.cpp
+    sdl_web_clip_offers.hpp
     sdl_context.hpp
     sdl_context.cpp
+    sdl_rail.hpp
+    sdl_rail.cpp
+    sdl_rail_platform.hpp
+    sdl_rail_platform.cpp
+    sdl_rail_window.hpp
+    sdl_rail_window.cpp
+    sdl_rail_window_style.hpp
+    sdl_wayland.hpp
+    sdl_wayland.cpp
+    sdl_win32.hpp
+    sdl_win32.cpp
+    sdl_x11.hpp
+    sdl_x11.cpp
 )
+
+# Native X11 helpers for RAIL (_NET_WM_MOVERESIZE, compositor detection); no-op stubs without libX11.
+set(SDL_X11_NATIVE OFF)
+if(NOT WIN32 AND NOT APPLE)
+  find_package(X11 QUIET)
+  if(X11_FOUND)
+    set(SDL_X11_NATIVE ON)
+  endif()
+endif()
+
+# Native Wayland helpers for RAIL (xdg_toplevel.move/resize); no-op stubs without wayland-client.
+set(SDL_WAYLAND_NATIVE OFF)
+if(NOT WIN32 AND NOT APPLE)
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(WAYLAND_CLIENT QUIET wayland-client)
+    # Host scanner and canonical protocol, so a cross build does not pick the target ones.
+    pkg_get_variable(WAYLAND_SCANNER_BIN wayland-scanner wayland_scanner)
+    pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+  endif()
+  if(NOT WAYLAND_SCANNER_BIN)
+    find_program(WAYLAND_SCANNER_BIN wayland-scanner)
+  endif()
+  # Prefer wayland-protocols; fall back to the copy bundled with uwac.
+  if(WAYLAND_PROTOCOLS_DIR AND EXISTS ${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml)
+    set(XDG_SHELL_XML ${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml)
+  else()
+    set(XDG_SHELL_XML ${CMAKE_SOURCE_DIR}/uwac/protocols/xdg-shell.xml)
+  endif()
+  if(WAYLAND_CLIENT_FOUND AND WAYLAND_SCANNER_BIN AND EXISTS ${XDG_SHELL_XML})
+    set(SDL_WAYLAND_NATIVE ON)
+    set(WAYLAND_SOURCE_NAME_NO_EXT ${CMAKE_CURRENT_BINARY_DIR}/wayland/xdg-shell-client-protocol)
+
+    add_custom_command(
+      OUTPUT ${WAYLAND_SOURCE_NAME_NO_EXT}.h COMMAND ${CMAKE_COMMAND} -E make_directory
+                                                     ${CMAKE_CURRENT_BINARY_DIR}/wayland
+      COMMAND ${WAYLAND_SCANNER_BIN} client-header ${XDG_SHELL_XML} ${WAYLAND_SOURCE_NAME_NO_EXT}.h
+      DEPENDS ${XDG_SHELL_XML}
+    )
+    add_custom_command(
+      OUTPUT ${WAYLAND_SOURCE_NAME_NO_EXT}.c COMMAND ${CMAKE_COMMAND} -E make_directory
+                                                     ${CMAKE_CURRENT_BINARY_DIR}/wayland
+      COMMAND ${WAYLAND_SCANNER_BIN} private-code ${XDG_SHELL_XML} ${WAYLAND_SOURCE_NAME_NO_EXT}.c
+      DEPENDS ${XDG_SHELL_XML}
+    )
+
+    set(WAYLAND_SRCS ${WAYLAND_SOURCE_NAME_NO_EXT}.c ${WAYLAND_SOURCE_NAME_NO_EXT}.h)
+
+    # Silence warnings from generated files:
+    # 1. compile without warnings
+    # 2. place files in binary subdirectory not in include path
+    # 3. add the subdirectory as SYSTEM include directory, which silences warnings
+    set_source_files_properties(${WAYLAND_SRCS} PROPERTIES COMPILE_FLAGS "-w")
+    include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/wayland)
+    list(APPEND SRCS ${WAYLAND_SRCS})
+  endif()
+endif()
 
 add_win_console_manifest(SRCS)
 
@@ -60,7 +131,6 @@ list(
   Threads::Threads
   sdl3_client_res
   sdl3-dialogs
-  sdl-common-aad-view
   sdl-common-prefs
 )
 
@@ -75,7 +145,28 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 addtargetwithresourcefile(${MODULE_NAME} "${WIN32_GUI_FLAG}" "${PROJECT_VERSION}" SRCS)
 
+if(SDL_WAYLAND_NATIVE)
+  target_compile_definitions(${MODULE_NAME} PRIVATE WITH_SDL_WAYLAND_NATIVE)
+  target_include_directories(${MODULE_NAME} PRIVATE ${WAYLAND_CLIENT_INCLUDE_DIRS})
+  list(APPEND LIBS ${WAYLAND_CLIENT_LIBRARIES})
+endif()
+
+if(SDL_X11_NATIVE)
+  target_compile_definitions(${MODULE_NAME} PRIVATE WITH_SDL_X11_NATIVE)
+  target_include_directories(${MODULE_NAME} PRIVATE ${X11_INCLUDE_DIR})
+  list(APPEND LIBS ${X11_LIBRARIES})
+endif()
+
 target_link_libraries(${MODULE_NAME} PRIVATE ${LIBS})
+
+if(EMSCRIPTEN)
+  # JavaScript side of the browser clipboard in sdl_clip.cpp and of the page's monitors in
+  # sdl_context.cpp
+  foreach(_js sdl_clip_emscripten.js sdl_monitors_emscripten.js)
+    target_link_options(${MODULE_NAME} PRIVATE "--js-library=${CMAKE_CURRENT_SOURCE_DIR}/${_js}")
+    set_property(TARGET ${MODULE_NAME} APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_js})
+  endforeach()
+endif()
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "Client/SDL")
 get_target_property(SDL_CLIENT_BINARY_NAME ${MODULE_NAME} OUTPUT_NAME)

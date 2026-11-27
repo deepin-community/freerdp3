@@ -124,8 +124,9 @@ static BOOL log_mmresult(AudinWinmmDevice* winmm, const char* what, MMRESULT res
 		CHAR cmsg[8192] = WINPR_C_ARRAY_INIT;
 		waveInGetErrorTextA(result, buffer, sizeof(buffer));
 
-		_snprintf(msg, sizeof(msg) - 1, "%s failed. %" PRIu32 " [%s]", what, result, buffer);
-		_snprintf(cmsg, sizeof(cmsg) - 1, "audin_winmm_thread_func reported an error '%s'", msg);
+		(void)_snprintf(msg, sizeof(msg) - 1, "%s failed. %" PRIu32 " [%s]", what, result, buffer);
+		(void)_snprintf(cmsg, sizeof(cmsg) - 1, "audin_winmm_thread_func reported an error '%s'",
+		                msg);
 		WLog_Print(winmm->log, WLOG_DEBUG, "%s", msg);
 		if (winmm->rdpcontext)
 			setChannelError(winmm->rdpcontext, ERROR_INTERNAL_ERROR, cmsg);
@@ -169,8 +170,6 @@ static BOOL test_format_supported(const PWAVEFORMATEX pwfx)
 static DWORD WINAPI audin_winmm_thread_func(LPVOID arg)
 {
 	AudinWinmmDevice* winmm = (AudinWinmmDevice*)arg;
-	char* buffer = nullptr;
-	int size = 0;
 	WAVEHDR waveHdr[4] = WINPR_C_ARRAY_INIT;
 	DWORD status = 0;
 	MMRESULT rc = 0;
@@ -184,19 +183,22 @@ static DWORD WINAPI audin_winmm_thread_func(LPVOID arg)
 			return ERROR_INTERNAL_ERROR;
 	}
 
-	size =
-	    (winmm->pwfx_cur->wBitsPerSample * winmm->pwfx_cur->nChannels * winmm->frames_per_packet +
-	     7) /
-	    8;
+	const size_t framesize =
+	    1ull * winmm->pwfx_cur->wBitsPerSample / 8ull * winmm->pwfx_cur->nChannels;
+	if (framesize > UINT32_MAX)
+		return ERROR_INTERNAL_ERROR;
 
+	const size_t size = framesize * winmm->frames_per_packet;
+	if (size > UINT32_MAX)
+		return ERROR_INTERNAL_ERROR;
 	for (int i = 0; i < 4; i++)
 	{
-		buffer = (char*)malloc(size);
+		char* buffer = (char*)calloc(framesize, winmm->frames_per_packet);
 
 		if (!buffer)
 			return CHANNEL_RC_NO_MEMORY;
 
-		waveHdr[i].dwBufferLength = size;
+		waveHdr[i].dwBufferLength = WINPR_ASSERTING_INT_CAST(DWORD, size);
 		waveHdr[i].dwFlags = 0;
 		waveHdr[i].lpData = buffer;
 		rc = waveInPrepareHeader(winmm->hWaveIn, &waveHdr[i], sizeof(waveHdr[i]));

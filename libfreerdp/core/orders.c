@@ -513,7 +513,7 @@ static BOOL check_primary_order_supported(wLog* log, const rdpSettings* settings
 
 WINPR_PRAGMA_DIAG_PUSH
 WINPR_PRAGMA_DIAG_IGNORED_FORMAT_NONLITERAL
-static const char* primary_order_string(UINT32 orderType)
+const char* primary_order_string(UINT32 orderType, char* buffer, size_t len)
 {
 	const char* orders[] = { "[0x%02" PRIx8 "] DstBlt",
 		                     "[0x%02" PRIx8 "] PatBlt",
@@ -544,15 +544,15 @@ static const char* primary_order_string(UINT32 orderType)
 		                     "[0x%02" PRIx8 "] EllipseCB",
 		                     "[0x%02" PRIx8 "] GlyphIndex" };
 	const char* fmt = "[0x%02" PRIx8 "] UNKNOWN";
-	static char buffer[64] = WINPR_C_ARRAY_INIT;
 
 	if (orderType < ARRAYSIZE(orders))
 		fmt = orders[orderType];
 
-	(void)sprintf_s(buffer, ARRAYSIZE(buffer), fmt, orderType);
+	(void)sprintf_s(buffer, len, fmt, orderType);
 	return buffer;
 }
-static const char* secondary_order_string(UINT32 orderType)
+
+const char* secondary_order_string(UINT32 orderType, char* buffer, size_t len)
 {
 	const char* orders[] = { "[0x%02" PRIx8 "] Cache Bitmap",
 		                     "[0x%02" PRIx8 "] Cache Color Table",
@@ -564,15 +564,15 @@ static const char* secondary_order_string(UINT32 orderType)
 		                     "[0x%02" PRIx8 "] Cache Brush",
 		                     "[0x%02" PRIx8 "] Cache Bitmap V3" };
 	const char* fmt = "[0x%02" PRIx8 "] UNKNOWN";
-	static char buffer[64] = WINPR_C_ARRAY_INIT;
 
 	if (orderType < ARRAYSIZE(orders))
 		fmt = orders[orderType];
 
-	(void)sprintf_s(buffer, ARRAYSIZE(buffer), fmt, orderType);
+	(void)sprintf_s(buffer, len, fmt, orderType);
 	return buffer;
 }
-static const char* altsec_order_string(BYTE orderType)
+
+const char* altsec_order_string(BYTE orderType, char* buffer, size_t len)
 {
 	const char* orders[] = {
 		"[0x%02" PRIx8 "] Switch Surface",         "[0x%02" PRIx8 "] Create Offscreen Bitmap",
@@ -584,12 +584,11 @@ static const char* altsec_order_string(BYTE orderType)
 		"[0x%02" PRIx8 "] Desktop Composition",    "[0x%02" PRIx8 "] Frame Marker"
 	};
 	const char* fmt = "[0x%02" PRIx8 "] UNKNOWN";
-	static char buffer[64] = WINPR_C_ARRAY_INIT;
 
 	if (orderType < ARRAYSIZE(orders))
 		fmt = orders[orderType];
 
-	(void)sprintf_s(buffer, ARRAYSIZE(buffer), fmt, orderType);
+	(void)sprintf_s(buffer, len, fmt, orderType);
 	return buffer;
 }
 WINPR_PRAGMA_DIAG_POP
@@ -605,7 +604,19 @@ static inline BOOL update_read_coord(wStream* s, INT32* coord, BOOL delta)
 			return FALSE;
 
 		Stream_Read_INT8(s, lsi8);
-		*coord += lsi8;
+
+		/* [MS-RDPEGDI] 2.2.2.2.1.1.1.1 Coord Field (COORD_FIELD) is a signed 16 bit value,
+		 * do not let deltas accumulate beyond that range. */
+		const INT32 value = *coord + lsi8;
+		if ((value > INT16_MAX) || (value < INT16_MIN))
+		{
+			WLog_WARN(TAG,
+			          "[MS-RDPEGDI] 2.2.2.2.1.1.1.1 Coord Field (COORD_FIELD): out of range delta "
+			          "update: %d <= %d <= %d. Clamping to limits.",
+			          INT16_MIN, value, INT16_MAX);
+		}
+
+		*coord = MIN(MAX(value, INT16_MIN), INT16_MAX);
 	}
 	else
 	{
@@ -1108,6 +1119,9 @@ static inline BOOL update_read_delta_points(wStream* s, DELTA_POINT** points, UI
 {
 	BYTE flags = 0;
 	UINT32 zeroBitsSize = ((number + 3) / 4);
+
+	if (SIZE_MAX / number <= sizeof(DELTA_POINT))
+		return FALSE;
 
 	WINPR_ASSERT(points);
 	DELTA_POINT* newpoints = (DELTA_POINT*)realloc(*points, sizeof(DELTA_POINT) * number);
@@ -2309,7 +2323,6 @@ static BOOL update_read_ellipse_cb_order(const char* orderName, wStream* s,
 
 /* Secondary Drawing Orders */
 WINPR_ATTR_MALLOC(free_cache_bitmap_order, 2)
-WINPR_ATTR_NODISCARD
 static CACHE_BITMAP_ORDER* update_read_cache_bitmap_order(rdpUpdate* update, wStream* s,
                                                           BOOL compressed, UINT16 flags)
 {
@@ -2448,7 +2461,7 @@ static CACHE_BITMAP_V2_ORDER* update_read_cache_bitmap_v2_order(rdpUpdate* updat
 	if (!cache_bitmap_v2)
 		goto fail;
 
-	cache_bitmap_v2->cacheId = flags & 0x0003;
+	cache_bitmap_v2->cacheId = flags & 0x0007;
 	cache_bitmap_v2->flags = (flags & 0xFF80) >> 7;
 	bitsPerPixelId = (flags & 0x0078) >> 3;
 	cache_bitmap_v2->bitmapBpp = get_cbr2_bpp(bitsPerPixelId, &rc);
@@ -2618,40 +2631,68 @@ BOOL update_write_cache_bitmap_v2_order(wStream* s, CACHE_BITMAP_V2_ORDER* cache
 }
 
 WINPR_ATTR_MALLOC(free_cache_bitmap_v3_order, 2)
-WINPR_ATTR_NODISCARD
 static CACHE_BITMAP_V3_ORDER* update_read_cache_bitmap_v3_order(rdpUpdate* update, wStream* s,
                                                                 UINT16 flags)
 {
 	BOOL rc = 0;
-	BYTE bitsPerPixelId = 0;
-	BITMAP_DATA_EX* bitmapData = nullptr;
 	UINT32 new_len = 0;
 	BYTE* new_data = nullptr;
-	CACHE_BITMAP_V3_ORDER* cache_bitmap_v3 = nullptr;
 	rdp_update_internal* up = update_cast(update);
 
 	if (!update || !s)
 		return nullptr;
 
-	cache_bitmap_v3 = calloc(1, sizeof(CACHE_BITMAP_V3_ORDER));
+	WINPR_ASSERT(update->context);
+
+	const rdpSettings* settings = update->context->settings;
+	WINPR_ASSERT(settings);
+
+	if (!freerdp_settings_get_bool(settings, FreeRDP_BitmapCacheV3Enabled))
+	{
+		WLog_Print(up->log, WLOG_ERROR, "BitmapCacheV3 not enabled for this connection, aborting");
+		return nullptr;
+	}
+
+	CACHE_BITMAP_V3_ORDER* cache_bitmap_v3 = calloc(1, sizeof(CACHE_BITMAP_V3_ORDER));
 
 	if (!cache_bitmap_v3)
 		goto fail;
 
-	cache_bitmap_v3->cacheId = flags & 0x00000003;
-	cache_bitmap_v3->flags = (flags & 0x0000FF80) >> 7;
-	bitsPerPixelId = (flags & 0x00000078) >> 3;
-	cache_bitmap_v3->bpp = get_cbr2_bpp(bitsPerPixelId, &rc);
-	if (!rc)
+	cache_bitmap_v3->cacheId = flags & 0x00000007;
+	const UINT32 NumCellCaches =
+	    freerdp_settings_get_uint32(settings, FreeRDP_BitmapCacheV2NumCells);
+	if (cache_bitmap_v3->cacheId >= NumCellCaches)
+	{
+		WLog_Print(up->log, WLOG_ERROR,
+		           "BitmapCacheV3::cacheId %" PRIu32 " > NumCellCaches %" PRIu32,
+		           cache_bitmap_v3->cacheId, NumCellCaches);
 		goto fail;
+	}
+	cache_bitmap_v3->flags = (flags >> 7) & 0x000001FF;
 
-	if (!Stream_CheckAndLogRequiredLength(TAG, s, 21))
+	const BYTE bitsPerPixelId = (flags >> 3) & 0x000000F;
+	cache_bitmap_v3->bpp = get_cbr2_bpp(bitsPerPixelId, &rc);
+
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, 22))
 		goto fail;
 
 	Stream_Read_UINT16(s, cache_bitmap_v3->cacheIndex); /* cacheIndex (2 bytes) */
 	Stream_Read_UINT32(s, cache_bitmap_v3->key1);       /* key1 (4 bytes) */
 	Stream_Read_UINT32(s, cache_bitmap_v3->key2);       /* key2 (4 bytes) */
-	bitmapData = &cache_bitmap_v3->bitmapData;
+
+	if ((cache_bitmap_v3->flags & CBR3_DO_NOT_CACHE) != 0)
+	{
+		rdpCache* cache = update->context->cache;
+		WINPR_ASSERT(cache);
+
+		if (cache_bitmap_v3->cacheId >= cache->bitmap->maxCells)
+			goto fail;
+
+		BITMAP_V2_CELL* cell = &cache->bitmap->cells[cache_bitmap_v3->cacheId];
+		cache_bitmap_v3->cacheIndex = cell->number;
+	}
+
+	BITMAP_DATA_EX* bitmapData = &cache_bitmap_v3->bitmapData;
 	Stream_Read_UINT8(s, bitmapData->bpp);
 
 	if ((bitmapData->bpp < 1) || (bitmapData->bpp > 32))
@@ -2660,12 +2701,53 @@ static CACHE_BITMAP_V3_ORDER* update_read_cache_bitmap_v3_order(rdpUpdate* updat
 		goto fail;
 	}
 
+	/* [MS-RDPEGDI] 2.2.2.2.1.2.8 Cache Bitmap - Revision 3 (CACHE_BITMAP_REV3_ORDER)
+	 * tells this should not be 0, but it is for some windows versions.
+	 * fall back to setting color depth from bitmapData
+	 */
+	if (!rc)
+		cache_bitmap_v3->bpp = bitmapData->bpp;
+
 	Stream_Seek_UINT8(s);                      /* reserved1 (1 byte) */
 	Stream_Seek_UINT8(s);                      /* reserved2 (1 byte) */
 	Stream_Read_UINT8(s, bitmapData->codecID); /* codecID (1 byte) */
 	Stream_Read_UINT16(s, bitmapData->width);  /* width (2 bytes) */
 	Stream_Read_UINT16(s, bitmapData->height); /* height (2 bytes) */
 	Stream_Read_UINT32(s, new_len);            /* length (4 bytes) */
+
+	switch (bitmapData->codecID)
+	{
+		case RDP_CODEC_ID_IMAGE_REMOTEFX:
+			if (!freerdp_settings_get_bool(settings, FreeRDP_RemoteFxImageCodec))
+			{
+				WLog_Print(up->log, WLOG_ERROR,
+				           "codecID RDP_CODEC_ID_IMAGE_REMOTEFX not enabled for this "
+				           "connection, aborting");
+				goto fail;
+			}
+			break;
+		case RDP_CODEC_ID_REMOTEFX:
+			if (!freerdp_settings_get_bool(settings, FreeRDP_RemoteFxCodec))
+			{
+				WLog_ERR(TAG,
+				         "codecID RDP_CODEC_ID_REMOTEFX not enabled for this connection, aborting");
+				goto fail;
+			}
+			break;
+		case RDP_CODEC_ID_NSCODEC:
+			if (!freerdp_settings_get_bool(settings, FreeRDP_NSCodec))
+			{
+				WLog_ERR(TAG,
+				         "codecID RDP_CODEC_ID_NSCODEC not enabled for this connection, aborting");
+				goto fail;
+			}
+			break;
+		case RDP_CODEC_ID_NONE:
+			break;
+		default:
+			WLog_ERR(TAG, "Unsupported codecID 0x%08" PRIx32, bitmapData->codecID);
+			goto fail;
+	}
 
 	if ((new_len == 0) || (!Stream_CheckAndLogRequiredLength(TAG, s, new_len)))
 		goto fail;
@@ -2709,7 +2791,7 @@ BOOL update_write_cache_bitmap_v3_order(wStream* s, CACHE_BITMAP_V3_ORDER* cache
 	bitsPerPixelId = get_bpp_bmf(cache_bitmap_v3->bpp, &rc);
 	if (!rc)
 		return FALSE;
-	*flags = (cache_bitmap_v3->cacheId & 0x00000003) |
+	*flags = (cache_bitmap_v3->cacheId & 0x00000007) |
 	         ((cache_bitmap_v3->flags << 7) & 0x0000FF80) | ((bitsPerPixelId << 3) & 0x00000078);
 	Stream_Write_UINT16(s,
 	                    get_checked_uint16(cache_bitmap_v3->cacheIndex)); /* cacheIndex (2 bytes) */
@@ -3400,7 +3482,7 @@ static BOOL update_read_stream_bitmap_first_order(wStream* s,
 
 	Stream_Read_UINT16(s, stream_bitmap_first->bitmapType);   /* bitmapType (2 bytes) */
 	Stream_Read_UINT16(s, stream_bitmap_first->bitmapWidth);  /* bitmapWidth (2 bytes) */
-	Stream_Read_UINT16(s, stream_bitmap_first->bitmapHeight); /* bitmapHeigth (2 bytes) */
+	Stream_Read_UINT16(s, stream_bitmap_first->bitmapHeight); /* bitmapHeight (2 bytes) */
 
 	if (stream_bitmap_first->bitmapFlags & STREAM_BITMAP_V2)
 	{
@@ -3619,7 +3701,15 @@ static BOOL update_read_bounds(wStream* s, rdpBounds* bounds)
 			return FALSE;
 	}
 
-	return TRUE;
+	if (bounds->left > bounds->right)
+		return FALSE;
+	if (bounds->top > bounds->bottom)
+		return FALSE;
+	const INT64 w = 1ll * bounds->right - bounds->left;
+	if ((w <= INT32_MIN) || (w >= INT32_MAX))
+		return FALSE;
+	const INT64 h = 1ll * bounds->bottom - bounds->top;
+	return !((h <= INT32_MIN) || (h >= INT32_MAX));
 }
 BOOL update_write_bounds(wStream* s, const ORDER_INFO* orderInfo)
 {
@@ -3818,7 +3908,9 @@ static BOOL update_recv_primary_order(rdpUpdate* update, wStream* s, BYTE flags)
 		Stream_Read_UINT8(s, orderInfo->orderType); /* orderType (1 byte) */
 	}
 
-	const char* orderName = primary_order_string(orderInfo->orderType);
+	up->stats.primary[orderInfo->orderType]++;
+	char buffer[64] = WINPR_C_ARRAY_INIT;
+	const char* orderName = primary_order_string(orderInfo->orderType, buffer, sizeof(buffer));
 	WLog_Print(up->log, WLOG_DEBUG, "%s %s", primary_order_str, orderName);
 
 	if (!check_primary_order_supported(up->log, settings, orderInfo->orderType, orderName))
@@ -4097,8 +4189,12 @@ static BOOL update_recv_secondary_order(rdpUpdate* update, wStream* s, WINPR_ATT
 	Stream_Read_UINT8(s, orderType);   /* orderType (1 byte) */
 
 	start = Stream_GetPosition(s);
-	name = secondary_order_string(orderType);
+
+	char buffer[64] = WINPR_C_ARRAY_INIT;
+	name = secondary_order_string(orderType, buffer, sizeof(buffer));
 	WLog_Print(up->log, WLOG_DEBUG, "%s %s", secondary_order_str, name);
+
+	up->stats.secondary[orderType]++;
 	rc = IFCALLRESULT(TRUE, secondary->CacheOrderInfo, context, orderLength, extraFlags, orderType,
 	                  name);
 	if (!rc)
@@ -4333,8 +4429,9 @@ static BOOL read_altsec_order(wLog* log, wStream* s, BYTE orderType, rdpAltSecUp
 
 	if (!rc)
 	{
+		char buffer[64] = WINPR_C_ARRAY_INIT;
 		WLog_Print(log, WLOG_ERROR, "Read %s %s failed", alt_sec_order_str,
-		           altsec_order_string(orderType));
+		           altsec_order_string(orderType, buffer, sizeof(buffer)));
 	}
 
 	return rc;
@@ -4348,13 +4445,17 @@ static BOOL update_recv_altsec_order(rdpUpdate* update, wStream* s, BYTE flags)
 	rdpContext* context = update->context;
 	rdpSettings* settings = context->settings;
 	rdp_altsec_update_internal* altsec = altsec_update_cast(update->altsec);
-	const char* orderName = altsec_order_string(orderType);
+
+	char buffer[64] = WINPR_C_ARRAY_INIT;
+	const char* orderName = altsec_order_string(orderType, buffer, sizeof(buffer));
 
 	WINPR_ASSERT(s);
 	WINPR_ASSERT(context);
 	WINPR_ASSERT(settings);
 
 	WLog_Print(up->log, WLOG_DEBUG, "%s %s", alt_sec_order_str, orderName);
+
+	up->stats.altsec[orderType]++;
 
 	rc = IFCALLRESULT(TRUE, altsec->common.DrawOrderInfo, context, orderType, orderName);
 	if (!rc)
@@ -4446,6 +4547,9 @@ BOOL update_recv_order(rdpUpdate* update, wStream* s)
 	BOOL rc = 0;
 	BYTE controlFlags = 0;
 	rdp_update_internal* up = update_cast(update);
+
+	if (!rdp_has_reached_state(update->context->rdp, CONNECTION_STATE_ACTIVE))
+		return FALSE;
 
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, 1))
 		return FALSE;

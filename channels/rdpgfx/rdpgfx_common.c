@@ -32,13 +32,16 @@
  *
  * @return 0 on success, otherwise a Win32 error code
  */
-UINT rdpgfx_read_header(wLog* log, wStream* s, RDPGFX_HEADER* header)
+UINT rdpgfx_read_header(wLog* log, wStream* s, RDPGFX_HEADER* header, size_t* pPacketLength)
 {
 	WINPR_ASSERT(s);
 	WINPR_ASSERT(header);
 
+	if (pPacketLength)
+		*pPacketLength = 0;
+
 	if (!Stream_CheckAndLogRequiredLengthWLog(log, s, 8))
-		return CHANNEL_RC_NO_MEMORY;
+		return ERROR_INVALID_DATA;
 
 	Stream_Read_UINT16(s, header->cmdId);     /* cmdId (2 bytes) */
 	Stream_Read_UINT16(s, header->flags);     /* flags (2 bytes) */
@@ -49,8 +52,12 @@ UINT rdpgfx_read_header(wLog* log, wStream* s, RDPGFX_HEADER* header)
 		WLog_Print(log, WLOG_ERROR, "header->pduLength %u less than 8!", header->pduLength);
 		return ERROR_INVALID_DATA;
 	}
-	if (!Stream_CheckAndLogRequiredLengthWLog(log, s, (header->pduLength - 8)))
+
+	const size_t size = (header->pduLength - 8ull);
+	if (!Stream_CheckAndLogRequiredLengthWLog(log, s, size))
 		return ERROR_INVALID_DATA;
+	if (pPacketLength)
+		*pPacketLength = size;
 
 	return CHANNEL_RC_OK;
 }
@@ -127,9 +134,17 @@ UINT rdpgfx_read_rect16(wLog* log, wStream* s, RECTANGLE_16* rect16)
 	Stream_Read_UINT16(s, rect16->right);  /* right (2 bytes) */
 	Stream_Read_UINT16(s, rect16->bottom); /* bottom (2 bytes) */
 	if (rect16->left >= rect16->right)
+	{
+		WLog_Print(log, WLOG_ERROR, "Invalid RECTANGLE_16: left(%" PRIu16 ") > right(%" PRIu16 ")",
+		           rect16->left, rect16->right);
 		return ERROR_INVALID_DATA;
+	}
 	if (rect16->top >= rect16->bottom)
+	{
+		WLog_Print(log, WLOG_ERROR, "Invalid RECTANGLE_16: top(%" PRIu16 ") > bottom(%" PRIu16 ")",
+		           rect16->top, rect16->bottom);
 		return ERROR_INVALID_DATA;
+	}
 	return CHANNEL_RC_OK;
 }
 

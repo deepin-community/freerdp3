@@ -137,6 +137,7 @@ static NTSTATUS drive_map_windows_err(DWORD fs_errno)
 	return rc;
 }
 
+WINPR_ATTR_NODISCARD
 static DRIVE_FILE* drive_get_file_by_id(DRIVE_DEVICE* drive, UINT32 id)
 {
 	DRIVE_FILE* file = nullptr;
@@ -193,12 +194,6 @@ static UINT drive_process_irp_create(DRIVE_DEVICE* drive, IRP* irp)
 	{
 		void* key = (void*)(size_t)file->id;
 
-		if (!ListDictionary_Add(drive->files, key, file))
-		{
-			WLog_ERR(TAG, "ListDictionary_Add failed!");
-			return ERROR_INTERNAL_ERROR;
-		}
-
 		switch (CreateDisposition)
 		{
 			case FILE_SUPERSEDE:
@@ -224,10 +219,19 @@ static UINT drive_process_irp_create(DRIVE_DEVICE* drive, IRP* irp)
 		if (allocationSize > 0)
 		{
 			const BYTE buffer[] = { '\0' };
-			if (!drive_file_seek(file, allocationSize - sizeof(buffer)))
+			if (!drive_file_seek(file, allocationSize - sizeof(buffer)) ||
+			    !drive_file_write(file, buffer, sizeof(buffer)))
+			{
+				drive_file_free(file);
 				return ERROR_INTERNAL_ERROR;
-			if (!drive_file_write(file, buffer, sizeof(buffer)))
-				return ERROR_INTERNAL_ERROR;
+			}
+		}
+
+		if (!ListDictionary_Add(drive->files, key, file))
+		{
+			WLog_ERR(TAG, "ListDictionary_Add failed!");
+			drive_file_free(file);
+			return ERROR_INTERNAL_ERROR;
 		}
 	}
 
@@ -256,11 +260,15 @@ static UINT drive_process_irp_close(DRIVE_DEVICE* drive, IRP* irp)
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
 	else
 	{
-		ListDictionary_Remove(drive->files, key);
-		irp->IoStatus = drive_map_windows_err(GetLastError());
+		/* Free the file here, so that a failing delete on close is reported */
+		DRIVE_FILE* taken = ListDictionary_Take(drive->files, key);
+		if (drive_file_free(taken))
+			irp->IoStatus = STATUS_SUCCESS;
+		else
+			irp->IoStatus = drive_map_windows_err(GetLastError());
 	}
 
-	Stream_Zero(irp->output, 5); /* Padding(5) */
+	Stream_Zero(irp->output, 4); /* Padding(4) */
 
 	return CHANNEL_RC_OK;
 }
@@ -293,13 +301,8 @@ static UINT drive_process_irp_read(DRIVE_DEVICE* drive, IRP* irp)
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
 		Length = 0;
 	}
-	else if (!drive_file_seek(file, Offset))
-	{
-		irp->IoStatus = drive_map_windows_err(GetLastError());
-		Length = 0;
-	}
 
-	if (!Stream_EnsureRemainingCapacity(irp->output, 4ull + Length))
+	if (!Stream_EnsureRemainingCapacity(irp->output, 4ull))
 	{
 		WLog_ERR(TAG, "Stream_EnsureRemainingCapacity failed!");
 		return ERROR_INTERNAL_ERROR;
@@ -308,9 +311,12 @@ static UINT drive_process_irp_read(DRIVE_DEVICE* drive, IRP* irp)
 		Stream_Write_UINT32(irp->output, 0);
 	else
 	{
-		BYTE* buffer = Stream_PointerAs(irp->output, BYTE) + sizeof(UINT32);
-
-		if (!drive_file_read(file, buffer, &Length))
+		const size_t pos = Stream_GetPosition(irp->output);
+		Stream_Seek_UINT32(irp->output);
+		const BOOL rc = drive_file_read(file, irp->output, Offset, &Length);
+		if (!Stream_SetPosition(irp->output, pos))
+			return ERROR_INTERNAL_ERROR;
+		if (!rc)
 		{
 			irp->IoStatus = drive_map_windows_err(GetLastError());
 			Stream_Write_UINT32(irp->output, 0);
@@ -849,7 +855,10 @@ static DWORD WINAPI drive_thread_func(LPVOID arg)
 
 		IRP* irp = (IRP*)message.wParam;
 		if (!drive_poll_run(drive, irp))
+		{
+			error = ERROR_INVALID_DATA;
 			break;
+		}
 	}
 
 fail:

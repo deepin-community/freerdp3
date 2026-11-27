@@ -187,6 +187,7 @@ extern "C"
 #else
 	    UINT32 reservedAV1[2];
 #endif
+		BOOL h264HwAccel; /** @since version 3.32.0 */
 	};
 
 	struct rdp_shadow_surface
@@ -269,7 +270,7 @@ extern "C"
 
 	struct S_SHADOW_MSG_OUT
 	{
-		int refCount;
+		LONG refCount; /* InterlockedIncrement() and InterlockedDecrement() take a LONG* */
 		MSG_OUT_FREE_FN Free;
 	};
 

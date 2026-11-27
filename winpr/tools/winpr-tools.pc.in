@@ -6,7 +6,7 @@ libs=-lwinpr-tools@WINPR_TOOLS_API_VERSION@
 
 Name: WinPR
 Description: WinPR: Windows Portable Runtime
-URL: http://www.freerdp.com/
+URL: https://freerdp.com/
 Version: @WINPR_TOOLS_VERSION@
 Requires: @WINPR_TOOLS_PC_REQUIRES@
 Requires.private: @WINPR_TOOLS_PC_REQUIRES_PRIVATE@

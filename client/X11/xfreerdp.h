@@ -168,9 +168,12 @@ struct xf_context
 	BOOL debug;
 	HANDLE x11event;
 	xfWindow* window;
+	Window reconnectWindow;
+	char reconnectMessage[128];
 	xfAppWindow* appWindow;
 	xfPointer* pointer;
 	xfWorkArea workArea;
+	xfWorkArea railWorkArea;
 	xfFullscreenMonitors fullscreenMonitors;
 	int current_desktop;
 	BOOL remote_app;
@@ -201,6 +204,12 @@ struct xf_context
 	BOOL mouse_active;
 	BOOL fullscreen_toggle;
 	BOOL KeyboardState[256];
+	BOOL deferAlt;
+	struct
+	{
+		UINT32 pending;
+		UINT32 sent;
+	} deferredAlt;
 	XModifierKeymap* modifierMap;
 	wArrayList* keyCombinations;
 	wArrayList* xevents;
@@ -289,9 +298,14 @@ struct xf_context
 	RailClientContext* rail;
 	wHashTable* railWindows;
 	xfRailIconCache* railIconCache;
+	/* gdi's DeleteSurface, wrapped with software GDI to detach RemoteApp windows */
+	pcRdpgfxDeleteSurface gdiDeleteSurface;
 
 #if defined(WITH_VERBOSE_WINPR_ASSERT)
 	BOOL isRailWindowsLocked;
+	const char* whereFkt;
+	const char* whereFile;
+	size_t whereLine;
 #endif
 
 	BOOL xkbAvailable;
@@ -317,7 +331,6 @@ struct xf_context
 #endif
 	BOOL xi_rawevent;
 	BOOL xi_event;
-	HANDLE pipethread;
 	wLog* log;
 	FREERDP_REMAP_TABLE* remap_table;
 	DWORD X11_KEYCODE_TO_VIRTUAL_SCANCODE[256];
@@ -401,7 +414,8 @@ enum XF_EXIT_CODE
 	XF_EXIT_CONNECT_LOGON_TYPE_NOT_GRANTED = 158,
 	XF_EXIT_CONNECT_NO_OR_MISSING_CREDENTIALS = 159,
 	XF_EXIT_CONNECT_TARGET_BOOTING = 160,
-	XF_EXIT_CODE_LAST = XF_EXIT_CONNECT_TARGET_BOOTING,
+	XF_EXIT_CONNECT_HYBRID_REQUIRED_BY_SERVER = 161,
+	XF_EXIT_CODE_LAST = XF_EXIT_CONNECT_HYBRID_REQUIRED_BY_SERVER,
 	XF_EXIT_UNKNOWN = 255,
 };
 
@@ -420,6 +434,6 @@ void xf_draw_screen_(xfContext* xfc, int x, int y, int w, int h, const char* fkt
 
 BOOL xf_keyboard_update_modifier_map(xfContext* xfc);
 
-int xf_exit_code_from_disconnect_reason(DWORD reason);
+FREERDP_API int xf_exit_code_from_disconnect_reason(DWORD reason);
 
 #endif /* FREERDP_CLIENT_X11_FREERDP_H */

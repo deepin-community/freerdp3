@@ -6,7 +6,7 @@ libs=-luwac@UWAC_VERSION_MAJOR@
 
 Name: uwac@UWAC_API_VERSION@ 
 Description: uwac: using wayland as a client
-URL: http://www.freerdp.com/
+URL: https://freerdp.com/
 Version: @UWAC_VERSION@
 Requires:
 Requires.private: @UWAC_PC_REQUIRES_PRIVATE@

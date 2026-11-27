@@ -79,10 +79,10 @@ BOOL MutexCloseHandle(HANDLE handle)
 			if (msg)
 			{
 				for (size_t i = 0; i < used; i++)
-					WLog_ERR(TAG, "%2" PRIdz ": %s", i, msg[i]);
+					WLog_ERR(TAG, "%2" PRIuz ": %s", i, msg[i]);
 			}
 
-			free(msg);
+			free((void*)msg);
 			winpr_backtrace_free(stack);
 		}
 #endif
@@ -93,7 +93,7 @@ BOOL MutexCloseHandle(HANDLE handle)
 	}
 
 	free(mutex->name);
-	free(handle);
+	mutex->name = nullptr;
 	return TRUE;
 }
 

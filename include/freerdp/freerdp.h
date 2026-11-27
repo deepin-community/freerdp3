@@ -516,10 +516,10 @@ owned by rdpRdp */
 
 		WINPR_DEPRECATED_VAR("Use VerifyCertificateEx or VerifyX509Certificate  instead",
 		                     WINPR_ATTR_NODISCARD ALIGN64 pVerifyCertificate
-		                         VerifyCertificate;) /**< (offset 51) */
+		                         VerifyCertificate); /**< (offset 51) */
 		WINPR_DEPRECATED_VAR("Use VerifyChangedCertificateEx or VerifyX509Certificate  instead",
 		                     WINPR_ATTR_NODISCARD ALIGN64 pVerifyChangedCertificate
-		                         VerifyChangedCertificate;) /**< (offset 52) */
+		                         VerifyChangedCertificate); /**< (offset 52) */
 #else
 	    ALIGN64 UINT64 reserved50[3];
 #endif
@@ -739,6 +739,17 @@ owned by rdpRdp */
 
 	WINPR_ATTR_NODISCARD
 	FREERDP_API const char* freerdp_get_build_config(void);
+
+	/**
+	 * Initialize FreeRDP's translation domain and its WinPR dependency.
+	 *
+	 * @param locale Locale name, or NULL/empty to use the environment locale.
+	 * @param searchPath Optional gettext catalog directory for this module.
+	 * @return TRUE on success, otherwise FALSE.
+	 * @since version 3.33.0
+	 */
+	WINPR_ATTR_NODISCARD
+	FREERDP_API BOOL freerdp_enable_translation(const char* locale, const char* searchPath);
 
 	FREERDP_API void freerdp_free(freerdp* instance);
 

@@ -23,6 +23,8 @@
 
 #include "proxy_modules.h"
 #include "pf_channel.h"
+#include "pf_client.h"
+#include "pf_server.h"
 
 #define TAG PROXY_TAG("channel")
 
@@ -105,6 +107,19 @@ PfChannelResult channelTracker_update(ChannelStateTracker* tracker, const BYTE* 
 	         tracker->channel->channel_name, xsize, firstPacket, lastPacket);
 	if (flags & CHANNEL_FLAG_FIRST)
 	{
+		/* A new packet may only start once the previous one was completed with
+		 * CHANNEL_FLAG_LAST, same as drdynvc_virtual_channel_event_data_received */
+		if (tracker->currentPacketFragments != 0)
+		{
+			WLog_WARN(TAG,
+			          "new packet started while the previous one is incomplete (%" PRIuz
+			          " of %" PRIuz " bytes received)",
+			          tracker->currentPacketReceived, channelTracker_getCurrentPacketSize(tracker));
+			return PF_CHANNEL_RESULT_ERROR;
+		}
+
+		/* The mode is a decision about the current packet only */
+		channelTracker_setMode(tracker, CHANNEL_TRACKER_PEEK);
 		if (!channelTracker_resetCurrentPacket(tracker))
 			return PF_CHANNEL_RESULT_ERROR;
 		channelTracker_setCurrentPacketSize(tracker, totalSize);
@@ -114,13 +129,34 @@ PfChannelResult channelTracker_update(ChannelStateTracker* tracker, const BYTE* 
 
 	{
 		const size_t currentPacketSize = channelTracker_getCurrentPacketSize(tracker);
-		if (tracker->currentPacketReceived + xsize > currentPacketSize)
-			WLog_INFO(TAG, "cumulated size is bigger (%" PRIuz ") than total size (%" PRIuz ")",
-			          tracker->currentPacketReceived + xsize, currentPacketSize);
-	}
+		if ((xsize > currentPacketSize) || (currentPacketSize != totalSize))
+		{
+			WLog_WARN(TAG,
+			          "current fragment size is bigger (%" PRIuz ") than total size (%" PRIuz ")",
+			          xsize, currentPacketSize);
+			return PF_CHANNEL_RESULT_ERROR;
+		}
 
-	tracker->currentPacketReceived += xsize;
-	tracker->currentPacketFragments++;
+		if (xsize > SIZE_MAX - tracker->currentPacketReceived)
+		{
+			WLog_WARN(TAG,
+			          "current fragment size is overflowing size_t (%" PRIuz
+			          ") when added to (%" PRIuz ")",
+			          xsize, tracker->currentPacketReceived);
+			return PF_CHANNEL_RESULT_ERROR;
+		}
+
+		tracker->currentPacketReceived += xsize;
+		tracker->currentPacketFragments++;
+		if (tracker->currentPacketReceived > currentPacketSize)
+		{
+			WLog_WARN(TAG, "cumulated size is bigger (%" PRIuz ") than total size (%" PRIuz ")",
+			          tracker->currentPacketReceived + xsize, currentPacketSize);
+			return PF_CHANNEL_RESULT_ERROR;
+		}
+		else if ((tracker->currentPacketReceived == currentPacketSize) && !lastPacket)
+			return PF_CHANNEL_RESULT_ERROR;
+	}
 
 	switch (channelTracker_getMode(tracker))
 	{
@@ -154,6 +190,9 @@ PfChannelResult channelTracker_update(ChannelStateTracker* tracker, const BYTE* 
 		if (tracker->currentPacketReceived != currentPacketSize)
 			WLog_INFO(TAG, "cumulated size(%" PRIuz ") does not match total size (%" PRIuz ")",
 			          tracker->currentPacketReceived, currentPacketSize);
+
+		/* the packet is complete, the next fragment must start a new one */
+		tracker->currentPacketFragments = 0;
 	}
 
 	return result;
@@ -177,9 +216,6 @@ void channelTracker_free(ChannelStateTracker* t)
 PfChannelResult channelTracker_flushCurrent(ChannelStateTracker* t, BOOL first, BOOL last,
                                             BOOL toBack)
 {
-	proxyData* pdata = nullptr;
-	pServerContext* ps = nullptr;
-	pServerStaticChannelContext* channel = nullptr;
 	UINT32 flags = CHANNEL_FLAG_FIRST;
 	BOOL r = 0;
 	const char* direction = toBack ? "F->B" : "B->F";
@@ -194,8 +230,8 @@ PfChannelResult channelTracker_flushCurrent(ChannelStateTracker* t, BOOL first, 
 	if (first)
 		return PF_CHANNEL_RESULT_PASS;
 
-	pdata = t->pdata;
-	channel = t->channel;
+	proxyData* pdata = t->pdata;
+	pServerStaticChannelContext* channel = t->channel;
 	if (last)
 		flags |= CHANNEL_FLAG_LAST;
 
@@ -210,14 +246,14 @@ PfChannelResult channelTracker_flushCurrent(ChannelStateTracker* t, BOOL first, 
 		ev.flags = flags;
 		ev.total_size = currentPacketSize;
 
-		if (!pdata->pc->sendChannelData)
+		pClientContext* pc = proxy_data_get_client_context(pdata);
+		if (!pc->sendChannelData)
 			return PF_CHANNEL_RESULT_ERROR;
 
-		return pdata->pc->sendChannelData(pdata->pc, &ev) ? PF_CHANNEL_RESULT_DROP
-		                                                  : PF_CHANNEL_RESULT_ERROR;
+		return pc->sendChannelData(pc, &ev) ? PF_CHANNEL_RESULT_DROP : PF_CHANNEL_RESULT_ERROR;
 	}
 
-	ps = pdata->ps;
+	pServerContext* ps = proxy_data_get_server_context(pdata);
 	r = ps->context.peer->SendChannelPacket(
 	    ps->context.peer, WINPR_ASSERTING_INT_CAST(UINT16, channel->front_channel_id),
 	    currentPacketSize, flags, Stream_Buffer(currentPacket), Stream_GetPosition(currentPacket));

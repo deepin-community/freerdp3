@@ -20,6 +20,7 @@ libfreerdp-server3.so.3 libfreerdp-server3-3 #MINVER#
  echo_server_context_new@Base 3.0.0
  encomsp_server_context_free@Base 3.0.0
  encomsp_server_context_new@Base 3.0.0
+ freerdp_server_enable_translation@Base 3.33.0
  freerdp_server_warn_deprecated@Base 3.0.0
  freerdp_server_warn_experimental@Base 3.0.0
  freerdp_server_warn_unmaintained@Base 3.0.0
@@ -34,6 +35,7 @@ libfreerdp-server3.so.3 libfreerdp-server3-3 #MINVER#
  rail_server_set_handshake_ex_flags@Base 3.0.0
  rdpdr_server_context_free@Base 3.0.0
  rdpdr_server_context_new@Base 3.0.0
+ rdpdr_server_discard_request@Base 3.28.0
  rdpei_server_context_free@Base 3.0.0
  rdpei_server_context_new@Base 3.0.0
  rdpei_server_context_reset@Base 3.0.0

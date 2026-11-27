@@ -41,46 +41,37 @@ extern "C"
 	FREERDP_API void freerdp_certificate_free(rdpCertificate* certificate);
 
 	WINPR_ATTR_MALLOC(freerdp_certificate_free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpCertificate* freerdp_certificate_new(void);
 
 	WINPR_ATTR_MALLOC(freerdp_certificate_free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpCertificate* freerdp_certificate_new_from_file(const char* file);
 
 	WINPR_ATTR_MALLOC(freerdp_certificate_free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpCertificate* freerdp_certificate_new_from_pem(const char* pem);
 
 	WINPR_ATTR_MALLOC(freerdp_certificate_free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API rdpCertificate* freerdp_certificate_new_from_der(const BYTE* data, size_t length);
 
 	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_certificate_is_rsa(const rdpCertificate* certificate);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_hash(const rdpCertificate* certificate,
 	                                               const char* hash, size_t* plength);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_fingerprint_by_hash(const rdpCertificate* certificate,
 	                                                              const char* hash);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char*
 	freerdp_certificate_get_fingerprint_by_hash_ex(const rdpCertificate* certificate,
 	                                               const char* hash, BOOL separator);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_fingerprint(const rdpCertificate* certificate);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_pem(const rdpCertificate* certificate,
 	                                              size_t* pLength);
 
@@ -94,29 +85,23 @@ extern "C"
 	 * @since version 3.8.0
 	 */
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_pem_ex(const rdpCertificate* certificate,
 	                                                 size_t* pLength, BOOL withCertChain);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API BYTE* freerdp_certificate_get_der(const rdpCertificate* certificate,
 	                                              size_t* pLength);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_subject(const rdpCertificate* certificate);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_issuer(const rdpCertificate* certificate);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_upn(const rdpCertificate* certificate);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_email(const rdpCertificate* certificate);
 
 	/**
@@ -127,7 +112,6 @@ extern "C"
 	 * @since version 3.8.0
 	 */
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_validity(const rdpCertificate* certificate,
 	                                                   BOOL startDate);
 
@@ -135,16 +119,68 @@ extern "C"
 	FREERDP_API WINPR_MD_TYPE freerdp_certificate_get_signature_alg(const rdpCertificate* cert);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_common_name(const rdpCertificate* cert,
 	                                                      size_t* plength);
 
-	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
-	FREERDP_API char** freerdp_certificate_get_dns_names(const rdpCertificate* cert, size_t* pcount,
-	                                                     size_t** pplengths);
 	FREERDP_API void freerdp_certificate_free_dns_names(size_t count, size_t* lengths,
 	                                                    char** names);
+
+	/** @brief get DNS SAN entries from a certificate.
+	 *
+	 *  @param cert The certificate to extract the data from
+	 *  @param pcount A pointer that will be set to the number of entries, must not be \b NULL
+	 *  @param pplengths A pointer to an array that will hold the string length of each entry
+	 *  @return an allocated array of strings containing the DNS SAN addresses or NULL if not found
+	 */
+	WINPR_ATTR_MALLOC(freerdp_certificate_free_dns_names, 3)
+	FREERDP_API char** freerdp_certificate_get_dns_names(const rdpCertificate* cert, size_t* pcount,
+	                                                     size_t** pplengths);
+
+	/** @brief free IP san entries.
+	 *
+	 *  @param count The number of entries in the arrays
+	 *  @param lengths The array containing the string lengths
+	 *  @param  names The array containing the strings
+	 *
+	 *  @since version 3.33.0
+	 */
+	FREERDP_API void freerdp_certificate_free_ip_names(size_t count, size_t* lengths, char** names);
+
+	/** @brief get IP SAN entries from a certificate.
+	 *
+	 *  @param cert The certificate to extract the data from
+	 *  @param pcount A pointer that will be set to the number of entries, must not be \b NULL
+	 *  @param pplengths A pointer to an array that will hold the string length of each entry
+	 *  @return an allocated array of strings containing the IP SAN addresses or NULL if not found
+	 *
+	 *  @since version 3.33.0
+	 */
+	WINPR_ATTR_MALLOC(freerdp_certificate_free_ip_names, 3)
+	FREERDP_API char** freerdp_certificate_get_ip_names(const rdpCertificate* cert, size_t* pcount,
+	                                                    size_t** pplengths);
+
+	/** @brief Check if a given hostname matches the certificate given names.
+	 *
+	 *  Matching algorithm:
+	 *  1. if hostname is an IPv6/IPv6 address
+	 *    a. Check IP SAN entries exist
+	 *      I. Check if the hostname matches one of them, return TRUE
+	 *      II. Return FALSE if no match
+	 *  2. Check if DNS SAN entries exist
+	 *    a. If a DNS SAN entry matches return TRUE
+	 *    b. Return FALSE if no match
+	 *  3. Check if the common name matches
+	 *
+	 *  @param cert The certificate to check against
+	 *  @param hostname The hostname to check
+	 *  @param hostlen The string length of the hostname
+	 *
+	 *  @return TRUE if a match exists, FALSE otherwise
+	 *  @since version 3.33.0
+	 */
+	WINPR_ATTR_NODISCARD
+	FREERDP_API BOOL freerdp_certificate_matches_hostname(const rdpCertificate* cert,
+	                                                      const char* hostname, size_t hostlen);
 
 	WINPR_ATTR_NODISCARD
 	FREERDP_API BOOL freerdp_certificate_check_eku(const rdpCertificate* certificate, int nid);
@@ -161,7 +197,6 @@ extern "C"
 	FREERDP_API BOOL freerdp_certificate_is_rdp_security_compatible(const rdpCertificate* cert);
 
 	WINPR_ATTR_MALLOC(free, 1)
-	WINPR_ATTR_NODISCARD
 	FREERDP_API char* freerdp_certificate_get_param(const rdpCertificate* cert,
 	                                                enum FREERDP_CERT_PARAM what, size_t* psize);
 

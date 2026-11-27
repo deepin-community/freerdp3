@@ -85,6 +85,7 @@
 
 #ifndef _WIN32
 
+#include <pthread.h>
 #include <winpr/crt.h>
 #include <winpr/platform.h>
 
@@ -368,17 +369,17 @@ static void dump_thread(WINPR_THREAD* thread)
 	msg = winpr_backtrace_symbols(stack, &used);
 
 	for (size_t i = 0; i < used; i++)
-		WLog_DBG(TAG, "[%" PRIdz "]: %s", i, msg[i]);
+		WLog_DBG(TAG, "[%" PRIuz "]: %s", i, msg[i]);
 
-	free(msg);
+	free((void*)msg);
 	winpr_backtrace_free(stack);
 	WLog_DBG(TAG, "Thread handle created still not closed!");
 	msg = winpr_backtrace_symbols(thread->create_stack, &used);
 
 	for (size_t i = 0; i < used; i++)
-		WLog_DBG(TAG, "[%" PRIdz "]: %s", i, msg[i]);
+		WLog_DBG(TAG, "[%" PRIuz "]: %s", i, msg[i]);
 
-	free(msg);
+	free((void*)msg);
 
 	if (thread->started)
 	{
@@ -394,9 +395,9 @@ static void dump_thread(WINPR_THREAD* thread)
 		msg = winpr_backtrace_symbols(thread->exit_stack, &used);
 
 		for (size_t i = 0; i < used; i++)
-			WLog_DBG(TAG, "[%" PRIdz "]: %s", i, msg[i]);
+			WLog_DBG(TAG, "[%" PRIuz "]: %s", i, msg[i]);
 
-		free(msg);
+		free((void*)msg);
 	}
 #else
 	WINPR_UNUSED(thread);
@@ -429,7 +430,7 @@ static BOOL thread_compare(const void* a, const void* b)
 
 static INIT_ONCE threads_InitOnce = INIT_ONCE_STATIC_INIT;
 static pthread_t mainThreadId;
-static DWORD currentThreadTlsIndex = TLS_OUT_OF_INDEXES;
+static pthread_key_t currentThreadTlsIndex = 0;
 
 static BOOL initializeThreads(WINPR_ATTR_UNUSED PINIT_ONCE InitOnce,
                               WINPR_ATTR_UNUSED PVOID Parameter, WINPR_ATTR_UNUSED PVOID* Context)
@@ -443,10 +444,11 @@ static BOOL initializeThreads(WINPR_ATTR_UNUSED PINIT_ONCE InitOnce,
 	mainThread.common.Type = HANDLE_TYPE_THREAD;
 	mainThreadId = pthread_self();
 
-	currentThreadTlsIndex = TlsAlloc();
-	if (currentThreadTlsIndex == TLS_OUT_OF_INDEXES)
+	const int res = pthread_key_create(&currentThreadTlsIndex, nullptr);
+	if (res != 0)
 	{
 		WLog_ERR(TAG, "Major bug, unable to allocate a TLS value for currentThread");
+		return FALSE;
 	}
 
 #if defined(WITH_THREAD_LIST)
@@ -512,7 +514,8 @@ static void* thread_launcher(void* arg)
 		goto exit;
 	}
 
-	if (!TlsSetValue(currentThreadTlsIndex, thread))
+	const int res = pthread_setspecific(currentThreadTlsIndex, thread);
+	if (res != 0)
 	{
 		WLog_ERR(TAG, "thread %" PRIu64 ", unable to set current thread value",
 		         WINPR_CXX_COMPAT_CAST(uint64_t, pthread_self()));
@@ -568,8 +571,25 @@ static BOOL winpr_StartThread(WINPR_THREAD* thread)
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	if (thread->dwStackSize > 0)
-		pthread_attr_setstacksize(&attr, thread->dwStackSize);
+	size_t stackSize = thread->dwStackSize;
+	if (stackSize == 0)
+	{
+		size_t platformDefault = 0;
+		if ((pthread_attr_getstacksize(&attr, &platformDefault) == 0) &&
+		    (platformDefault < WINPR_THREAD_DEFAULT_STACK_SIZE))
+			stackSize = WINPR_THREAD_DEFAULT_STACK_SIZE;
+	}
+
+	if (stackSize > 0)
+	{
+		const int err = pthread_attr_setstacksize(&attr, stackSize);
+		if (err != 0)
+		{
+			char ebuffer[256] = WINPR_C_ARRAY_INIT;
+			WLog_WARN(TAG, "pthread_attr_setstacksize(%" PRIuz ") failed: %s", stackSize,
+			          winpr_strerror(err, ebuffer, sizeof(ebuffer)));
+		}
+	}
 
 	thread->started = TRUE;
 	reset_event(thread);
@@ -894,7 +914,7 @@ WINPR_THREAD* winpr_GetCurrentThread(VOID)
 	if (mainThreadId == pthread_self())
 		return (HANDLE)&mainThread;
 
-	ret = TlsGetValue(currentThreadTlsIndex);
+	ret = pthread_getspecific(currentThreadTlsIndex);
 	return ret;
 }
 
@@ -907,6 +927,8 @@ DWORD GetCurrentThreadId(VOID)
 {
 #if defined(__FreeBSD__)
 	return WINPR_CXX_COMPAT_CAST(DWORD, pthread_getthreadid_np());
+#elif defined(__OpenBSD__)
+	return WINPR_CXX_COMPAT_CAST(DWORD, getthrid());
 #elif defined(__linux__)
 	return WINPR_CXX_COMPAT_CAST(DWORD, syscall(SYS_gettid));
 #else
@@ -914,7 +936,15 @@ DWORD GetCurrentThreadId(VOID)
 	/* Since pthread_t can be 64-bits on some systems, take just the    */
 	/* lower 32-bits of it for the thread ID returned by this function. */
 	uintptr_t ptid = WINPR_REINTERPRET_CAST(tid, pthread_t, uintptr_t);
+#if UINTPTR_MAX > UINT32_MAX
 	return (ptid & UINT32_MAX) ^ (ptid >> 32);
+#else
+	/* A 32-bit pthread_t already fits. Shifting it by 32 is undefined behaviour and
+	 * WebAssembly masks the shift count to 0, so the expression above returned
+	 * ptid ^ ptid == 0 for every thread, and critical sections took any thread for
+	 * the owner. */
+	return WINPR_CXX_COMPAT_CAST(DWORD, ptid);
+#endif
 #endif
 }
 
@@ -1064,10 +1094,10 @@ VOID DumpThreadHandles(void)
 
 	for (size_t i = 0; i < used; i++)
 	{
-		WLog_DBG(TAG, "[%" PRIdz "]: %s", i, msg[i]);
+		WLog_DBG(TAG, "[%" PRIuz "]: %s", i, msg[i]);
 	}
 
-	free(msg);
+	free((void*)msg);
 	winpr_backtrace_free(stack);
 	WLog_DBG(TAG, "---------------- Start Dumping thread handles -----------");
 

@@ -23,6 +23,7 @@
 
 #include <winpr/string.h>
 #include <winpr/sspi.h>
+#include <winpr/json.h>
 
 #include <freerdp/config.h>
 
@@ -37,6 +38,20 @@
 
 WINPR_ATTR_NODISCARD
 FREERDP_LOCAL BOOL freerdp_settings_enforce_consistency(rdpSettings* settings);
+
+/** @brief Replace a KeyboardType value that is not one of WINPR_KBD_TYPE with
+ *  WINPR_KBD_TYPE_IBM_ENHANCED, logging a warning.
+ *
+ *  Some clients (e.g. mstsc.exe on Windows 11 25H2) advertise out of spec
+ *  keyboard types; the scancode translation in WinPR only knows the types in
+ *  [MS-RDPBCGR] 2.2.1.3.2 and would otherwise map every key to VK_NONE.
+ *
+ *  @param log the logger to use, may be \b NULL
+ *  @param settings the settings to sanitize, must not be \b NULL
+ *  @param source a short description of where the value came from
+ */
+FREERDP_LOCAL void freerdp_settings_sanitize_keyboard_type(wLog* log, rdpSettings* settings,
+                                                           const char* source);
 
 WINPR_ATTR_NODISCARD
 FREERDP_LOCAL BOOL freerdp_settings_enforce_monitor_exists(rdpSettings* settings);
@@ -105,5 +120,16 @@ FREERDP_LOCAL BOOL freerdp_target_net_adresses_reset(rdpSettings* settings, size
 
 WINPR_ATTR_NODISCARD
 FREERDP_LOCAL BOOL freerdp_target_net_addresses_resize(rdpSettings* settings, size_t count);
+
+/** @brief A function that reads \b rdpSettings values from a JSON file
+ *
+ *  @param settings The settings to store the updated values in
+ *  @param json The JSON to read the data from
+ *
+ *  @return TRUE for success, FALSE on failure
+ *  @since version 3.33.0
+ */
+WINPR_ATTR_NODISCARD
+FREERDP_LOCAL BOOL freerdp_settings_apply_from_json(rdpSettings* settings, WINPR_JSON* json);
 
 #endif /* FREERDP_LIB_CORE_SETTINGS_H */

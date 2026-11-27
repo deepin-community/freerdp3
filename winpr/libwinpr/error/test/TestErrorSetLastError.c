@@ -84,7 +84,8 @@ int TestErrorSetLastError(int argc, char* argv[])
 	/* We must initialize WLog here. It will check for settings
 	 * in the environment and if the variables are not set, the last
 	 * error state is changed... */
-	WLog_GetRoot();
+	if (!WLog_GetRoot())
+		return -1;
 
 	SetLastError(ERROR_ACCESS_DENIED);
 
@@ -97,7 +98,7 @@ int TestErrorSetLastError(int argc, char* argv[])
 		return -1;
 	}
 
-	pLoopCount = winpr_aligned_malloc(sizeof(LONG), sizeof(LONG));
+	pLoopCount = winpr_aligned_calloc(1, sizeof(LONG), sizeof(LONG));
 	if (!pLoopCount)
 	{
 		printf("Unable to allocate memory\n");

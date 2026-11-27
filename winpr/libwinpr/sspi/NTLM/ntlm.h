@@ -25,6 +25,7 @@
 
 #include <winpr/nt.h>
 #include <winpr/crypto.h>
+#include <winpr/sysinfo.h>
 
 #include "../sspi.h"
 
@@ -109,11 +110,7 @@ typedef enum
 } NTLM_AV_ID;
 #endif /* __MINGW32__ */
 
-typedef struct
-{
-	UINT16 AvId;
-	UINT16 AvLen;
-} NTLM_AV_PAIR;
+typedef void NTLM_AV_PAIR;
 
 #define MSV_AV_FLAGS_AUTHENTICATION_CONSTRAINED 0x00000001
 #define MSV_AV_FLAGS_MESSAGE_INTEGRITY_CHECK 0x00000002
@@ -239,7 +236,7 @@ typedef struct
 	UINT32 NegotiateFlags;
 	BOOL UseSamFileDatabase;
 	int LmCompatibilityLevel;
-	int SuppressExtendedProtection;
+	BOOL SuppressExtendedProtection;
 	BOOL SendWorkstationName;
 	UNICODE_STRING Workstation;
 	UNICODE_STRING ServicePrincipalName;
@@ -279,23 +276,60 @@ typedef struct
 	BYTE ServerSealingKey[16];
 	psSspiNtlmHashCallback HashCallback;
 	void* HashCallbackArg;
+	UNICODE_STRING NbDomainName;
+	UNICODE_STRING NbComputerName;
+	UNICODE_STRING DnsDomainName;
+	UNICODE_STRING DnsComputerName;
 } NTLM_CONTEXT;
 
+WINPR_ATTR_NODISCARD
 char* ntlm_negotiate_flags_string(char* buffer, size_t size, UINT32 flags);
+
+WINPR_ATTR_NODISCARD
 const char* ntlm_message_type_string(UINT32 messageType);
 
+WINPR_ATTR_NODISCARD
 const char* ntlm_state_string(NTLM_STATE state);
+
 void ntlm_change_state(NTLM_CONTEXT* ntlm, NTLM_STATE state);
+
+WINPR_ATTR_NODISCARD
 NTLM_STATE ntlm_get_state(NTLM_CONTEXT* ntlm);
+
+WINPR_ATTR_NODISCARD
 BOOL ntlm_reset_cipher_state(PSecHandle phContext);
 
+WINPR_ATTR_NODISCARD
 SECURITY_STATUS ntlm_computeProofValue(NTLM_CONTEXT* ntlm, SecBuffer* ntproof);
+
+WINPR_ATTR_NODISCARD
 SECURITY_STATUS ntlm_computeMicValue(NTLM_CONTEXT* ntlm, SecBuffer* micvalue);
+
+WINPR_ATTR_NODISCARD
+SECURITY_STATUS ntlm_SetContextWorkstationX(NTLM_CONTEXT* context, BOOL unicode, const void* data,
+                                            size_t length);
 
 #ifdef WITH_DEBUG_NLA
 #define WITH_DEBUG_NTLM
 #endif
 
 BOOL NTLM_init(void);
+
+void ntlm_free_unicode_string(UNICODE_STRING* string);
+
+WINPR_ATTR_NODISCARD
+UNICODE_STRING ntlm_clone_unicode_string(const UNICODE_STRING* other);
+
+WINPR_ATTR_NODISCARD
+UNICODE_STRING ntlm_from_unicode_string_w(const WCHAR* str, size_t wcharlen);
+
+WINPR_ATTR_NODISCARD
+UNICODE_STRING ntlm_from_unicode_string_utf8(const char* str, size_t wcharlen);
+
+WINPR_ATTR_NODISCARD
+BOOL ntlm_is_unicode_string_empty(const UNICODE_STRING* str);
+
+WINPR_ATTR_NODISCARD
+BOOL ntlm_SecBufferRealloc(SecBuffer* buffer, ULONG len);
 
 #endif /* WINPR_SSPI_NTLM_PRIVATE_H */

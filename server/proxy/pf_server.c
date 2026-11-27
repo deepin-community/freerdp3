@@ -347,7 +347,7 @@ static BOOL pf_server_post_connect(freerdp_peer* peer)
 		return FALSE;
 	}
 
-	client_settings = pc->context.settings;
+	client_settings = pc->cctx.context.settings;
 
 	/* keep both sides of the connection in pdata */
 	proxy_data_set_client_context(pdata, pc);
@@ -446,7 +446,7 @@ static BOOL pf_server_receive_channel_data_hook(freerdp_peer* peer, UINT16 chann
 	proxyData* pdata = ps->pdata;
 	WINPR_ASSERT(pdata);
 
-	pClientContext* pc = pdata->pc;
+	pClientContext* pc = proxy_data_get_client_context(ps->pdata);
 
 	/*
 	 * client side is not initialized yet, call original callback.
@@ -573,6 +573,8 @@ static BOOL pf_server_initialize_peer_connection(freerdp_peer* peer, proxyData* 
 	if (!freerdp_settings_set_bool(settings, FreeRDP_TlsSecurity, config->ServerTlsSecurity))
 		return FALSE;
 	if (!freerdp_settings_set_bool(settings, FreeRDP_NlaSecurity, config->ServerNlaSecurity))
+		return FALSE;
+	if (!freerdp_settings_set_bool(settings, FreeRDP_ExtSecurity, config->ServerExtSecurity))
 		return FALSE;
 
 	if (!freerdp_settings_set_uint32(settings, FreeRDP_EncryptionLevel,
@@ -793,12 +795,12 @@ out_free_peer:
 		ArrayList_Lock(server->peer_list);
 		ArrayList_Remove(server->peer_list, args->thread);
 		count = ArrayList_Count(server->peer_list);
+		PROXY_LOG_DBG(TAG, ps, "Removed peer, %" PRIuz " connected", count);
+		freerdp_peer_context_free(client);
+		freerdp_peer_free(client);
+		proxy_data_free(pdata);
 		ArrayList_Unlock(server->peer_list);
 	}
-	PROXY_LOG_DBG(TAG, ps, "Removed peer, %" PRIuz " connected", count);
-	freerdp_peer_context_free(client);
-	freerdp_peer_free(client);
-	proxy_data_free(pdata);
 
 #if defined(WITH_DEBUG_EVENTS)
 	DumpEventHandles();

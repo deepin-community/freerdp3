@@ -44,6 +44,7 @@
 
 #define TAG FREERDP_TAG("core.gateway.rpc")
 
+WINPR_ATTR_NODISCARD
 static const char* rpc_client_state_str(RPC_CLIENT_STATE state)
 {
 	// NOLINTNEXTLINE(clang-analyzer-deadcode.DeadStores)
@@ -131,6 +132,7 @@ fail:
 	return nullptr;
 }
 
+WINPR_ATTR_NODISCARD
 static int rpc_client_receive_pipe_write(RpcClient* client, const BYTE* buffer, size_t length)
 {
 	int status = 0;
@@ -190,6 +192,7 @@ static int rpc_client_transition_to_state(rdpRpc* rpc, RPC_CLIENT_STATE state)
 	return status;
 }
 
+WINPR_ATTR_NODISCARD
 static int rpc_client_recv_pdu_int(rdpRpc* rpc, RPC_PDU* pdu)
 {
 	int status = -1;
@@ -345,6 +348,7 @@ static int rpc_client_recv_pdu_int(rdpRpc* rpc, RPC_PDU* pdu)
 	return status;
 }
 
+WINPR_ATTR_NODISCARD
 static int rpc_client_recv_pdu(rdpRpc* rpc, RPC_PDU* pdu)
 {
 	WINPR_ASSERT(rpc);
@@ -369,10 +373,10 @@ static int rpc_client_recv_pdu(rdpRpc* rpc, RPC_PDU* pdu)
 	return rc;
 }
 
+WINPR_ATTR_NODISCARD
 static int rpc_client_recv_fragment(rdpRpc* rpc, wStream* fragment)
 {
 	int rc = -1;
-	RPC_PDU* pdu = nullptr;
 	size_t StubOffset = 0;
 	size_t StubLength = 0;
 	RpcClientCall* call = nullptr;
@@ -382,7 +386,7 @@ static int rpc_client_recv_fragment(rdpRpc* rpc, wStream* fragment)
 	WINPR_ASSERT(rpc->client);
 	WINPR_ASSERT(fragment);
 
-	pdu = rpc->client->pdu;
+	RPC_PDU* pdu = rpc->client->pdu;
 	WINPR_ASSERT(pdu);
 
 	Stream_SealLength(fragment);
@@ -464,7 +468,7 @@ static int rpc_client_recv_fragment(rdpRpc* rpc, wStream* fragment)
 		{
 			const rpcconn_response_hdr_t* response =
 			    (const rpcconn_response_hdr_t*)&header.response;
-			if (!Stream_EnsureCapacity(pdu->s, response->alloc_hint))
+			if (!Stream_EnsureRemainingCapacity(pdu->s, StubLength))
 				goto fail;
 
 			if (Stream_Length(fragment) < StubOffset + StubLength)
@@ -472,6 +476,7 @@ static int rpc_client_recv_fragment(rdpRpc* rpc, wStream* fragment)
 
 			if (!Stream_SetPosition(fragment, StubOffset))
 				goto fail;
+
 			Stream_Write(pdu->s, Stream_ConstPointer(fragment), StubLength);
 			rpc->StubFragCount++;
 
@@ -496,7 +501,9 @@ static int rpc_client_recv_fragment(rdpRpc* rpc, wStream* fragment)
 				goto fail;
 			if (!Stream_SetPosition(fragment, StubOffset))
 				goto fail;
-			rpc_client_receive_pipe_write(rpc->client, Stream_ConstPointer(fragment), StubLength);
+			if (rpc_client_receive_pipe_write(rpc->client, Stream_ConstPointer(fragment),
+			                                  StubLength) < 0)
+				goto fail;
 			rpc->StubFragCount++;
 
 			if (response->alloc_hint == StubLength)
@@ -517,7 +524,7 @@ static int rpc_client_recv_fragment(rdpRpc* rpc, wStream* fragment)
 			pdu->CallId = header.common.call_id;
 
 			const size_t len = Stream_Length(fragment);
-			if (!Stream_EnsureCapacity(pdu->s, len))
+			if (!Stream_EnsureRemainingCapacity(pdu->s, len))
 				goto fail;
 
 			Stream_Write(pdu->s, Stream_Buffer(fragment), len);
@@ -544,7 +551,7 @@ static int rpc_client_recv_fragment(rdpRpc* rpc, wStream* fragment)
 		pdu->CallId = header.common.call_id;
 
 		const size_t len = Stream_Length(fragment);
-		if (!Stream_EnsureCapacity(pdu->s, len))
+		if (!Stream_EnsureRemainingCapacity(pdu->s, len))
 			goto fail;
 
 		Stream_Write(pdu->s, Stream_Buffer(fragment), len);
@@ -576,6 +583,7 @@ fail:
 	return rc;
 }
 
+WINPR_ATTR_NODISCARD
 static SSIZE_T rpc_client_default_out_channel_recv(rdpRpc* rpc)
 {
 	SSIZE_T status = -1;
@@ -709,7 +717,7 @@ static SSIZE_T rpc_client_default_out_channel_recv(rdpRpc* rpc)
 			if (!Stream_SetPosition(fragment, pos))
 				return -1;
 
-			if (header.frag_length > rpc->max_recv_frag)
+			if (header.frag_length >= rpc->max_recv_frag)
 			{
 				WLog_ERR(TAG,
 				         "rpc_client_recv: invalid fragment size: %" PRIu16 " (max: %" PRIu16 ")",
@@ -763,6 +771,7 @@ static SSIZE_T rpc_client_default_out_channel_recv(rdpRpc* rpc)
 	return status;
 }
 
+WINPR_ATTR_NODISCARD
 static SSIZE_T rpc_client_nondefault_out_channel_recv(rdpRpc* rpc)
 {
 	SSIZE_T status = -1;
@@ -1172,6 +1181,7 @@ fail:
 	return rc;
 }
 
+WINPR_ATTR_NODISCARD
 static BOOL rpc_client_resolve_gateway(rdpSettings* settings, char** host, UINT16* port,
                                        BOOL* isProxy)
 {
@@ -1191,8 +1201,8 @@ static BOOL rpc_client_resolve_gateway(rdpSettings* settings, char** host, UINT1
 		if (!result)
 			return FALSE;
 
-		*host =
-		    freerdp_tcp_address_to_string((const struct sockaddr_storage*)result->ai_addr, nullptr);
+		*host = freerdp_tcp_address_to_string(
+		    WINPR_PACKED_ALIGN_CAST(const struct sockaddr_storage*, result->ai_addr), nullptr);
 		freeaddrinfo(result);
 		return TRUE;
 	}

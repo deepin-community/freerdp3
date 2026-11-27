@@ -28,6 +28,7 @@
 #include <freerdp/types.h>
 #include <freerdp/channels/wtsvc.h>
 #include <freerdp/channels/rdpdr.h>
+#include <freerdp/channels/scard.h>
 #include <freerdp/utils/rdpdr_utils.h>
 
 #ifdef __cplusplus
@@ -42,194 +43,620 @@ extern "C"
 	typedef struct s_rdpdr_server_context RdpdrServerContext;
 	typedef struct s_rdpdr_server_private RdpdrServerPrivate;
 
+	/** RDPDR protocol header */
 	typedef struct
 	{
-		UINT16 Component;
-		UINT16 PacketId;
+		UINT16 Component; /**< Component identifier */
+		UINT16 PacketId;  /**< Packet identifier */
 	} RDPDR_HEADER;
 
 #ifndef __MINGW32__
-typedef struct
-{
-	UINT32 NextEntryOffset;
-	UINT32 FileIndex;
-	LARGE_INTEGER CreationTime;
-	LARGE_INTEGER LastAccessTime;
-	LARGE_INTEGER LastWriteTime;
-	LARGE_INTEGER ChangeTime;
-	LARGE_INTEGER EndOfFile;
-	LARGE_INTEGER AllocationSize;
-	UINT32 FileAttributes;
+	/** File directory information structure */
+	typedef struct
+	{
+		UINT32 NextEntryOffset;       /**< Offset to next entry */
+		UINT32 FileIndex;             /**< File index */
+		LARGE_INTEGER CreationTime;   /**< File creation time */
+		LARGE_INTEGER LastAccessTime; /**< Last access time */
+		LARGE_INTEGER LastWriteTime;  /**< Last write time */
+		LARGE_INTEGER ChangeTime;     /**< Last change time */
+		LARGE_INTEGER EndOfFile;      /**< End of file position */
+		LARGE_INTEGER AllocationSize; /**< Allocated size */
+		UINT32 FileAttributes;        /**< File attributes */
 #if defined(WITH_WCHAR_FILE_DIRECTORY_INFORMATION)
-	WCHAR FileName[512];
+		WCHAR FileName[512]; /**< File name (wide char) */
 #else
-	char FileName[512];
+		char FileName[512]; /**< File name */
 #endif
-} FILE_DIRECTORY_INFORMATION;
+	} FILE_DIRECTORY_INFORMATION;
 #endif
 
-typedef UINT (*psRdpdrStart)(RdpdrServerContext* context);
-typedef UINT (*psRdpdrStop)(RdpdrServerContext* context);
+	typedef UINT (*psRdpdrStart)(RdpdrServerContext* context);
+	typedef UINT (*psRdpdrStop)(RdpdrServerContext* context);
 
-typedef UINT (*psRdpdrCapablityPDU)(RdpdrServerContext* context,
-	                                const RDPDR_CAPABILITY_HEADER* header, size_t size,
-	                                const BYTE* data);
-typedef UINT (*psRdpdrReceivePDU)(RdpdrServerContext* context, const RDPDR_HEADER* header,
-	                              UINT error);
-typedef UINT (*psRdpdrReceiveAnnounceResponse)(RdpdrServerContext* context, UINT16 VersionMajor,
-	                                           UINT16 VersionMinor, UINT32 ClientId);
-typedef UINT (*psRdpdrSendServerAnnounce)(RdpdrServerContext* context);
-typedef UINT (*psRdpdrReceiveDeviceAnnounce)(RdpdrServerContext* context,
-	                                         const RdpdrDevice* device);
-typedef UINT (*psRdpdrReceiveDeviceRemove)(RdpdrServerContext* context, UINT32 deviceId,
-	                                       const RdpdrDevice* device);
-typedef UINT (*psRdpdrReceiveClientNameRequest)(RdpdrServerContext* context, size_t ComputerNameLen,
-	                                            const char* name);
+	typedef UINT (*psRdpdrCapablityPDU)(RdpdrServerContext* context,
+	                                    const RDPDR_CAPABILITY_HEADER* header, size_t size,
+	                                    const BYTE* data);
+	typedef UINT (*psRdpdrReceivePDU)(RdpdrServerContext* context, const RDPDR_HEADER* header,
+	                                  UINT error);
+	typedef UINT (*psRdpdrReceiveAnnounceResponse)(RdpdrServerContext* context, UINT16 VersionMajor,
+	                                               UINT16 VersionMinor, UINT32 ClientId);
+	typedef UINT (*psRdpdrSendServerAnnounce)(RdpdrServerContext* context);
+	typedef UINT (*psRdpdrReceiveDeviceAnnounce)(RdpdrServerContext* context,
+	                                             const RdpdrDevice* device);
+	typedef UINT (*psRdpdrReceiveDeviceRemove)(RdpdrServerContext* context, UINT32 deviceId,
+	                                           const RdpdrDevice* device);
+	typedef UINT (*psRdpdrReceiveClientNameRequest)(RdpdrServerContext* context,
+	                                                size_t ComputerNameLen, const char* name);
 
-typedef UINT (*psRdpdrDriveCreateDirectory)(RdpdrServerContext* context, void* callbackData,
-	                                        UINT32 deviceId, const char* path);
-typedef UINT (*psRdpdrDriveDeleteDirectory)(RdpdrServerContext* context, void* callbackData,
-	                                        UINT32 deviceId, const char* path);
-typedef UINT (*psRdpdrDriveQueryDirectory)(RdpdrServerContext* context, void* callbackData,
+	typedef UINT (*psRdpdrDriveCreateDirectory)(RdpdrServerContext* context, void* callbackData,
+	                                            UINT32 deviceId, const char* path);
+	typedef UINT (*psRdpdrDriveDeleteDirectory)(RdpdrServerContext* context, void* callbackData,
+	                                            UINT32 deviceId, const char* path);
+	typedef UINT (*psRdpdrDriveQueryDirectory)(RdpdrServerContext* context, void* callbackData,
+	                                           UINT32 deviceId, const char* path);
+	typedef UINT (*psRdpdrDriveOpenFile)(RdpdrServerContext* context, void* callbackData,
+	                                     UINT32 deviceId, const char* path, UINT32 desiredAccess,
+	                                     UINT32 createDisposition);
+	typedef UINT (*psRdpdrDriveReadFile)(RdpdrServerContext* context, void* callbackData,
+	                                     UINT32 deviceId, UINT32 fileId, UINT32 length,
+	                                     UINT32 offset);
+	typedef UINT (*psRdpdrDriveWriteFile)(RdpdrServerContext* context, void* callbackData,
+	                                      UINT32 deviceId, UINT32 fileId, const char* buffer,
+	                                      UINT32 length, UINT32 offset);
+	typedef UINT (*psRdpdrDriveCloseFile)(RdpdrServerContext* context, void* callbackData,
+	                                      UINT32 deviceId, UINT32 fileId);
+	typedef UINT (*psRdpdrDriveDeleteFile)(RdpdrServerContext* context, void* callbackData,
 	                                       UINT32 deviceId, const char* path);
-typedef UINT (*psRdpdrDriveOpenFile)(RdpdrServerContext* context, void* callbackData,
-	                                 UINT32 deviceId, const char* path, UINT32 desiredAccess,
-	                                 UINT32 createDisposition);
-typedef UINT (*psRdpdrDriveReadFile)(RdpdrServerContext* context, void* callbackData,
-	                                 UINT32 deviceId, UINT32 fileId, UINT32 length, UINT32 offset);
-typedef UINT (*psRdpdrDriveWriteFile)(RdpdrServerContext* context, void* callbackData,
-	                                  UINT32 deviceId, UINT32 fileId, const char* buffer,
-	                                  UINT32 length, UINT32 offset);
-typedef UINT (*psRdpdrDriveCloseFile)(RdpdrServerContext* context, void* callbackData,
-	                                  UINT32 deviceId, UINT32 fileId);
-typedef UINT (*psRdpdrDriveDeleteFile)(RdpdrServerContext* context, void* callbackData,
-	                                   UINT32 deviceId, const char* path);
-typedef UINT (*psRdpdrDriveRenameFile)(RdpdrServerContext* context, void* callbackData,
-	                                   UINT32 deviceId, const char* oldPath, const char* newPath);
+	typedef UINT (*psRdpdrDriveRenameFile)(RdpdrServerContext* context, void* callbackData,
+	                                       UINT32 deviceId, const char* oldPath,
+	                                       const char* newPath);
 
-typedef void (*psRdpdrOnDriveCreateDirectoryComplete)(RdpdrServerContext* context,
-                                                      void* callbackData, UINT32 ioStatus);
-typedef void (*psRdpdrOnDriveDeleteDirectoryComplete)(RdpdrServerContext* context,
-                                                      void* callbackData, UINT32 ioStatus);
-typedef void (*psRdpdrOnDriveQueryDirectoryComplete)(RdpdrServerContext* context,
-                                                     void* callbackData, UINT32 ioStatus,
-                                                     FILE_DIRECTORY_INFORMATION* fdi);
-typedef void (*psRdpdrOnDriveOpenFileComplete)(RdpdrServerContext* context, void* callbackData,
-                                               UINT32 ioStatus, UINT32 deviceId, UINT32 fileId);
-typedef void (*psRdpdrOnDriveReadFileComplete)(RdpdrServerContext* context, void* callbackData,
-                                               UINT32 ioStatus, const char* buffer, UINT32 length);
-typedef void (*psRdpdrOnDriveWriteFileComplete)(RdpdrServerContext* context, void* callbackData,
-                                                UINT32 ioStatus, UINT32 bytesWritten);
-typedef void (*psRdpdrOnDriveCloseFileComplete)(RdpdrServerContext* context, void* callbackData,
-                                                UINT32 ioStatus);
-typedef void (*psRdpdrOnDriveDeleteFileComplete)(RdpdrServerContext* context, void* callbackData,
-                                                 UINT32 ioStatus);
-typedef void (*psRdpdrOnDriveRenameFileComplete)(RdpdrServerContext* context, void* callbackData,
-                                                 UINT32 ioStatus);
-
-typedef UINT (*psRdpdrOnDeviceCreate)(RdpdrServerContext* context, const RdpdrDevice* device);
-typedef UINT (*psRdpdrOnDeviceDelete)(RdpdrServerContext* context, UINT32 deviceId);
-
-struct s_rdpdr_server_context
-{
-	HANDLE vcm;
-
-	WINPR_ATTR_NODISCARD psRdpdrStart Start;
-	psRdpdrStop Stop;
-
-	RdpdrServerPrivate* priv;
-
-	/* Server self-defined pointer. */
-	void* data;
-
-	/**< Server supported redirections.
-	 * initially used to determine which redirections are supported by the
-	 * server in the server capability, later on updated with what the client
-	 * actually wants to have supported.
-	 *
-	 * Use the \b RDPDR_DTYP_* defines as a mask to check.
+	/**
+	 * @brief Read from a file, with a 64-bit offset
+	 * @since version 3.33.0
 	 */
-	UINT16 supported;
+	typedef UINT (*psRdpdrDriveReadFileEx)(RdpdrServerContext* context, void* callbackData,
+	                                       UINT32 deviceId, UINT32 fileId, UINT32 length,
+	                                       UINT64 offset);
+	/**
+	 * @brief Write to a file, with a 64-bit offset
+	 * @since version 3.33.0
+	 */
+	typedef UINT (*psRdpdrDriveWriteFileEx)(RdpdrServerContext* context, void* callbackData,
+	                                        UINT32 deviceId, UINT32 fileId, const char* buffer,
+	                                        UINT32 length, UINT64 offset);
+	/**
+	 * @brief Rename a file, optionally replacing an existing target
+	 * @since version 3.33.0
+	 */
+	typedef UINT (*psRdpdrDriveRenameFileEx)(RdpdrServerContext* context, void* callbackData,
+	                                         UINT32 deviceId, const char* oldPath,
+	                                         const char* newPath, BOOL replaceIfExists);
+	/**
+	 * @brief Set the size of a file
+	 * @since version 3.33.0
+	 */
+	typedef UINT (*psRdpdrDriveSetFileSize)(RdpdrServerContext* context, void* callbackData,
+	                                        UINT32 deviceId, const char* path, UINT64 size);
+	/**
+	 * @brief Set the access and write times of a file or directory
+	 * @since version 3.33.0
+	 */
+	typedef UINT (*psRdpdrDriveSetFileTimes)(RdpdrServerContext* context, void* callbackData,
+	                                         UINT32 deviceId, const char* path,
+	                                         INT64 lastAccessTime, INT64 lastWriteTime);
+	/**
+	 * @brief Query the size and free space of a drive
+	 * @since version 3.33.0
+	 */
+	typedef UINT (*psRdpdrDriveQueryVolumeInformation)(RdpdrServerContext* context,
+	                                                   void* callbackData, UINT32 deviceId);
 
-	/*** RDPDR message intercept callbacks */
-	WINPR_ATTR_NODISCARD psRdpdrCapablityPDU
-		ReceiveCaps;                                   /**< Called for each received capability */
-	WINPR_ATTR_NODISCARD psRdpdrCapablityPDU SendCaps; /**< Called for each capability to be sent */
-	WINPR_ATTR_NODISCARD psRdpdrReceivePDU
-		ReceivePDU; /**< Called after a RDPDR pdu was received and parsed */
-	WINPR_ATTR_NODISCARD psRdpdrSendServerAnnounce
-		SendServerAnnounce; /**< Called before the server sends the announce message */
-	WINPR_ATTR_NODISCARD psRdpdrReceiveAnnounceResponse
-		ReceiveAnnounceResponse; /**< Called after the client announce response is received */
-	WINPR_ATTR_NODISCARD psRdpdrReceiveClientNameRequest
-		ReceiveClientNameRequest; /**< Called after a client name request is received */
-	WINPR_ATTR_NODISCARD psRdpdrReceiveDeviceAnnounce
-		ReceiveDeviceAnnounce; /** < Called after a new device request was received but before the
-		                          device is added */
-	WINPR_ATTR_NODISCARD psRdpdrReceiveDeviceRemove
-		ReceiveDeviceRemove; /**< Called after a new device request was
-		   received, but before it is removed */
+	/**
+	 * @brief Completion callback for DriveSetFileSize and DriveSetFileTimes
+	 * @since version 3.33.0
+	 */
+	typedef void (*psRdpdrOnDriveSetFileInformationComplete)(RdpdrServerContext* context,
+	                                                         void* callbackData, UINT32 ioStatus);
+	/**
+	 * @brief Completion callback for DriveQueryVolumeInformation
+	 * @since version 3.33.0
+	 */
+	typedef void (*psRdpdrOnDriveQueryVolumeInformationComplete)(RdpdrServerContext* context,
+	                                                             void* callbackData,
+	                                                             UINT32 ioStatus, UINT64 totalBytes,
+	                                                             UINT64 availableBytes);
 
-	/*** Drive APIs called by the server. ***/
-	WINPR_ATTR_NODISCARD psRdpdrDriveCreateDirectory DriveCreateDirectory;
-	WINPR_ATTR_NODISCARD psRdpdrDriveDeleteDirectory DriveDeleteDirectory;
-	WINPR_ATTR_NODISCARD psRdpdrDriveQueryDirectory DriveQueryDirectory;
-	WINPR_ATTR_NODISCARD psRdpdrDriveOpenFile DriveOpenFile;
-	WINPR_ATTR_NODISCARD psRdpdrDriveReadFile DriveReadFile;
-	WINPR_ATTR_NODISCARD psRdpdrDriveWriteFile DriveWriteFile;
-	WINPR_ATTR_NODISCARD psRdpdrDriveCloseFile DriveCloseFile;
-	WINPR_ATTR_NODISCARD psRdpdrDriveDeleteFile DriveDeleteFile;
-	WINPR_ATTR_NODISCARD psRdpdrDriveRenameFile DriveRenameFile;
+	typedef void (*psRdpdrOnDriveCreateDirectoryComplete)(RdpdrServerContext* context,
+	                                                      void* callbackData, UINT32 ioStatus);
+	typedef void (*psRdpdrOnDriveDeleteDirectoryComplete)(RdpdrServerContext* context,
+	                                                      void* callbackData, UINT32 ioStatus);
+	typedef void (*psRdpdrOnDriveQueryDirectoryComplete)(RdpdrServerContext* context,
+	                                                     void* callbackData, UINT32 ioStatus,
+	                                                     FILE_DIRECTORY_INFORMATION* fdi);
+	typedef void (*psRdpdrOnDriveOpenFileComplete)(RdpdrServerContext* context, void* callbackData,
+	                                               UINT32 ioStatus, UINT32 deviceId, UINT32 fileId);
+	typedef void (*psRdpdrOnDriveReadFileComplete)(RdpdrServerContext* context, void* callbackData,
+	                                               UINT32 ioStatus, const char* buffer,
+	                                               UINT32 length);
+	typedef void (*psRdpdrOnDriveWriteFileComplete)(RdpdrServerContext* context, void* callbackData,
+	                                                UINT32 ioStatus, UINT32 bytesWritten);
+	typedef void (*psRdpdrOnDriveCloseFileComplete)(RdpdrServerContext* context, void* callbackData,
+	                                                UINT32 ioStatus);
+	typedef void (*psRdpdrOnDriveDeleteFileComplete)(RdpdrServerContext* context,
+	                                                 void* callbackData, UINT32 ioStatus);
+	typedef void (*psRdpdrOnDriveRenameFileComplete)(RdpdrServerContext* context,
+	                                                 void* callbackData, UINT32 ioStatus);
 
-	/*** Drive callbacks registered by the server. ***/
-	WINPR_ATTR_NODISCARD psRdpdrOnDeviceCreate OnDriveCreate; /**< Called for devices of type \b
-		                                    RDPDR_DTYP_FILESYSTEM after \b ReceiveDeviceAnnounce */
-	WINPR_ATTR_NODISCARD psRdpdrOnDeviceDelete OnDriveDelete; /**< Called for devices of type \b
-		                                    RDPDR_DTYP_FILESYSTEM after \b ReceiveDeviceRemove */
-	psRdpdrOnDriveCreateDirectoryComplete OnDriveCreateDirectoryComplete;
-	psRdpdrOnDriveDeleteDirectoryComplete OnDriveDeleteDirectoryComplete;
-	psRdpdrOnDriveQueryDirectoryComplete OnDriveQueryDirectoryComplete;
-	psRdpdrOnDriveOpenFileComplete OnDriveOpenFileComplete;
-	psRdpdrOnDriveReadFileComplete OnDriveReadFileComplete;
-	psRdpdrOnDriveWriteFileComplete OnDriveWriteFileComplete;
-	psRdpdrOnDriveCloseFileComplete OnDriveCloseFileComplete;
-	psRdpdrOnDriveDeleteFileComplete OnDriveDeleteFileComplete;
-	psRdpdrOnDriveRenameFileComplete OnDriveRenameFileComplete;
+	typedef UINT (*psRdpdrOnDeviceCreate)(RdpdrServerContext* context, const RdpdrDevice* device);
+	typedef UINT (*psRdpdrOnDeviceDelete)(RdpdrServerContext* context, UINT32 deviceId);
 
-	/*** Serial Port callbacks registered by the server. ***/
-	WINPR_ATTR_NODISCARD psRdpdrOnDeviceCreate OnSerialPortCreate; /**< Called for devices of type
-		                                   \b RDPDR_DTYP_SERIAL after \b ReceiveDeviceAnnounce */
-	WINPR_ATTR_NODISCARD psRdpdrOnDeviceDelete OnSerialPortDelete; /**< Called for devices of type
-		                                   \b RDPDR_DTYP_SERIAL after \b ReceiveDeviceRemove */
+	typedef UINT (*psRdpdrSmartcardEstablishContext)(RdpdrServerContext* context,
+	                                                 void* callbackData, UINT32 dwScope,
+	                                                 UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardReleaseContext)(RdpdrServerContext* context, void* callbackData,
+	                                               const REDIR_SCARDCONTEXT* hContext,
+	                                               UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardIsValidContext)(RdpdrServerContext* context, void* callbackData,
+	                                               const REDIR_SCARDCONTEXT* hContext,
+	                                               UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardListReaderGroups)(RdpdrServerContext* context,
+	                                                 void* callbackData,
+	                                                 const ListReaderGroups_Call* call,
+	                                                 UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardListReaders)(RdpdrServerContext* context, void* callbackData,
+	                                            const ListReaders_Call* call, UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardGetStatusChangeA)(RdpdrServerContext* context,
+	                                                 void* callbackData,
+	                                                 const GetStatusChangeA_Call* call,
+	                                                 UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardGetStatusChangeW)(RdpdrServerContext* context,
+	                                                 void* callbackData,
+	                                                 const GetStatusChangeW_Call* call,
+	                                                 UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardCancel)(RdpdrServerContext* context, void* callbackData,
+	                                       const REDIR_SCARDCONTEXT* hContext,
+	                                       UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardConnectA)(RdpdrServerContext* context, void* callbackData,
+	                                         const ConnectA_Call* call, UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardConnectW)(RdpdrServerContext* context, void* callbackData,
+	                                         const ConnectW_Call* call, UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardReconnect)(RdpdrServerContext* context, void* callbackData,
+	                                          const Reconnect_Call* call, UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardDisconnect)(RdpdrServerContext* context, void* callbackData,
+	                                           const HCardAndDisposition_Call* call,
+	                                           UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardBeginTransaction)(RdpdrServerContext* context,
+	                                                 void* callbackData,
+	                                                 const HCardAndDisposition_Call* call,
+	                                                 UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardEndTransaction)(RdpdrServerContext* context, void* callbackData,
+	                                               const HCardAndDisposition_Call* call,
+	                                               UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardStatus)(RdpdrServerContext* context, void* callbackData,
+	                                       const Status_Call* call, UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardTransmit)(RdpdrServerContext* context, void* callbackData,
+	                                         const Transmit_Call* call, UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardControl)(RdpdrServerContext* context, void* callbackData,
+	                                        const Control_Call* call, UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardGetAttrib)(RdpdrServerContext* context, void* callbackData,
+	                                          const GetAttrib_Call* call, UINT32* completionId);
+	typedef UINT (*psRdpdrSmartcardSetAttrib)(RdpdrServerContext* context, void* callbackData,
+	                                          const SetAttrib_Call* call, UINT32* completionId);
 
-	/*** Parallel Port callbacks registered by the server. ***/
-	WINPR_ATTR_NODISCARD psRdpdrOnDeviceCreate OnParallelPortCreate; /**< Called for devices of type
-		                                   \b RDPDR_DTYP_PARALLEL after \b ReceiveDeviceAnnounce */
-	WINPR_ATTR_NODISCARD psRdpdrOnDeviceDelete OnParallelPortDelete; /**< Called for devices of type
-		                                   \b RDPDR_DTYP_PARALLEL after \b ReceiveDeviceRemove */
+	typedef void (*psRdpdrOnSmartcardEstablishContextComplete)(RdpdrServerContext* context,
+	                                                           void* callbackData, UINT32 ioStatus,
+	                                                           LONG returnCode,
+	                                                           const EstablishContext_Return* ret);
+	typedef void (*psRdpdrOnSmartcardReleaseContextComplete)(RdpdrServerContext* context,
+	                                                         void* callbackData, UINT32 ioStatus,
+	                                                         LONG returnCode);
+	typedef void (*psRdpdrOnSmartcardIsValidContextComplete)(RdpdrServerContext* context,
+	                                                         void* callbackData, UINT32 ioStatus,
+	                                                         LONG returnCode);
+	typedef void (*psRdpdrOnSmartcardListReaderGroupsComplete)(RdpdrServerContext* context,
+	                                                           void* callbackData, UINT32 ioStatus,
+	                                                           LONG returnCode,
+	                                                           const ListReaderGroups_Return* ret);
+	typedef void (*psRdpdrOnSmartcardListReadersComplete)(RdpdrServerContext* context,
+	                                                      void* callbackData, UINT32 ioStatus,
+	                                                      LONG returnCode,
+	                                                      const ListReaders_Return* ret);
+	typedef void (*psRdpdrOnSmartcardGetStatusChangeComplete)(RdpdrServerContext* context,
+	                                                          void* callbackData, UINT32 ioStatus,
+	                                                          LONG returnCode,
+	                                                          const GetStatusChange_Return* ret);
+	typedef void (*psRdpdrOnSmartcardCancelComplete)(RdpdrServerContext* context,
+	                                                 void* callbackData, UINT32 ioStatus,
+	                                                 LONG returnCode);
+	typedef void (*psRdpdrOnSmartcardConnectComplete)(RdpdrServerContext* context,
+	                                                  void* callbackData, UINT32 ioStatus,
+	                                                  LONG returnCode, const Connect_Return* ret);
+	typedef void (*psRdpdrOnSmartcardReconnectComplete)(RdpdrServerContext* context,
+	                                                    void* callbackData, UINT32 ioStatus,
+	                                                    LONG returnCode,
+	                                                    const Reconnect_Return* ret);
+	typedef void (*psRdpdrOnSmartcardDisconnectComplete)(RdpdrServerContext* context,
+	                                                     void* callbackData, UINT32 ioStatus,
+	                                                     LONG returnCode);
+	typedef void (*psRdpdrOnSmartcardBeginTransactionComplete)(RdpdrServerContext* context,
+	                                                           void* callbackData, UINT32 ioStatus,
+	                                                           LONG returnCode);
+	typedef void (*psRdpdrOnSmartcardEndTransactionComplete)(RdpdrServerContext* context,
+	                                                         void* callbackData, UINT32 ioStatus,
+	                                                         LONG returnCode);
+	typedef void (*psRdpdrOnSmartcardStatusComplete)(RdpdrServerContext* context,
+	                                                 void* callbackData, UINT32 ioStatus,
+	                                                 LONG returnCode, const Status_Return* ret);
+	typedef void (*psRdpdrOnSmartcardTransmitComplete)(RdpdrServerContext* context,
+	                                                   void* callbackData, UINT32 ioStatus,
+	                                                   LONG returnCode, const Transmit_Return* ret);
+	typedef void (*psRdpdrOnSmartcardControlComplete)(RdpdrServerContext* context,
+	                                                  void* callbackData, UINT32 ioStatus,
+	                                                  LONG returnCode, const Control_Return* ret);
+	typedef void (*psRdpdrOnSmartcardGetAttribComplete)(RdpdrServerContext* context,
+	                                                    void* callbackData, UINT32 ioStatus,
+	                                                    LONG returnCode,
+	                                                    const GetAttrib_Return* ret);
+	typedef void (*psRdpdrOnSmartcardSetAttribComplete)(RdpdrServerContext* context,
+	                                                    void* callbackData, UINT32 ioStatus,
+	                                                    LONG returnCode);
 
-	/*** Printer callbacks registered by the server. ***/
-	WINPR_ATTR_NODISCARD psRdpdrOnDeviceCreate OnPrinterCreate; /**< Called for devices of type
-		                                      RDPDR_DTYP_PRINT after \b ReceiveDeviceAnnounce */
-	WINPR_ATTR_NODISCARD psRdpdrOnDeviceDelete OnPrinterDelete; /**< Called for devices of type
-		                                      RDPDR_DTYP_PRINT after \b ReceiveDeviceRemove */
+	struct s_rdpdr_server_context
+	{
+		HANDLE vcm; /**< Virtual channel manager handle */
 
-	/*** Smartcard callbacks registered by the server. ***/
-	WINPR_ATTR_NODISCARD psRdpdrOnDeviceCreate
-		OnSmartcardCreate; /**< Called for devices of type RDPDR_DTYP_SMARTCARD
-		 after                    \b ReceiveDeviceAnnounce */
-	WINPR_ATTR_NODISCARD psRdpdrOnDeviceDelete OnSmartcardDelete; /**< Called for devices of type
-		                                        RDPDR_DTYP_SMARTCARD after \b ReceiveDeviceRemove */
+		WINPR_ATTR_NODISCARD psRdpdrStart Start; /**< Start the RDPDR server */
+		psRdpdrStop Stop;                        /**< Stop the RDPDR server */
 
-	rdpContext* rdpcontext;
-};
+		RdpdrServerPrivate* priv; /**< Private server context data */
 
-FREERDP_API void rdpdr_server_context_free(RdpdrServerContext* context);
+		/* Server self-defined pointer. */
+		void* data;
 
-WINPR_ATTR_MALLOC(rdpdr_server_context_free, 1)
-WINPR_ATTR_NODISCARD
-FREERDP_API RdpdrServerContext* rdpdr_server_context_new(HANDLE vcm);
+		/**< Server supported redirections.
+		 * initially used to determine which redirections are supported by the
+		 * server in the server capability, later on updated with what the client
+		 * actually wants to have supported.
+		 *
+		 * Use the \b RDPDR_DTYP_* defines as a mask to check.
+		 */
+		UINT16 supported;
 
+		/*** RDPDR message intercept callbacks */
+		WINPR_ATTR_NODISCARD psRdpdrCapablityPDU
+		    ReceiveCaps; /**< Called for each received capability */
+		WINPR_ATTR_NODISCARD psRdpdrCapablityPDU
+		    SendCaps; /**< Called for each capability to be sent */
+		WINPR_ATTR_NODISCARD psRdpdrReceivePDU
+		    ReceivePDU; /**< Called after a RDPDR pdu was received and parsed */
+		WINPR_ATTR_NODISCARD psRdpdrSendServerAnnounce
+		    SendServerAnnounce; /**< Called before the server sends the announce message */
+		WINPR_ATTR_NODISCARD psRdpdrReceiveAnnounceResponse
+		    ReceiveAnnounceResponse; /**< Called after the client announce response is received */
+		WINPR_ATTR_NODISCARD psRdpdrReceiveClientNameRequest
+		    ReceiveClientNameRequest; /**< Called after a client name request is received */
+		WINPR_ATTR_NODISCARD psRdpdrReceiveDeviceAnnounce
+		    ReceiveDeviceAnnounce; /**< Called after a new device request was received but before
+		                              the device is added */
+		WINPR_ATTR_NODISCARD psRdpdrReceiveDeviceRemove
+		    ReceiveDeviceRemove; /**< Called after a new device request was
+		       received, but before it is removed */
+
+		/*** Drive APIs called by the server. ***/
+		WINPR_ATTR_NODISCARD psRdpdrDriveCreateDirectory
+		    DriveCreateDirectory; /**< Create directory */
+		WINPR_ATTR_NODISCARD psRdpdrDriveDeleteDirectory
+		    DriveDeleteDirectory; /**< Delete directory */
+		WINPR_ATTR_NODISCARD psRdpdrDriveQueryDirectory DriveQueryDirectory; /**< Query directory */
+		WINPR_ATTR_NODISCARD psRdpdrDriveOpenFile DriveOpenFile;             /**< Open file */
+		WINPR_ATTR_NODISCARD psRdpdrDriveReadFile DriveReadFile;             /**< Read file */
+		WINPR_ATTR_NODISCARD psRdpdrDriveWriteFile DriveWriteFile;           /**< Write file */
+		WINPR_ATTR_NODISCARD psRdpdrDriveCloseFile DriveCloseFile;           /**< Close file */
+		WINPR_ATTR_NODISCARD psRdpdrDriveDeleteFile DriveDeleteFile;         /**< Delete file */
+		WINPR_ATTR_NODISCARD psRdpdrDriveRenameFile DriveRenameFile;         /**< Rename file */
+
+		/*** Drive callbacks registered by the server. ***/
+		WINPR_ATTR_NODISCARD psRdpdrOnDeviceCreate
+		    OnDriveCreate; /**< Called for devices of type \b
+		 RDPDR_DTYP_FILESYSTEM after \b ReceiveDeviceAnnounce */
+		WINPR_ATTR_NODISCARD psRdpdrOnDeviceDelete
+		    OnDriveDelete; /**< Called for devices of type \b
+		 RDPDR_DTYP_FILESYSTEM after \b ReceiveDeviceRemove */
+		psRdpdrOnDriveCreateDirectoryComplete
+		    OnDriveCreateDirectoryComplete; /**< DriveCreateDirectory completion callback */
+		psRdpdrOnDriveDeleteDirectoryComplete
+		    OnDriveDeleteDirectoryComplete; /**< DriveDeleteDirectory completion callback */
+		psRdpdrOnDriveQueryDirectoryComplete
+		    OnDriveQueryDirectoryComplete; /**< DriveQueryDirectory completion callback */
+		psRdpdrOnDriveOpenFileComplete
+		    OnDriveOpenFileComplete; /**< DriveOpenFile completion callback */
+		psRdpdrOnDriveReadFileComplete
+		    OnDriveReadFileComplete; /**< DriveReadFile completion callback */
+		psRdpdrOnDriveWriteFileComplete
+		    OnDriveWriteFileComplete; /**< DriveWriteFile completion callback */
+		psRdpdrOnDriveCloseFileComplete
+		    OnDriveCloseFileComplete; /**< DriveCloseFile completion callback */
+		psRdpdrOnDriveDeleteFileComplete
+		    OnDriveDeleteFileComplete; /**< DriveDeleteFile completion callback */
+		psRdpdrOnDriveRenameFileComplete
+		    OnDriveRenameFileComplete; /**< DriveRenameFile completion callback */
+
+		/*** Serial Port callbacks registered by the server. ***/
+		WINPR_ATTR_NODISCARD psRdpdrOnDeviceCreate
+		    OnSerialPortCreate; /**< Called for devices of type
+		\b RDPDR_DTYP_SERIAL after \b ReceiveDeviceAnnounce */
+		WINPR_ATTR_NODISCARD psRdpdrOnDeviceDelete
+		    OnSerialPortDelete; /**< Called for devices of type
+		\b RDPDR_DTYP_SERIAL after \b ReceiveDeviceRemove */
+
+		/*** Parallel Port callbacks registered by the server. ***/
+		WINPR_ATTR_NODISCARD psRdpdrOnDeviceCreate
+		    OnParallelPortCreate; /**< Called for devices of type
+		\b RDPDR_DTYP_PARALLEL after \b ReceiveDeviceAnnounce */
+		WINPR_ATTR_NODISCARD psRdpdrOnDeviceDelete
+		    OnParallelPortDelete; /**< Called for devices of type
+		\b RDPDR_DTYP_PARALLEL after \b ReceiveDeviceRemove */
+
+		/*** Printer callbacks registered by the server. ***/
+		WINPR_ATTR_NODISCARD psRdpdrOnDeviceCreate OnPrinterCreate; /**< Called for devices of type
+		                                          RDPDR_DTYP_PRINT after \b ReceiveDeviceAnnounce */
+		WINPR_ATTR_NODISCARD psRdpdrOnDeviceDelete OnPrinterDelete; /**< Called for devices of type
+		                                          RDPDR_DTYP_PRINT after \b ReceiveDeviceRemove */
+
+		/*** Smartcard callbacks registered by the server. ***/
+		WINPR_ATTR_NODISCARD psRdpdrOnDeviceCreate
+		    OnSmartcardCreate; /**< Called for devices of type RDPDR_DTYP_SMARTCARD
+		     after                    \b ReceiveDeviceAnnounce */
+		WINPR_ATTR_NODISCARD psRdpdrOnDeviceDelete
+		    OnSmartcardDelete; /**< Called for devices of type
+		     RDPDR_DTYP_SMARTCARD after \b ReceiveDeviceRemove */
+
+		rdpContext* rdpcontext; /**< RDP context */
+
+		/*** New Smartcard APIs called by the server.
+		 * @since version 3.28.0
+		 */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardEstablishContext
+		    SmartcardEstablishContext; /**< Send SCardEstablishContext to the client.
+		                                * @since version 3.28.0
+		                                */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardReleaseContext
+		    SmartcardReleaseContext; /**< Send SCardReleaseContext to the client.
+		                              * @since version 3.28.0
+		                              */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardIsValidContext
+		    SmartcardIsValidContext; /**< Send SCardIsValidContext to the client.
+		                              * @since version 3.28.0
+		                              */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardListReaderGroups
+		    SmartcardListReaderGroupsA; /**< Send SCardListReaderGroupsA to the client.
+		                                 * @since version 3.28.0
+		                                 */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardListReaderGroups
+		    SmartcardListReaderGroupsW; /**< Send SCardListReaderGroupsW to the client.
+		                                 * @since version 3.28.0
+		                                 */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardListReaders
+		    SmartcardListReadersA; /**< Send SCardListReadersA to the client.
+		                            * @since version 3.28.0
+		                            */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardListReaders
+		    SmartcardListReadersW; /**< Send SCardListReadersW to the client.
+		                            * @since version 3.28.0
+		                            */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardGetStatusChangeA
+		    SmartcardGetStatusChangeA; /**< Send SCardGetStatusChangeA to the client.
+		                                * @since version 3.28.0
+		                                */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardGetStatusChangeW
+		    SmartcardGetStatusChangeW; /**< Send SCardGetStatusChangeW to the client.
+		                                * @since version 3.28.0
+		                                */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardCancel
+		    SmartcardCancel; /**< Send SCardCancel to the client.
+		                      * @since version 3.28.0
+		                      */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardConnectA
+		    SmartcardConnectA; /**< Send SCardConnectA to the client.
+		                        * @since version 3.28.0
+		                        */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardConnectW
+		    SmartcardConnectW; /**< Send SCardConnectW to the client.
+		                        * @since version 3.28.0
+		                        */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardReconnect
+		    SmartcardReconnect; /**< Send SCardReconnect to the client.
+		                         * @since version 3.28.0
+		                         */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardDisconnect
+		    SmartcardDisconnect; /**< Send SCardDisconnect to the client.
+		                          * @since version 3.28.0
+		                          */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardBeginTransaction
+		    SmartcardBeginTransaction; /**< Send SCardBeginTransaction to the client.
+		                                * @since version 3.28.0
+		                                */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardEndTransaction
+		    SmartcardEndTransaction; /**< Send SCardEndTransaction to the client.
+		                              * @since version 3.28.0
+		                              */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardStatus
+		    SmartcardStatusA; /**< Send SCardStatusA to the client.
+		                       * @since version 3.28.0
+		                       */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardStatus
+		    SmartcardStatusW; /**< Send SCardStatusW to the client.
+		                       * @since version 3.28.0
+		                       */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardTransmit
+		    SmartcardTransmit; /**< Send SCardTransmit to the client.
+		                        * @since version 3.28.0
+		                        */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardControl
+		    SmartcardControl; /**< Send SCardControl to the client.
+		                       * @since version 3.28.0
+		                       */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardGetAttrib
+		    SmartcardGetAttrib; /**< Send SCardGetAttrib to the client.
+		                         * @since version 3.28.0
+		                         */
+		WINPR_ATTR_NODISCARD psRdpdrSmartcardSetAttrib
+		    SmartcardSetAttrib; /**< Send SCardSetAttrib to the client.
+		                         * @since version 3.28.0
+		                         */
+
+		/*** New Smartcard callbacks registered by the server. ***/
+		psRdpdrOnSmartcardEstablishContextComplete
+		    OnSmartcardEstablishContextComplete; /**<
+		                                          * Completion callback for
+		                                          * SmartcardEstablishContext.
+		                                          * @since version 3.28.0
+		                                          */
+		psRdpdrOnSmartcardReleaseContextComplete
+		    OnSmartcardReleaseContextComplete; /**< Completion
+		                                        * callback for SmartcardReleaseContext.
+		                                        * @since version 3.28.0
+		                                        */
+		psRdpdrOnSmartcardIsValidContextComplete
+		    OnSmartcardIsValidContextComplete; /**< Completion
+		                                        * callback for SmartcardIsValidContext.
+		                                        * @since version 3.28.0
+		                                        */
+		psRdpdrOnSmartcardListReaderGroupsComplete
+		    OnSmartcardListReaderGroupsComplete; /**<
+		                                          * Completion callback for
+		                                          * SmartcardListReaderGroups.
+		                                          * @since version 3.28.0
+		                                          */
+		psRdpdrOnSmartcardListReadersComplete
+		    OnSmartcardListReadersComplete; /**< Completion
+		                                     * callback for SmartcardListReaders.
+		                                     * @since version 3.28.0
+		                                     */
+		psRdpdrOnSmartcardGetStatusChangeComplete
+		    OnSmartcardGetStatusChangeComplete;                       /**<
+		                                                               * Completion callback for SmartcardGetStatusChange.
+		                                                               * @since version 3.28.0
+		                                                               */
+		psRdpdrOnSmartcardCancelComplete OnSmartcardCancelComplete;   /**< Completion callback for
+		                                                               * SmartcardCancel.
+		                                                               * @since version 3.28.0
+		                                                               */
+		psRdpdrOnSmartcardConnectComplete OnSmartcardConnectComplete; /**< Completion callback for
+		                                                               * SmartcardConnect.
+		                                                               * @since version 3.28.0
+		                                                               */
+		psRdpdrOnSmartcardReconnectComplete OnSmartcardReconnectComplete; /**< Completion callback
+		                                                                   * for SmartcardReconnect.
+		                                                                   * @since version 3.28.0
+		                                                                   */
+		psRdpdrOnSmartcardDisconnectComplete
+		    OnSmartcardDisconnectComplete; /**< Completion callback
+		                                    * for SmartcardDisconnect.
+		                                    * @since version 3.28.0
+		                                    */
+		psRdpdrOnSmartcardBeginTransactionComplete
+		    OnSmartcardBeginTransactionComplete; /**<
+		                                          * Completion callback for
+		                                          * SmartcardBeginTransaction.
+		                                          * @since version 3.28.0
+		                                          */
+		psRdpdrOnSmartcardEndTransactionComplete
+		    OnSmartcardEndTransactionComplete;                          /**< Completion
+		                                                                 * callback for SmartcardEndTransaction.
+		                                                                 * @since version 3.28.0
+		                                                                 */
+		psRdpdrOnSmartcardStatusComplete OnSmartcardStatusComplete;     /**< Completion callback for
+		                                                                 * SmartcardStatus.
+		                                                                 * @since version 3.28.0
+		                                                                 */
+		psRdpdrOnSmartcardTransmitComplete OnSmartcardTransmitComplete; /**< Completion callback for
+		                                                                 * SmartcardTransmit.
+		                                                                 * @since version 3.28.0
+		                                                                 */
+		psRdpdrOnSmartcardControlComplete OnSmartcardControlComplete;   /**< Completion callback for
+		                                                                 * SmartcardControl.
+		                                                                 * @since version 3.28.0
+		                                                                 */
+		psRdpdrOnSmartcardGetAttribComplete OnSmartcardGetAttribComplete; /**< Completion callback
+		                                                                   * for SmartcardGetAttrib.
+		                                                                   * @since version 3.28.0
+		                                                                   */
+		psRdpdrOnSmartcardSetAttribComplete OnSmartcardSetAttribComplete; /**< Completion callback
+		                                                                   * for SmartcardSetAttrib.
+		                                                                   * @since version 3.28.0
+		                                                                   */
+
+		/*** New Drive APIs called by the server.
+		 * @since version 3.33.0
+		 */
+		WINPR_ATTR_NODISCARD psRdpdrDriveReadFileEx
+		    DriveReadFileEx; /**< Read file with a 64-bit offset, completes with
+		                      * \b OnDriveReadFileComplete.
+		                      * @since version 3.33.0
+		                      */
+		WINPR_ATTR_NODISCARD psRdpdrDriveWriteFileEx
+		    DriveWriteFileEx; /**< Write file with a 64-bit offset, completes with
+		                       * \b OnDriveWriteFileComplete.
+		                       * @since version 3.33.0
+		                       */
+		WINPR_ATTR_NODISCARD psRdpdrDriveRenameFileEx
+		    DriveRenameFileEx; /**< Rename file, optionally replacing the target, completes
+		                        * with \b OnDriveRenameFileComplete.
+		                        * @since version 3.33.0
+		                        */
+		WINPR_ATTR_NODISCARD psRdpdrDriveSetFileSize
+		    DriveSetFileSize; /**< Set the size of a file (FileEndOfFileInformation),
+		                       * completes with \b OnDriveSetFileInformationComplete.
+		                       * @since version 3.33.0
+		                       */
+		WINPR_ATTR_NODISCARD psRdpdrDriveSetFileTimes
+		    DriveSetFileTimes; /**< Set the access and write times of a file or directory
+		                        * (FileBasicInformation, 0 keeps a time), completes with
+		                        * \b OnDriveSetFileInformationComplete.
+		                        * @since version 3.33.0
+		                        */
+		WINPR_ATTR_NODISCARD psRdpdrDriveQueryVolumeInformation
+		    DriveQueryVolumeInformation; /**< Query the size and free space of a drive
+		                                  * (FileFsFullSizeInformation), completes with
+		                                  * \b OnDriveQueryVolumeInformationComplete.
+		                                  * @since version 3.33.0
+		                                  */
+		psRdpdrOnDriveSetFileInformationComplete
+		    OnDriveSetFileInformationComplete; /**< Completion callback for DriveSetFileSize
+		                                        * and DriveSetFileTimes.
+		                                        * @since version 3.33.0
+		                                        */
+		psRdpdrOnDriveQueryVolumeInformationComplete
+		    OnDriveQueryVolumeInformationComplete; /**< Completion callback for
+		                                            * DriveQueryVolumeInformation.
+		                                            * @since version 3.33.0
+		                                            */
+	};
+
+	/**
+	 * @brief Free an RDPDR server context.
+	 * @param context The RDPDR server context to free.
+	 */
+	FREERDP_API void rdpdr_server_context_free(RdpdrServerContext* context);
+
+	/**
+	 * @brief Create a new RDPDR server context.
+	 * @param vcm Virtual channel manager handle.
+	 * @return Newly allocated RDPDR server context, or NULL on failure.
+	 */
+	WINPR_ATTR_MALLOC(rdpdr_server_context_free, 1)
+	FREERDP_API RdpdrServerContext* rdpdr_server_context_new(HANDLE vcm);
+
+	/**
+	 * @brief Remove and free a pending IRP request from the context.
+	 * @param context The RDPDR server context.
+	 * @param completionId The completion ID of the IRP to discard.
+	 * @since version 3.28
+	 */
+	FREERDP_API void rdpdr_server_discard_request(RdpdrServerContext* context, UINT32 completionId);
 #ifdef __cplusplus
 }
 #endif

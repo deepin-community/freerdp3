@@ -2,6 +2,7 @@
 #include <winpr/ntlm.h>
 #include <winpr/string.h>
 #include <winpr/print.h>
+#include <winpr/ssl.h>
 
 typedef struct
 {
@@ -311,6 +312,10 @@ static BOOL testNTOWFv2FromHash(size_t x, const test_case_from_hash_t* test)
 
 int TestNTLM(WINPR_ATTR_UNUSED int argc, WINPR_ATTR_UNUSED char* argv[])
 {
+	/* Make sure we load the OpenSSL legacy provider if needed */
+	if (!winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT))
+		return -1;
+
 	for (size_t x = 0; x < ARRAYSIZE(ntofw1tests); x++)
 	{
 		const test_case_ntowf1_t* cur = &ntofw1tests[x];

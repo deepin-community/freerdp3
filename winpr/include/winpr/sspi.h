@@ -396,14 +396,37 @@ typedef struct
 
 typedef struct
 {
-	SecPkgInfo* PackageInfo;
+	SecPkgInfoA* PackageInfo;
 	UINT32 NegotiationState;
-} SecPkgContext_NegotiationInfo;
+} SecPkgContext_NegotiationInfoA;
 
 typedef struct
 {
-	SecPkgInfo* PackageInfo;
-} SecPkgContext_PackageInfo;
+	SecPkgInfoW* PackageInfo;
+	UINT32 NegotiationState;
+} SecPkgContext_NegotiationInfoW;
+
+#ifdef UNICODE
+#define SecPkgContext_NegotiationInfo SecPkgContext_NegotiationInfoW
+#else
+#define SecPkgContext_NegotiationInfo SecPkgContext_NegotiationInfoA
+#endif /* UNICODE */
+
+typedef struct
+{
+	SecPkgInfoA* PackageInfo;
+} SecPkgContext_PackageInfoA;
+
+typedef struct
+{
+	SecPkgInfoW* PackageInfo;
+} SecPkgContext_PackageInfoW;
+
+#ifdef UNICODE
+#define SecPkgContext_PackageInfo SecPkgContext_PackageInfoW
+#else
+#define SecPkgContext_PackageInfo SecPkgContext_PackageInfoA
+#endif /* UNICODE */
 
 typedef struct
 {
@@ -664,7 +687,17 @@ typedef struct
 #define SEC_WINNT_AUTH_IDENTITY_UNICODE 0x2
 #define SEC_WINNT_AUTH_IDENTITY_MARSHALLED 0x4
 #define SEC_WINNT_AUTH_IDENTITY_ONLY 0x8
+
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
+/**< @deprecated use SEC_WINNT_AUTH_IDENTITY_EXTENDED_v2
+ * @since [version 3.31.0]
+ */
 #define SEC_WINNT_AUTH_IDENTITY_EXTENDED 0x100
+#endif
+
+#define SEC_WINNT_AUTH_IDENTITY_EXTENDED_v2 0x200 /**< @since 3.31.0 */
+
+#define SEC_WINPR_AUTH_IDENTITY_PASSWORD_HASH 0x00800000
 
 #if !defined(_WIN32) || defined(_UWP) || defined(__MINGW32__)
 
@@ -878,15 +911,19 @@ typedef SECURITY_STATUS (*psSspiNtlmHashCallback)(void* client,
                                                   const BYTE* randkey, const BYTE* mic,
                                                   const SecBuffer* micvalue, BYTE* ntlmhash);
 
-typedef struct
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
+
+struct SEC_WINPR_NTLM_SETTINGS
 {
 	char* samFile; /**< File name (with path) of a SAM file */
 	WINPR_ATTR_NODISCARD psSspiNtlmHashCallback
 	    hashCallback;      /**< Callback to be called to generate a NTLM hash. */
 	void* hashCallbackArg; /**< A pointer passed to \ref hashCallback */
-} SEC_WINPR_NTLM_SETTINGS;
+};
+WINPR_DEPRECATED_VAR("[since 3.31.0] use SEC_WINPR_NTLM_SETTINGS_V2",
+                     typedef struct SEC_WINPR_NTLM_SETTINGS SEC_WINPR_NTLM_SETTINGS);
 
-typedef struct
+struct SEC_WINPR_KERBEROS_SETTINGS
 {
 	char* kdcUrl;
 	char* keytab;
@@ -899,14 +936,65 @@ typedef struct
 	INT32 renewLifeTime;
 	INT32 lifeTime;
 	BYTE certSha1[20];
-} SEC_WINPR_KERBEROS_SETTINGS;
+};
+WINPR_DEPRECATED_VAR("[since 3.31.0] use SEC_WINPR_KERBEROS_SETTINGS_V2",
+                     typedef struct SEC_WINPR_KERBEROS_SETTINGS SEC_WINPR_KERBEROS_SETTINGS);
 
-typedef struct
+struct SEC_WINNT_AUTH_IDENTITY_WINPR
 {
 	SEC_WINNT_AUTH_IDENTITY_EXW identity;
-	SEC_WINPR_NTLM_SETTINGS* ntlmSettings;
-	SEC_WINPR_KERBEROS_SETTINGS* kerberosSettings;
-} SEC_WINNT_AUTH_IDENTITY_WINPR;
+	struct SEC_WINPR_NTLM_SETTINGS* ntlmSettings;
+	struct SEC_WINPR_KERBEROS_SETTINGS* kerberosSettings;
+};
+WINPR_DEPRECATED_VAR("[since 3.31.0] use SEC_WINNT_AUTH_IDENTITY_WINPR_V2",
+                     typedef struct SEC_WINNT_AUTH_IDENTITY_WINPR SEC_WINNT_AUTH_IDENTITY_WINPR);
+
+#endif
+
+typedef struct DECLSPEC_ALIGN(8) /**< @since version 3.31.0 */
+{
+	DECLSPEC_ALIGN(8)
+	UINT32 size;                     /**< size of this struct. */
+	DECLSPEC_ALIGN(8) char* samFile; /**< File name (with path) of a SAM file */
+	DECLSPEC_ALIGN(8)
+	WINPR_ATTR_NODISCARD psSspiNtlmHashCallback
+	    hashCallback;                        /**< Callback to be called to generate a NTLM hash. */
+	DECLSPEC_ALIGN(8) void* hashCallbackArg; /**< A pointer passed to \ref hashCallback */
+	DECLSPEC_ALIGN(8) char* targetName;      /**< @since version 3.31.0 */
+	DECLSPEC_ALIGN(8) char* netBiosComputerName; /**< @since version 3.31.0 */
+	DECLSPEC_ALIGN(8) char* netBiosDomainName;   /**< @since version 3.31.0 */
+	DECLSPEC_ALIGN(8) char* dnsComputerName;     /**< @since version 3.31.0 */
+	DECLSPEC_ALIGN(8) char* dnsDomainName;       /**< @since version 3.31.0 */
+} SEC_WINPR_NTLM_SETTINGS_V2;
+
+typedef struct DECLSPEC_ALIGN(8) /**< @since version 3.31.0 */
+{
+	DECLSPEC_ALIGN(8) UINT32 size;
+	DECLSPEC_ALIGN(8) char* kdcUrl;
+	DECLSPEC_ALIGN(8) char* keytab;
+	DECLSPEC_ALIGN(8) char* cache;
+	DECLSPEC_ALIGN(8) char* armorCache;
+	DECLSPEC_ALIGN(8) char* pkinitX509Anchors;
+	DECLSPEC_ALIGN(8) char* pkinitX509Identity;
+	DECLSPEC_ALIGN(8) BOOL withPac;
+	DECLSPEC_ALIGN(8) INT32 startTime;
+	DECLSPEC_ALIGN(8) INT32 renewLifeTime;
+	DECLSPEC_ALIGN(8) INT32 lifeTime;
+	DECLSPEC_ALIGN(8) BYTE certSha1[20];
+} SEC_WINPR_KERBEROS_SETTINGS_V2;
+
+typedef enum WINPR_C23_ENUM_TYPE(uint32_t)
+{
+	SEC_WINNT_AUTH_IDENTITY_WINPR_V2_REVISION_1 = 1 /**< @since version 3.31.0 */
+} SEC_WINNT_AUTH_IDENTITY_WINPR_V2_VERSION;         /**< @since version 3.31.0 */
+
+typedef struct DECLSPEC_ALIGN(8) /**< @since version 3.31.0 */
+{
+	DECLSPEC_ALIGN(8) SEC_WINNT_AUTH_IDENTITY_EXW identity;
+	DECLSPEC_ALIGN(8) UINT32 version;
+	DECLSPEC_ALIGN(8) SEC_WINPR_NTLM_SETTINGS_V2* ntlmSettingsV2;
+	DECLSPEC_ALIGN(8) SEC_WINPR_KERBEROS_SETTINGS_V2* kerberosSettingsV2;
+} SEC_WINNT_AUTH_IDENTITY_WINPR_V2;
 
 #define SECBUFFER_VERSION 0
 
@@ -1392,17 +1480,30 @@ extern "C"
 	/* Custom API */
 
 /* Extended SECPKG_ATTR IDs begin at 1000 */
-#define SECPKG_ATTR_AUTH_IDENTITY 1001
-#define SECPKG_ATTR_AUTH_PASSWORD 1002
-#define SECPKG_ATTR_AUTH_NTLM_HASH 1003
-#define SECPKG_ATTR_AUTH_NTLM_MESSAGE 1100
-#define SECPKG_ATTR_AUTH_NTLM_TIMESTAMP 1101
-#define SECPKG_ATTR_AUTH_NTLM_CLIENT_CHALLENGE 1102
-#define SECPKG_ATTR_AUTH_NTLM_SERVER_CHALLENGE 1103
-#define SECPKG_ATTR_AUTH_NTLM_NTPROOF_VALUE 1104
-#define SECPKG_ATTR_AUTH_NTLM_RANDKEY 1105
-#define SECPKG_ATTR_AUTH_NTLM_MIC 1106
-#define SECPKG_ATTR_AUTH_NTLM_MIC_VALUE 1107
+	enum WINPR_C23_ENUM_TYPE(uint32_t)
+	{
+		SECPKG_ATTR_AUTH_IDENTITY = 1001,
+		SECPKG_ATTR_AUTH_PASSWORD = 1002,
+		SECPKG_ATTR_AUTH_NTLM_HASH = 1003,
+		SECPKG_ATTR_AUTH_NTLM_MESSAGE = 1100,
+		SECPKG_ATTR_AUTH_NTLM_TIMESTAMP = 1101,
+		SECPKG_ATTR_AUTH_NTLM_CLIENT_CHALLENGE = 1102,
+		SECPKG_ATTR_AUTH_NTLM_SERVER_CHALLENGE = 1103,
+		SECPKG_ATTR_AUTH_NTLM_NTPROOF_VALUE = 1104,
+		SECPKG_ATTR_AUTH_NTLM_RANDKEY = 1105,
+		SECPKG_ATTR_AUTH_NTLM_MIC = 1106,
+		SECPKG_ATTR_AUTH_NTLM_MIC_VALUE = 1107,
+		SECPKG_ATTR_AUTH_NTLM_HOSTNAME = 1108,              /**< @since version 3.27.0 */
+		SECPKG_ATTR_AUTH_NTLM_HOSTNAME_LEN = 1110,          /**< @since version 3.27.0 */
+		SECPKG_ATTR_AUTH_NTLM_NB_COMPUTER_NAME = 1111,      /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_NB_COMPUTER_NAME_LEN = 1112,  /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_NB_DOMAIN_NAME = 1113,        /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_NB_DOMAIN_NAME_LEN = 1114,    /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_DNS_COMPUTER_NAME = 1115,     /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_DNS_COMPUTER_NAME_LEN = 1116, /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_DNS_DOMAIN_NAME = 1117,       /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_DNS_DOMAIN_NAME_LEN = 1118    /**< @since version 3.31.0 */
+	};
 
 #define SECPKG_CRED_ATTR_TICKET_LOGON 1200
 
@@ -1524,6 +1625,46 @@ extern "C"
 
 	WINPR_ATTR_NODISCARD
 	WINPR_API SecurityFunctionTableA* SEC_ENTRY InitSecurityInterfaceExA(DWORD flags);
+
+	/** @brief free an allocated \ref SEC_WINPR_NTLM_SETTINGS_V2
+	 *  @param settings A pointer to the settings to free
+	 *  @since version 3.31.0
+	 */
+	WINPR_API void sspi_FreeSecNtlmSettings(SEC_WINPR_NTLM_SETTINGS_V2* settings);
+
+	/** @brief allocate a \ref SEC_WINPR_NTLM_SETTINGS_V2
+	 *  @return An allocated settings struct or nullptr.
+	 *  @since version 3.31.0
+	 */
+	WINPR_ATTR_MALLOC(sspi_FreeSecNtlmSettings, 1)
+	WINPR_API SEC_WINPR_NTLM_SETTINGS_V2* sspi_AllocSecNtlmSettings(void);
+
+	/** @brief free an allocated \ref SEC_WINPR_KERBEROS_SETTINGS_V2
+	 *  @param settings A pointer to the settings to free
+	 *  @since version 3.31.0
+	 */
+	WINPR_API void sspi_FreeSecKerberosSettings(SEC_WINPR_KERBEROS_SETTINGS_V2* settings);
+
+	/** @brief allocate a \ref SEC_WINPR_KERBEROS_SETTINGS_V2
+	 *  @return An allocated settings struct or nullptr.
+	 *  @since version 3.31.0
+	 */
+	WINPR_ATTR_MALLOC(sspi_FreeSecKerberosSettings, 1)
+	WINPR_API SEC_WINPR_KERBEROS_SETTINGS_V2* sspi_AllocSecKerberosSettings(void);
+
+	/** @brief create a copy of a string. Frees up any previously allocated string at \ref dest
+	 *  This function was introduced to have an easy way to clone a string and keep clear of
+	 * allocator mismatches.
+	 *
+	 *  @param dest A pointer to a char* which will hold the allocated string result. Must not be
+	 * NULL
+	 *  @param src A pointer to the string to clone
+	 *
+	 *  @return TRUE for success, FALSE otherwise.
+	 *  @since version 3.31.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL sspi_CloneSecSettingsString(char** dest, const char* src);
 
 #ifdef UNICODE
 #define InitSecurityInterfaceEx InitSecurityInterfaceExW

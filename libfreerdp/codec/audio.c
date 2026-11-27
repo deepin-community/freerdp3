@@ -53,7 +53,7 @@ UINT32 audio_format_compute_time_length(const AUDIO_FORMAT* format, size_t size)
 
 			if ((format->cbSize == 2) && (format->data))
 			{
-				nSamplesPerBlock = *((UINT16*)format->data);
+				nSamplesPerBlock = *(WINPR_PACKED_ALIGN_CAST(UINT16*, format->data));
 				const size_t samples = (size / format->nBlockAlign) * nSamplesPerBlock;
 				WINPR_ASSERT(samples <= UINT32_MAX);
 				wSamples = (UINT32)samples;
@@ -101,7 +101,7 @@ const char* audio_format_get_tag_string(UINT16 wFormatTag)
 			return "WAVE_FORMAT_MSG723";
 
 		case WAVE_FORMAT_DSPGROUP_TRUESPEECH:
-			return "WAVE_FORMAT_DSPGROUP_TRUESPEECH	";
+			return "WAVE_FORMAT_DSPGROUP_TRUESPEECH";
 
 		case WAVE_FORMAT_MPEGLAYER3:
 			return "WAVE_FORMAT_MPEGLAYER3";
@@ -111,6 +111,10 @@ const char* audio_format_get_tag_string(UINT16 wFormatTag)
 
 		case WAVE_FORMAT_AAC_MS:
 			return "WAVE_FORMAT_AAC_MS";
+
+		case WAVE_FORMAT_OPUS:
+			return "WAVE_FORMAT_OPUS";
+
 		default:
 			return "WAVE_FORMAT_UNKNOWN";
 	}
@@ -184,7 +188,7 @@ BOOL audio_format_write(wStream* s, const AUDIO_FORMAT* format)
 	if (!s || !format)
 		return FALSE;
 
-	if (!Stream_EnsureRemainingCapacity(s, 18 + format->cbSize))
+	if (!Stream_EnsureRemainingCapacity(s, 18ull + format->cbSize))
 		return FALSE;
 
 	Stream_Write_UINT16(s, format->wFormatTag);      /* wFormatTag (WAVE_FORMAT_PCM) */

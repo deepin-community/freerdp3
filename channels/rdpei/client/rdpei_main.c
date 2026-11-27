@@ -626,10 +626,10 @@ static UINT rdpei_write_touch_frame(wLog* log, wStream* s, RDPINPUT_TOUCH_FRAME*
 	 * If this is the first frame being transmitted then this field MUST be set to zero.
 	 */
 	if (!rdpei_write_8byte_unsigned(s, frame->frameOffset *
-	                                       1000)) /* frameOffset (EIGHT_BYTE_UNSIGNED_INTEGER) */
+	                                       1000ull)) /* frameOffset (EIGHT_BYTE_UNSIGNED_INTEGER) */
 		return ERROR_OUTOFMEMORY;
 
-	if (!Stream_EnsureRemainingCapacity(s, (size_t)frame->contactCount * 64))
+	if (!Stream_EnsureRemainingCapacity(s, frame->contactCount * 64ull))
 	{
 		WLog_Print(log, WLOG_ERROR, "Stream_EnsureRemainingCapacity failed!");
 		return CHANNEL_RC_NO_MEMORY;
@@ -731,7 +731,7 @@ static UINT rdpei_send_touch_event_pdu(GENERIC_CHANNEL_CALLBACK* callback,
 		return CHANNEL_RC_NO_MEMORY;
 	}
 
-	if (!Stream_SafeSeek(s, RDPINPUT_HEADER_LENGTH))
+	if (!Stream_SafeZero(s, RDPINPUT_HEADER_LENGTH))
 		goto fail;
 	/**
 	 * the time that has elapsed (in milliseconds) from when the oldest touch frame
@@ -959,8 +959,11 @@ static UINT rdpei_on_close(IWTSVirtualChannelCallback* pChannelCallback)
 		RDPEI_PLUGIN* rdpei = (RDPEI_PLUGIN*)callback->plugin;
 		if (rdpei && rdpei->base.listener_callback)
 		{
+			/* Lock here to ensure that no frame is being sent with this callback. */
+			EnterCriticalSection(&rdpei->lock);
 			if (rdpei->base.listener_callback->channel_callback == callback)
 				rdpei->base.listener_callback->channel_callback = nullptr;
+			LeaveCriticalSection(&rdpei->lock);
 		}
 	}
 	free(callback);

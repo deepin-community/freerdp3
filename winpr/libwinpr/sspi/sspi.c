@@ -960,31 +960,75 @@ SECURITY_STATUS SEC_ENTRY sspi_VerifySignature(PCtxtHandle phContext, PSecBuffer
 
 WINPR_PRAGMA_DIAG_POP
 
-static void zfree(WCHAR* str, size_t len, BOOL isWCHAR)
-{
-	if (str)
-		memset(str, 0, len * (isWCHAR ? sizeof(WCHAR) : sizeof(char)));
-	free(str);
-}
-
 void sspi_FreeAuthIdentity(SEC_WINNT_AUTH_IDENTITY* identity)
 {
 	if (!identity)
 		return;
 
-	const BOOL wc = (identity->Flags & SEC_WINNT_AUTH_IDENTITY_UNICODE) != 0;
-	zfree(identity->User, identity->UserLength, wc);
-	zfree(identity->Domain, identity->DomainLength, wc);
-
-	/* identity->PasswordLength does have a dual use. In Pass The Hash (PTH) mode the maximum
-	 * password length (512) is added to the real length to mark this as a hash. when we free up
-	 * this field without removing these additional bytes we would corrupt the stack.
-	 */
-	size_t len = identity->PasswordLength;
-	if (len > SSPI_CREDENTIALS_HASH_LENGTH_OFFSET)
-		len -= SSPI_CREDENTIALS_HASH_LENGTH_OFFSET;
-	zfree(identity->Password, len, wc);
+	const size_t wc =
+	    ((identity->Flags & SEC_WINNT_AUTH_IDENTITY_UNICODE) != 0) ? sizeof(WCHAR) : sizeof(char);
+	winpr_znfree(identity->User, identity->UserLength * wc);
+	winpr_znfree(identity->Domain, identity->DomainLength * wc);
+	winpr_znfree(identity->Password, identity->PasswordLength * wc);
 
 	const SEC_WINNT_AUTH_IDENTITY empty = WINPR_C_ARRAY_INIT;
 	*identity = empty;
+}
+
+void sspi_FreeSecNtlmSettings(SEC_WINPR_NTLM_SETTINGS_V2* settings)
+{
+	if (!settings)
+		return;
+	free(settings->samFile);
+	free(settings->targetName);
+	free(settings->netBiosComputerName);
+	free(settings->netBiosDomainName);
+	free(settings->dnsComputerName);
+	free(settings->dnsDomainName);
+	free(settings);
+}
+
+SEC_WINPR_NTLM_SETTINGS_V2* sspi_AllocSecNtlmSettings(void)
+{
+	SEC_WINPR_NTLM_SETTINGS_V2* settings = calloc(1, sizeof(SEC_WINPR_NTLM_SETTINGS_V2));
+	if (!settings)
+		return nullptr;
+	settings->size = sizeof(SEC_WINPR_NTLM_SETTINGS_V2);
+	return settings;
+}
+
+void sspi_FreeSecKerberosSettings(SEC_WINPR_KERBEROS_SETTINGS_V2* settings)
+{
+	if (!settings)
+		return;
+	free(settings->kdcUrl);
+	free(settings->cache);
+	free(settings->keytab);
+	free(settings->armorCache);
+	free(settings->pkinitX509Anchors);
+	free(settings->pkinitX509Identity);
+	free(settings);
+}
+
+SEC_WINPR_KERBEROS_SETTINGS_V2* sspi_AllocSecKerberosSettings(void)
+{
+	SEC_WINPR_KERBEROS_SETTINGS_V2* settings = calloc(1, sizeof(SEC_WINPR_KERBEROS_SETTINGS_V2));
+	if (!settings)
+		return nullptr;
+	settings->size = sizeof(SEC_WINPR_KERBEROS_SETTINGS_V2);
+	return settings;
+}
+
+BOOL sspi_CloneSecSettingsString(char** dest, const char* src)
+{
+	WINPR_ASSERT(dest);
+	free(*dest);
+	*dest = nullptr;
+	if (src)
+	{
+		*dest = _strdup(src);
+		if (!*dest)
+			return FALSE;
+	}
+	return TRUE;
 }

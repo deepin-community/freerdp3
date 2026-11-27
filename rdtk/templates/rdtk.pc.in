@@ -6,7 +6,7 @@ libs=-lrdtk@RDTK_VERSION_MAJOR@
 
 Name: rdtk@RDTK_API_VERSION@ 
 Description: rdtk:
-URL: http://www.freerdp.com/
+URL: https://freerdp.com/
 Version: @RDTK_VERSION@
 Requires:
 Requires.private: @RDTK_PC_REQUIRES_PRIVATE@

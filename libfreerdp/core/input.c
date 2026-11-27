@@ -383,21 +383,29 @@ static BOOL input_send_keyboard_pause_event(rdpInput* input)
 
 static BOOL input_send_fastpath_synchronize_event(rdpInput* input, UINT32 flags)
 {
-	UINT16 sec_flags = 0;
-	wStream* s = nullptr;
-	rdpRdp* rdp = nullptr;
-
 	WINPR_ASSERT(input);
 	WINPR_ASSERT(input->context);
 
-	rdp = input->context->rdp;
+	/* The FastPath Synchronization eventFlags has identical values as SlowPath,
+	 * but the field is only 5 bits wide. Drop everything else, a value with
+	 * undefined bits set may have been received from a peer (proxy) */
+	const UINT32 mask =
+	    KBD_SYNC_SCROLL_LOCK | KBD_SYNC_NUM_LOCK | KBD_SYNC_CAPS_LOCK | KBD_SYNC_KANA_LOCK;
+	if (flags & ~mask)
+		WLog_WARN(TAG,
+		          "Problematic [MS-RDPBCGR] 2.2.8.1.2.2.5 Fast-Path Synchronize Event "
+		          "(TS_FP_SYNC_EVENT) flags=0x%08" PRIx32 ", ignoring undefined bits.",
+		          flags);
+	rdpRdp* rdp = input->context->rdp;
 	WINPR_ASSERT(rdp);
 
 	if (!input_ensure_client_running(input))
 		return FALSE;
 
 	/* The FastPath Synchronization eventFlags has identical values as SlowPath */
-	s = fastpath_input_pdu_init(rdp->fastpath, (BYTE)flags, FASTPATH_INPUT_EVENT_SYNC, &sec_flags);
+	UINT16 sec_flags = 0;
+	wStream* s =
+	    fastpath_input_pdu_init(rdp->fastpath, (BYTE)flags, FASTPATH_INPUT_EVENT_SYNC, &sec_flags);
 
 	if (!s)
 		return FALSE;
@@ -696,6 +704,10 @@ static BOOL input_recv_sync_event(rdpInput* input, wStream* s)
 
 	Stream_Seek(s, 2);                  /* pad2Octets (2 bytes) */
 	Stream_Read_UINT32(s, toggleFlags); /* toggleFlags (4 bytes) */
+
+	/* only pass input if we are actually connected */
+	if (!rdp_has_reached_state(input->context->rdp, CONNECTION_STATE_ACTIVE))
+		return TRUE;
 	return IFCALLRESULT(TRUE, input->SynchronizeEvent, input, toggleFlags);
 }
 
@@ -723,6 +735,10 @@ static BOOL input_recv_keyboard_event(rdpInput* input, wStream* s)
 		          "keyCode=0x%04" PRIx16
 		          ", high byte values should be sent in keyboardFlags field, ignoring.",
 		          keyCode);
+
+	/* only pass input if we are actually connected */
+	if (!rdp_has_reached_state(input->context->rdp, CONNECTION_STATE_ACTIVE))
+		return TRUE;
 	return IFCALLRESULT(TRUE, input->KeyboardEvent, input, keyboardFlags, keyCode & 0xFF);
 }
 
@@ -746,6 +762,9 @@ static BOOL input_recv_unicode_keyboard_event(rdpInput* input, wStream* s)
 	if (keyboardFlags & KBD_FLAGS_RELEASE)
 		keyboardFlags &= ~KBD_FLAGS_DOWN;
 
+	/* only pass input if we are actually connected */
+	if (!rdp_has_reached_state(input->context->rdp, CONNECTION_STATE_ACTIVE))
+		return TRUE;
 	return IFCALLRESULT(TRUE, input->UnicodeKeyboardEvent, input, keyboardFlags, unicodeCode);
 }
 
@@ -764,6 +783,10 @@ static BOOL input_recv_mouse_event(rdpInput* input, wStream* s)
 	Stream_Read_UINT16(s, pointerFlags); /* pointerFlags (2 bytes) */
 	Stream_Read_UINT16(s, xPos);         /* xPos (2 bytes) */
 	Stream_Read_UINT16(s, yPos);         /* yPos (2 bytes) */
+
+	/* only pass input if we are actually connected */
+	if (!rdp_has_reached_state(input->context->rdp, CONNECTION_STATE_ACTIVE))
+		return TRUE;
 	return IFCALLRESULT(TRUE, input->MouseEvent, input, pointerFlags, xPos, yPos);
 }
 
@@ -791,6 +814,10 @@ static BOOL input_recv_relmouse_event(rdpInput* input, wStream* s)
 		         pointerFlags, xDelta, yDelta);
 		return FALSE;
 	}
+
+	/* only pass input if we are actually connected */
+	if (!rdp_has_reached_state(input->context->rdp, CONNECTION_STATE_ACTIVE))
+		return TRUE;
 
 	return IFCALLRESULT(TRUE, input->RelMouseEvent, input, pointerFlags, xDelta, yDelta);
 }
@@ -820,6 +847,9 @@ static BOOL input_recv_extended_mouse_event(rdpInput* input, wStream* s)
 		return FALSE;
 	}
 
+	/* only pass input if we are actually connected */
+	if (!rdp_has_reached_state(input->context->rdp, CONNECTION_STATE_ACTIVE))
+		return TRUE;
 	return IFCALLRESULT(TRUE, input->ExtendedMouseEvent, input, pointerFlags, xPos, yPos);
 }
 
@@ -877,7 +907,8 @@ static BOOL input_recv_event(rdpInput* input, wStream* s)
 		default:
 			WLog_ERR(TAG, "Unknown messageType %" PRIu16 "", messageType);
 			/* Each input event uses 6 bytes. */
-			Stream_Seek(s, 6);
+			if (!Stream_SafeSeek(s, 6))
+				return FALSE;
 			break;
 	}
 
@@ -1100,6 +1131,9 @@ BOOL freerdp_input_send_qoe_timestamp(rdpInput* input, UINT32 timestampMS)
 {
 	if (!input || !input->context)
 		return FALSE;
+
+	if (input_skip(input, "QOE timestamp %" PRIu32, timestampMS))
+		return TRUE;
 
 	return IFCALLRESULT(TRUE, input->QoEEvent, input, timestampMS);
 }

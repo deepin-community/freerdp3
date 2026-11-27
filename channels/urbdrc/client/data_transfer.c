@@ -97,15 +97,25 @@ fail:
 	return status;
 }
 
+/* [MS-RDPEUSB] 2.2.7.2 and 2.2.7.3:
+ * Only a TRANSFER_IN_REQUEST that returns data carries an OutputBuffer.
+ * TRANSFER_OUT_REQUEST reports the transferred byte count in OutputBufferSize,
+ * but always uses URB_COMPLETION_NO_DATA. */
+static UINT32 urb_completion_payload_size(int transferDir, UINT32 outputBufferSize)
+{
+	return (transferDir == USBD_TRANSFER_DIRECTION_IN) ? outputBufferSize : 0;
+}
+
 static UINT urb_write_completion(WINPR_ATTR_UNUSED IUDEVICE* pdev,
                                  GENERIC_CHANNEL_CALLBACK* callback, BOOL noAck, wStream* out,
                                  UINT32 InterfaceId, UINT32 MessageId, UINT32 RequestId,
-                                 UINT32 usbd_status, UINT32 OutputBufferSize)
+                                 UINT32 usbd_status, UINT32 OutputBufferSize, int transferDir)
 {
 	if (!out)
 		return ERROR_INVALID_PARAMETER;
 
-	if (Stream_Capacity(out) < OutputBufferSize + 36)
+	const UINT32 payloadSize = urb_completion_payload_size(transferDir, OutputBufferSize);
+	if (Stream_Capacity(out) < payloadSize + 36ULL)
 	{
 		Stream_Free(out, TRUE);
 		return ERROR_INVALID_PARAMETER;
@@ -113,7 +123,7 @@ static UINT urb_write_completion(WINPR_ATTR_UNUSED IUDEVICE* pdev,
 
 	Stream_ResetPosition(out);
 
-	const UINT32 FunctionId = (OutputBufferSize != 0) ? URB_COMPLETION : URB_COMPLETION_NO_DATA;
+	const UINT32 FunctionId = (payloadSize != 0) ? URB_COMPLETION : URB_COMPLETION_NO_DATA;
 	if (!write_shared_message_header_with_functionid(out, InterfaceId, MessageId, FunctionId))
 	{
 		Stream_Free(out, TRUE);
@@ -129,9 +139,16 @@ static UINT urb_write_completion(WINPR_ATTR_UNUSED IUDEVICE* pdev,
 		return ERROR_OUTOFMEMORY;
 	}
 
-	Stream_Write_UINT32(out, 0);                /** HResult */
+	/* [MS-RDPEUSB] URB_COMPLETION: a failed URB must also fail the IRP, otherwise the server side
+	 * (e.g. usbstor) never runs its stall recovery (SYNC_RESET_PIPE_AND_CLEAR_STALL) */
+	HRESULT hr = S_OK;
+	const UINT32 mask = 0x80000000ul;
+	const UINT32 masked = usbd_status & mask;
+	if (masked == mask)
+		hr = HRESULT_FROM_WIN32(ERROR_GEN_FAILURE);
+	Stream_Write_INT32(out, hr);                /** HResult */
 	Stream_Write_UINT32(out, OutputBufferSize); /** OutputBufferSize */
-	Stream_Seek(out, OutputBufferSize);
+	Stream_Seek(out, payloadSize);
 
 	if (!noAck)
 		return stream_write_and_free(callback->plugin, callback->channel, out);
@@ -161,6 +178,41 @@ static wStream* urb_create_iocompletion(UINT32 InterfaceField, UINT32 MessageId,
 	Stream_Write_UINT32(out, OutputBufferSize);     /** Information */
 	Stream_Write_UINT32(out, OutputBufferSize);     /** OutputBufferSize */
 	return out;
+}
+
+/* [MS-RDPEUSB] 2.2.7.1 IO Control Completion (IOCONTROL_COMPLETION)
+ *
+ * The Information and OutputBufferSize fields describe the OutputBuffer that
+ * follows them, but urb_create_iocompletion() has to write both before the IO
+ * control handler has produced any output. Rewrite them once the payload is
+ * complete so that a handler which returns nothing does not announce a buffer
+ * it never sends.
+ */
+static BOOL urb_finalize_iocompletion(wStream* out)
+{
+	WINPR_ASSERT(out);
+
+	const size_t header = 12ULL /* SHARED_MSG_HEADER */ + 4ULL /* RequestId */;
+	const size_t offset = header + 4ULL /* HResult */;
+	const size_t fixed = offset + 4ULL /* Information */ + 4ULL /* OutputBufferSize */;
+	const size_t end = Stream_GetPosition(out);
+
+	if (end < fixed)
+		return FALSE;
+
+	const size_t OutputBufferSize = end - fixed;
+
+	if (OutputBufferSize > UINT32_MAX)
+		return FALSE;
+
+	const UINT32 size = WINPR_ASSERTING_INT_CAST(UINT32, OutputBufferSize);
+
+	if (!Stream_SetPosition(out, offset))
+		return FALSE;
+
+	Stream_Write_UINT32(out, size); /** Information */
+	Stream_Write_UINT32(out, size); /** OutputBufferSize */
+	return Stream_SetPosition(out, end);
 }
 
 static UINT urbdrc_process_register_request_callback(IUDEVICE* pdev,
@@ -351,6 +403,12 @@ static UINT urbdrc_process_io_control(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* 
 			           IoControlCode);
 			Stream_Free(out, TRUE);
 			return ERROR_INVALID_OPERATION;
+	}
+
+	if (!urb_finalize_iocompletion(out))
+	{
+		Stream_Free(out, TRUE);
+		return ERROR_INTERNAL_ERROR;
 	}
 
 	return stream_write_and_free(callback->plugin, callback->channel, out);
@@ -643,7 +701,9 @@ static UINT urb_select_interface(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callb
 		return ERROR_INVALID_DATA;
 
 	const UINT32 InterfaceId = ((STREAM_ID_PROXY << 30) | pdev->get_ReqCompletion(pdev));
-	const UINT32 ConfigurationHandle = Stream_Get_UINT32(s);
+	// Currently unused, so just skip the data
+	// const UINT32 ConfigurationHandle = Stream_Get_UINT32(s);
+	Stream_Seek_UINT32(s);
 	MSUSB_INTERFACE_DESCRIPTOR* MsInterface = msusb_msinterface_read(s);
 
 	if (!Stream_CheckAndLogRequiredLength(TAG, s, 4) || !MsInterface)
@@ -675,7 +735,10 @@ static UINT urb_select_interface(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callb
 	MSUSB_CONFIG_DESCRIPTOR* MsConfig = pdev->get_MsConfig(pdev);
 	const uint8_t InterfaceNumber = MsInterface->InterfaceNumber;
 	if (!msusb_msinterface_replace(MsConfig, InterfaceNumber, MsInterface))
+	{
+		msusb_msinterface_free(MsInterface);
 		return ERROR_BAD_CONFIGURATION;
+	}
 
 	/* complete configuration setup */
 	if (!pdev->complete_msconfig_setup(pdev, MsConfig))
@@ -790,18 +853,19 @@ static UINT urb_control_transfer(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callb
 	}
 
 	return urb_write_completion(pdev, callback, noAck, out, InterfaceId, MessageId, RequestId,
-	                            usbd_status, OutputBufferSize);
+	                            usbd_status, OutputBufferSize, transferDir);
 }
 
 static void urb_bulk_transfer_cb(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback, wStream* out,
                                  UINT32 InterfaceId, BOOL noAck, UINT32 MessageId, UINT32 RequestId,
                                  WINPR_ATTR_UNUSED UINT32 NumberOfPackets, UINT32 status,
                                  WINPR_ATTR_UNUSED UINT32 StartFrame,
-                                 WINPR_ATTR_UNUSED UINT32 ErrorCount, UINT32 OutputBufferSize)
+                                 WINPR_ATTR_UNUSED UINT32 ErrorCount, UINT32 OutputBufferSize,
+                                 int transferDir)
 {
 	if (!pdev->isChannelClosed(pdev))
 		urb_write_completion(pdev, callback, noAck, out, InterfaceId, MessageId, RequestId, status,
-		                     OutputBufferSize);
+		                     OutputBufferSize, transferDir);
 	else
 		Stream_Free(out, TRUE);
 }
@@ -840,24 +904,32 @@ static UINT urb_bulk_or_interrupt_transfer(IUDEVICE* pdev, GENERIC_CHANNEL_CALLB
 	const int rc = pdev->bulk_or_interrupt_transfer(
 	    pdev, callback, MessageId, RequestId, EndpointAddress, TransferFlags, noAck,
 	    OutputBufferSize,
-	    (transferDir == USBD_TRANSFER_DIRECTION_OUT) ? Stream_Pointer(s) : nullptr,
+	    (transferDir == USBD_TRANSFER_DIRECTION_OUT) ? Stream_Pointer(s) : nullptr, transferDir,
 	    urb_bulk_transfer_cb, 10000);
 
 	return (uint32_t)rc;
 }
 
-static void urb_isoch_transfer_cb(WINPR_ATTR_UNUSED IUDEVICE* pdev,
-                                  GENERIC_CHANNEL_CALLBACK* callback, wStream* out,
+static void urb_isoch_transfer_cb(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback, wStream* out,
                                   UINT32 InterfaceId, BOOL noAck, UINT32 MessageId,
                                   UINT32 RequestId, UINT32 NumberOfPackets, UINT32 status,
-                                  UINT32 StartFrame, UINT32 ErrorCount, UINT32 OutputBufferSize)
+                                  UINT32 StartFrame, UINT32 ErrorCount, UINT32 OutputBufferSize,
+                                  int transferDir)
 {
+	/* The channel (and with it the callback) is gone, nobody to report to. */
+	if (pdev->isChannelClosed(pdev))
+	{
+		Stream_Free(out, TRUE);
+		return;
+	}
+
 	if (!noAck)
 	{
 		UINT32 packetSize = (status == 0) ? NumberOfPackets * 12 : 0;
+		const UINT32 payloadSize = urb_completion_payload_size(transferDir, OutputBufferSize);
 		Stream_ResetPosition(out);
 
-		const UINT32 FunctionId = (OutputBufferSize == 0) ? URB_COMPLETION_NO_DATA : URB_COMPLETION;
+		const UINT32 FunctionId = (payloadSize != 0) ? URB_COMPLETION : URB_COMPLETION_NO_DATA;
 		if (!write_shared_message_header_with_functionid(out, InterfaceId, MessageId, FunctionId))
 		{
 			Stream_Free(out, TRUE);
@@ -890,7 +962,7 @@ static void urb_isoch_transfer_cb(WINPR_ATTR_UNUSED IUDEVICE* pdev,
 
 		Stream_Write_UINT32(out, 0);                /** HResult */
 		Stream_Write_UINT32(out, OutputBufferSize); /** OutputBufferSize */
-		Stream_Seek(out, OutputBufferSize);
+		Stream_Seek(out, payloadSize);
 
 		const UINT rc = stream_write_and_free(callback->plugin, callback->channel, out);
 		if (rc != CHANNEL_RC_OK)
@@ -946,7 +1018,7 @@ static UINT urb_isoch_transfer(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callbac
 	rc = pdev->isoch_transfer(
 	    pdev, callback, MessageId, RequestId, EndpointAddress, TransferFlags, StartFrame,
 	    ErrorCount, noAck, packetDescriptorData, NumberOfPackets, OutputBufferSize,
-	    (transferDir == USBD_TRANSFER_DIRECTION_OUT) ? Stream_Pointer(s) : nullptr,
+	    (transferDir == USBD_TRANSFER_DIRECTION_OUT) ? Stream_Pointer(s) : nullptr, transferDir,
 	    urb_isoch_transfer_cb, 2000);
 
 	if (rc < 0)
@@ -1035,7 +1107,7 @@ static UINT urb_control_descriptor_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLB
 	}
 
 	return urb_write_completion(pdev, callback, noAck, out, InterfaceId, MessageId, RequestId,
-	                            usbd_status, OutputBufferSize);
+	                            usbd_status, OutputBufferSize, transferDir);
 }
 
 static UINT urb_control_get_status_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback,
@@ -1096,7 +1168,7 @@ static UINT urb_control_get_status_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLB
 	}
 
 	return urb_write_completion(pdev, callback, noAck, out, InterfaceId, MessageId, RequestId,
-	                            usbd_status, OutputBufferSize);
+	                            usbd_status, OutputBufferSize, transferDir);
 }
 
 static UINT urb_control_vendor_or_class_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback,
@@ -1185,7 +1257,7 @@ static UINT urb_control_vendor_or_class_request(IUDEVICE* pdev, GENERIC_CHANNEL_
 	}
 
 	return urb_write_completion(pdev, callback, noAck, out, InterfaceId, MessageId, RequestId,
-	                            usbd_status, OutputBufferSize);
+	                            usbd_status, OutputBufferSize, transferDir);
 }
 
 static UINT urb_os_feature_descriptor_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback,
@@ -1276,7 +1348,7 @@ static UINT urb_os_feature_descriptor_request(IUDEVICE* pdev, GENERIC_CHANNEL_CA
 		WLog_Print(urbdrc->log, WLOG_DEBUG, "os_feature_descriptor_request: error num %d", ret);
 
 	return urb_write_completion(pdev, callback, noAck, out, InterfaceId, MessageId, RequestId,
-	                            usbd_status, OutputBufferSize);
+	                            usbd_status, OutputBufferSize, transferDir);
 }
 
 static UINT urb_pipe_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback, wStream* s,
@@ -1360,7 +1432,7 @@ static UINT urb_pipe_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback,
 		return ERROR_OUTOFMEMORY;
 
 	return urb_write_completion(pdev, callback, noAck, out, InterfaceId, MessageId, RequestId, ret,
-	                            0);
+	                            0, transferDir);
 }
 /* [MS-RDPEUSB] 2.2.10.4 TS_URB_GET_CURRENT_FRAME_NUMBER_RESULT */
 static UINT urb_send_current_frame_number_result(GENERIC_CHANNEL_CALLBACK* callback,
@@ -1376,15 +1448,17 @@ static UINT urb_send_current_frame_number_result(GENERIC_CHANNEL_CALLBACK* callb
 	if (!out)
 		return ERROR_OUTOFMEMORY;
 
+	if (!Stream_EnsureRemainingCapacity(out, 4))
+		goto fail;
 	Stream_Write_UINT32(out, 12); /** CbTsUrbResult */
 	if (!write_urb_result_header(out, 12, USBD_STATUS_SUCCESS))
-	{
-		Stream_Free(out, TRUE);
-		return ERROR_OUTOFMEMORY;
-	}
-
+		goto fail;
 	Stream_Write_UINT32(out, FrameNumber); /** FrameNumber */
 	return send_urb_completion_message(callback, out, 0, 0, nullptr);
+
+fail:
+	Stream_Free(out, TRUE);
+	return ERROR_OUTOFMEMORY;
 }
 
 static UINT urb_get_current_frame_number(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback,
@@ -1485,7 +1559,7 @@ static UINT urb_control_get_configuration_request(IUDEVICE* pdev,
 	}
 
 	return urb_write_completion(pdev, callback, noAck, out, InterfaceId, MessageId, RequestId,
-	                            usbd_status, OutputBufferSize);
+	                            usbd_status, OutputBufferSize, transferDir);
 }
 
 /* Unused function for current server */
@@ -1545,7 +1619,7 @@ static UINT urb_control_get_interface_request(IUDEVICE* pdev, GENERIC_CHANNEL_CA
 	}
 
 	return urb_write_completion(pdev, callback, noAck, out, InterfaceId, MessageId, RequestId,
-	                            usbd_status, OutputBufferSize);
+	                            usbd_status, OutputBufferSize, transferDir);
 }
 
 static UINT urb_control_feature_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback,
@@ -1645,7 +1719,7 @@ static UINT urb_control_feature_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK
 	}
 
 	return urb_write_completion(pdev, callback, noAck, out, InterfaceId, MessageId, RequestId,
-	                            usbd_status, OutputBufferSize);
+	                            usbd_status, OutputBufferSize, transferDir);
 }
 
 static UINT urbdrc_process_transfer_request(IUDEVICE* pdev, GENERIC_CHANNEL_CALLBACK* callback,
@@ -1986,6 +2060,18 @@ UINT urbdrc_process_udev_data_transfer(GENERIC_CHANNEL_CALLBACK* callback, URBDR
 
 	/* Device has been removed, ignore this request. */
 	if (pdev->isChannelClosed(pdev))
+	{
+		error = ERROR_SUCCESS;
+		goto fail;
+	}
+
+	/* Whatever channel the request arrived on, answer on the channel the device is bound to: a
+	 * pending transfer keeps the callback of that channel and closing it drains the device before
+	 * the callback is freed. Any other channel may go away while the transfer is still pending. */
+	callback = pdev->get_channelCallback(pdev);
+
+	/* Device has not been announced yet, ignore this request. */
+	if (callback == nullptr)
 	{
 		error = ERROR_SUCCESS;
 		goto fail;

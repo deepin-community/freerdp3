@@ -6,7 +6,7 @@ libs=-lfreerdp-shadow@FREERDP_API_VERSION@ -lfreerdp-shadow-subsystem@FREERDP_AP
 
 Name: FreeRDP shadow
 Description: FreeRDP: A Remote Desktop Protocol Implementation
-URL: http://www.freerdp.com/
+URL: https://freerdp.com/
 Version: @FREERDP_VERSION@
 Requires: @FREERDP_SHADOW_PC_REQUIRES@
 Requires.private: @FREERDP_SHADOW_PC_REQUIRES_PRIVATE@

@@ -41,6 +41,7 @@
 #include <freerdp/error.h>
 #include <freerdp/listener.h>
 
+#include "../cache/cache.h"
 #include "../cache/pointer.h"
 #include "../crypto/crypto.h"
 #include "../crypto/privatekey.h"
@@ -219,10 +220,11 @@ static BOOL rdp_client_reset_codecs(rdpContext* context)
 		                                   settings->DesktopWidth, settings->DesktopHeight))
 			return FALSE;
 
-/* Runtime H264 detection. (only available if dynamic backend loading is defined)
+/* Runtime H264 detection. (only available if dynamic backend loading is defined, or
+ * in the browser, which might not decode H.264)
  * If no backend is available disable it before the channel is loaded.
  */
-#if defined(WITH_GFX_H264) && defined(WITH_OPENH264_LOADING)
+#if defined(WITH_GFX_H264) && (defined(WITH_OPENH264_LOADING) || defined(WITH_H264_WEBCODECS))
 		if (!context->codecs->h264)
 		{
 			settings->GfxH264 = FALSE;
@@ -324,10 +326,32 @@ BOOL rdp_client_connect(rdpRdp* rdp)
 
 	/* FIPS Mode forces the following and overrides the following(by happening later
 	 * in the command line processing):
-	 * 1. Forces the only supported RDP encryption method to be FIPS. */
+	 * 1. Forces the only supported RDP encryption method to be FIPS.
+	 * 2. Disables NTLM authentication (not FIPS compliant due to MD4/RC4).
+	 * 3. Disables RDP Security if 3DES is not available in the crypto provider. */
 	if (settings->FIPSMode || winpr_FIPSMode())
 	{
+
 		settings->EncryptionMethods = ENCRYPTION_METHOD_FIPS;
+
+		if (!settings->AuthenticationPackageList)
+		{
+			if (!freerdp_settings_set_string(settings, FreeRDP_AuthenticationPackageList, "!ntlm"))
+				return FALSE;
+		}
+
+		const BYTE key[WINPR_CIPHER_MAX_KEY_LENGTH] = WINPR_C_ARRAY_INIT;
+		const BYTE iv[WINPR_CIPHER_MAX_IV_LENGTH] = WINPR_C_ARRAY_INIT;
+		WINPR_CIPHER_CTX* ctx = winpr_Cipher_NewEx(WINPR_CIPHER_DES_EDE3_CBC, WINPR_ENCRYPT, key,
+		                                           sizeof(key), iv, sizeof(iv));
+		if (ctx)
+		{
+			winpr_Cipher_Free(ctx);
+		}
+		else
+		{
+			settings->RdpSecurity = FALSE;
+		}
 	}
 
 	UINT32 TcpConnectTimeout = freerdp_settings_get_uint32(settings, FreeRDP_TcpConnectTimeout);
@@ -475,7 +499,13 @@ BOOL rdp_client_connect(rdpRdp* rdp)
 	if (!transport_set_recv_callbacks(rdp->transport, rdp_recv_callback, rdp))
 		return FALSE;
 
-	return rdp_client_wait_for_activation(rdp);
+	/* A tunnel the server asked for during the connection sequence is of no use when the
+	 * sequence fails. It is stopped now: the next disconnect, which would stop it too, can be a
+	 * long way off, an auto-reconnect waits between attempts. */
+	const BOOL activated = rdp_client_wait_for_activation(rdp);
+	if (!activated)
+		multitransport_reset(rdp->multitransport);
+	return activated;
 }
 
 BOOL rdp_client_disconnect(rdpRdp* rdp)
@@ -487,6 +517,12 @@ BOOL rdp_client_disconnect(rdpRdp* rdp)
 
 	context = rdp->context;
 
+	/* Leave the active state before the transport goes away: input functions are called from
+	 * other threads and only check the state, so they must stop before rdp_reset() frees the
+	 * transport and fastpath they use. */
+	if (!rdp_client_transition_to_state(rdp, CONNECTION_STATE_INITIAL))
+		return FALSE;
+
 	if (rdp->nego)
 	{
 		if (!nego_disconnect(rdp->nego))
@@ -497,9 +533,6 @@ BOOL rdp_client_disconnect(rdpRdp* rdp)
 		return FALSE;
 
 	if (!rdp_reset(rdp))
-		return FALSE;
-
-	if (!rdp_client_transition_to_state(rdp, CONNECTION_STATE_INITIAL))
 		return FALSE;
 
 	if (context->channels)
@@ -552,6 +585,9 @@ static BOOL rdp_client_reconnect_channels(rdpRdp* rdp, BOOL redirect)
 			return TRUE;
 
 		pointer_cache_register_callbacks(context->update);
+
+		if (!cache_resize(context))
+			return FALSE;
 
 		if (!IFCALLRESULT(FALSE, context->instance->PostConnect, context->instance))
 			return FALSE;
@@ -690,6 +726,7 @@ BOOL rdp_client_redirect(rdpRdp* rdp)
 	if (!ok)
 		return FALSE;
 
+	rdp->redirectionCount++;
 	status = rdp_client_connect(rdp);
 
 	if (status)
@@ -698,18 +735,88 @@ BOOL rdp_client_redirect(rdpRdp* rdp)
 	return status;
 }
 
+/* A redirection that carried a one-time RDSTLS token (LB_PASSWORD_IS_PK_ENCRYPTED) cannot be
+ * replayed: reconnecting straight to the redirected host is refused with SEC_E_INVALID_TOKEN.
+ * Go back to the server the connection was originally made to (the RD Connection Broker), which
+ * redirects again to the same session with a fresh token. Everything the redirection changed
+ * (host, load balance info, user, redirected session id, auto-reconnect cookie) has to go, so
+ * start again from the settings the connection began with, the way rdp_client_redirect() does:
+ * the channels are closed before the settings they use are freed, and loaded again after. */
+WINPR_ATTR_NODISCARD
+static BOOL rdp_client_reconnect_via_broker(rdpRdp* rdp, BOOL* viaBroker)
+{
+	WINPR_ASSERT(rdp);
+	WINPR_ASSERT(viaBroker);
+	*viaBroker = FALSE;
+	const rdpSettings* settings = rdp->settings;
+	WINPR_ASSERT(settings);
+
+	if (!rdp->originalSettings || !freerdp_settings_get_bool(settings, FreeRDP_RdstlsSecurity))
+		return TRUE;
+	if ((freerdp_settings_get_uint32(settings, FreeRDP_RedirectionFlags) &
+	     LB_PASSWORD_IS_PK_ENCRYPTED) == 0)
+		return TRUE;
+
+	WINPR_ASSERT(rdp->context);
+	WINPR_ASSERT(rdp->context->instance);
+	WLog_INFO(TAG, "the redirection used a one-time RDSTLS token, reconnecting through %s",
+	          freerdp_settings_get_string(rdp->originalSettings, FreeRDP_ServerHostname));
+
+	freerdp_channels_disconnect(rdp->context->channels, rdp->context->instance);
+	freerdp_channels_close(rdp->context->channels, rdp->context->instance);
+
+	if (!rdp_reset_runtime_settings(rdp))
+		return FALSE;
+	if (!freerdp_settings_set_bool(rdp->settings, FreeRDP_SessionHasBeenReconnected, TRUE))
+		return FALSE;
+	if (!IFCALLRESULT(TRUE, rdp->context->instance->Redirect, rdp->context->instance))
+		return FALSE;
+	if (!utils_reload_channels(rdp->context))
+		return FALSE;
+
+	*viaBroker = TRUE;
+	return TRUE;
+}
+
+/* Pause before reconnecting a connection that its UDP tunnel ended, see rdp_client_reconnect. */
+#define TUNNEL_RECONNECT_PAUSE_MS 2000
+
 BOOL rdp_client_reconnect(rdpRdp* rdp)
 {
+	/* A connection ended by its UDP tunnel closes TCP cleanly, and the server starts tearing
+	 * the session down at once. Windows drops a reconnect that arrives during that teardown,
+	 * and the auto-reconnect then waits out its whole retry delay. */
+	const BOOL tunnelEnded = multitransport_ended_connection(rdp->multitransport);
+
 	if (!rdp_client_disconnect_and_clear(rdp))
 		return FALSE;
+
+	if (tunnelEnded)
+	{
+		WLog_DBG(TAG, "the UDP tunnel ended the connection, reconnecting in %d ms",
+		         TUNNEL_RECONNECT_PAUSE_MS);
+		if (WaitForSingleObject(utils_get_abort_event(rdp), TUNNEL_RECONNECT_PAUSE_MS) ==
+		    WAIT_OBJECT_0)
+			return FALSE;
+	}
 
 	if (!freerdp_settings_set_bool(rdp->settings, FreeRDP_SessionHasBeenReconnected, TRUE))
 		return FALSE;
 
+	BOOL viaBroker = FALSE;
+	if (!rdp_client_reconnect_via_broker(rdp, &viaBroker))
+		return FALSE;
+
+	const UINT32 redirectionCount = rdp->redirectionCount;
 	BOOL status = rdp_client_connect(rdp);
 
-	if (status)
-		status = rdp_client_reconnect_channels(rdp, FALSE);
+	/* When the broker redirected us, rdp_client_redirect() already reloaded and reconnected the
+	 * channels (rdp_check_fds() runs it from inside rdp_client_connect()); doing it a second time
+	 * fails with CHANNEL_RC_ALREADY_OPEN and makes the whole attempt fail. RedirectionFlags can't
+	 * tell: ARM sets them during the connect without any redirection. */
+	const BOOL redirected = rdp->redirectionCount != redirectionCount;
+	if (status && !redirected)
+		status = rdp_client_reconnect_channels(rdp, viaBroker);
 
 	return status;
 }
@@ -901,6 +1008,9 @@ BOOL rdp_server_establish_keys(rdpRdp* rdp, wStream* s)
 
 	if (!rdp_read_header(rdp, s, &length, &channel_id))
 		return FALSE;
+
+	if (freerdp_shall_disconnect_context(rdp->context))
+		return TRUE;
 
 	if (!rdp_read_security_header(rdp, s, &sec_flags, nullptr))
 	{
@@ -1200,6 +1310,9 @@ BOOL rdp_client_connect_auto_detect(rdpRdp* rdp, wStream* s, DWORD logLevel)
 		res = FALSE;
 	else
 	{
+		if (freerdp_shall_disconnect_context(rdp->context))
+			return TRUE;
+
 		const UINT16 messageChannelId = rdp->mcs->messageChannelId;
 		/* If the MCS message channel has been joined... */
 
@@ -1235,6 +1348,9 @@ state_run_t rdp_client_connect_license(rdpRdp* rdp, wStream* s)
 	WINPR_ASSERT(rdp);
 	if (!rdp_read_header(rdp, s, &length, &channelId))
 		return STATE_RUN_FAILED;
+
+	if (freerdp_shall_disconnect_context(rdp->context))
+		return STATE_RUN_QUIT_SESSION;
 
 	/* there might be autodetect messages mixed in between licensing messages.
 	 * that has been observed with 2k12 R2 and 2k19
@@ -1324,12 +1440,25 @@ state_run_t rdp_client_connect_demand_active(rdpRdp* rdp, wStream* s)
 	if (!rdp_handle_optional_rdp_decryption(rdp, s, &length, nullptr))
 		return STATE_RUN_FAILED;
 
-	if (!rdp_read_share_control_header(rdp, s, nullptr, nullptr, &pduType, &pduSource))
+	UINT16 remainingLength = 0;
+	if (!rdp_read_share_control_header(rdp, s, nullptr, &remainingLength, &pduType, &pduSource))
 		return STATE_RUN_FAILED;
 
 	switch (pduType)
 	{
 		case PDU_TYPE_DEMAND_ACTIVE:
+			/* Demand Active consumes this entire payload. Check its Share Control
+			 * boundary after decryption, when security headers and FIPS padding
+			 * have been removed. Do not apply this to other, potentially batched
+			 * Share Control PDUs. */
+			if (remainingLength != Stream_GetRemainingLength(s))
+			{
+				WLog_Print(rdp->log, WLOG_ERROR,
+				           "Demand Active payload length %" PRIu16
+				           " differs from remaining data %" PRIuz,
+				           remainingLength, Stream_GetRemainingLength(s));
+				return STATE_RUN_FAILED;
+			}
 			if (!rdp_recv_demand_active(rdp, s, pduSource, length))
 				return STATE_RUN_FAILED;
 			return STATE_RUN_ACTIVE;
@@ -1338,7 +1467,8 @@ state_run_t rdp_client_connect_demand_active(rdpRdp* rdp, wStream* s)
 	}
 }
 
-state_run_t rdp_client_connect_finalize(rdpRdp* rdp)
+WINPR_ATTR_NODISCARD
+static state_run_t rdp_client_connect_finalize(rdpRdp* rdp)
 {
 	WINPR_ASSERT(rdp);
 	/**
@@ -1463,19 +1593,25 @@ BOOL rdp_server_accept_nego(rdpRdp* rdp, wStream* s)
 		return FALSE;
 
 	RequestedProtocols = nego_get_requested_protocols(nego);
-	WLog_DBG(TAG, "Client Security: RDSTLS:%d NLA:%d TLS:%d RDP:%d",
+	WLog_DBG(TAG, "Client Security: RDSTLS:%d NLA:%d EXT:%d TLS:%d RDP:%d",
 	         (RequestedProtocols & PROTOCOL_RDSTLS) ? 1 : 0,
 	         (RequestedProtocols & PROTOCOL_HYBRID) ? 1 : 0,
+	         (RequestedProtocols & PROTOCOL_HYBRID_EX) ? 1 : 0,
 	         (RequestedProtocols & PROTOCOL_SSL) ? 1 : 0,
 	         (RequestedProtocols == PROTOCOL_RDP) ? 1 : 0);
 	WLog_DBG(TAG,
-	         "Server Security: RDSTLS:%" PRId32 " NLA:%" PRId32 " TLS:%" PRId32 " RDP:%" PRId32 "",
-	         settings->RdstlsSecurity, settings->NlaSecurity, settings->TlsSecurity,
-	         settings->RdpSecurity);
+	         "Server Security: RDSTLS:%" PRId32 " NLA:%" PRId32 " EXT:%" PRId32 " TLS:%" PRId32
+	         " RDP:%" PRId32 "",
+	         settings->RdstlsSecurity, settings->NlaSecurity, settings->ExtSecurity,
+	         settings->TlsSecurity, settings->RdpSecurity);
 
 	if ((settings->RdstlsSecurity) && (RequestedProtocols & PROTOCOL_RDSTLS))
 	{
 		SelectedProtocol = PROTOCOL_RDSTLS;
+	}
+	else if ((settings->ExtSecurity) && (RequestedProtocols & PROTOCOL_HYBRID_EX))
+	{
+		SelectedProtocol = PROTOCOL_HYBRID_EX;
 	}
 	else if ((settings->NlaSecurity) && (RequestedProtocols & PROTOCOL_HYBRID))
 	{
@@ -1504,7 +1640,7 @@ BOOL rdp_server_accept_nego(rdpRdp* rdp, wStream* s)
 		}
 		else
 		{
-			if (settings->NlaSecurity && !settings->TlsSecurity)
+			if ((settings->ExtSecurity || settings->NlaSecurity) && !settings->TlsSecurity)
 			{
 				WLog_WARN(TAG, "server supports only NLA Security");
 				SelectedProtocol |= HYBRID_REQUIRED_BY_SERVER;
@@ -1521,9 +1657,10 @@ BOOL rdp_server_accept_nego(rdpRdp* rdp, wStream* s)
 
 	if (!(SelectedProtocol & PROTOCOL_FAILED_NEGO))
 	{
-		WLog_DBG(TAG, "Negotiated Security: RDSTLS:%d NLA:%d TLS:%d RDP:%d",
+		WLog_DBG(TAG, "Negotiated Security: RDSTLS:%d NLA:%d EXT:%d TLS:%d RDP:%d",
 		         (SelectedProtocol & PROTOCOL_RDSTLS) ? 1 : 0,
 		         (SelectedProtocol & PROTOCOL_HYBRID) ? 1 : 0,
+		         (SelectedProtocol & PROTOCOL_HYBRID_EX) ? 1 : 0,
 		         (SelectedProtocol & PROTOCOL_SSL) ? 1 : 0,
 		         (SelectedProtocol == PROTOCOL_RDP) ? 1 : 0);
 	}
@@ -1533,6 +1670,12 @@ BOOL rdp_server_accept_nego(rdpRdp* rdp, wStream* s)
 
 	if (!nego_send_negotiation_response(nego))
 		return FALSE;
+
+	if ((SelectedProtocol & PROTOCOL_FAILED_NEGO) != 0)
+	{
+		WLog_ERR(TAG, "Protocol security negotiation failed, disconnecting.");
+		return FALSE;
+	}
 
 	SelectedProtocol = nego_get_selected_protocol(nego);
 	status = FALSE;
@@ -1544,7 +1687,9 @@ BOOL rdp_server_accept_nego(rdpRdp* rdp, wStream* s)
 	else if (SelectedProtocol & PROTOCOL_RDSTLS)
 		status = transport_accept_rdstls(rdp->transport);
 	else if (SelectedProtocol & PROTOCOL_HYBRID)
-		status = transport_accept_nla(rdp->transport);
+		status = transport_accept_nla(rdp->transport, FALSE);
+	else if (SelectedProtocol & PROTOCOL_HYBRID_EX)
+		status = transport_accept_nla(rdp->transport, TRUE);
 	else if (SelectedProtocol & PROTOCOL_SSL)
 		status = transport_accept_tls(rdp->transport);
 	else if (SelectedProtocol == PROTOCOL_RDP) /* 0 */
@@ -1712,7 +1857,7 @@ BOOL rdp_server_accept_mcs_connect_initial(rdpRdp* rdp, wStream* s)
 	rdpMcs* mcs = rdp->mcs;
 	WINPR_ASSERT(mcs);
 
-	WINPR_ASSERT(rdp_get_state(rdp) == CONNECTION_STATE_MCS_CREATE_REQUEST);
+	WINPR_ASSERT(rdp_is_reached_state(rdp, CONNECTION_STATE_MCS_CREATE_REQUEST));
 	if (!mcs_recv_connect_initial(mcs, s))
 		return FALSE;
 	WINPR_ASSERT(rdp->settings);
@@ -1757,7 +1902,7 @@ BOOL rdp_server_accept_mcs_erect_domain_request(rdpRdp* rdp, wStream* s)
 {
 	WINPR_ASSERT(rdp);
 	WINPR_ASSERT(s);
-	WINPR_ASSERT(rdp_get_state(rdp) == CONNECTION_STATE_MCS_ERECT_DOMAIN);
+	WINPR_ASSERT(rdp_is_reached_state(rdp, CONNECTION_STATE_MCS_ERECT_DOMAIN));
 
 	if (!mcs_recv_erect_domain_request(rdp->mcs, s))
 		return FALSE;
@@ -1813,7 +1958,7 @@ BOOL rdp_server_accept_mcs_channel_join_request(rdpRdp* rdp, wStream* s)
 	mcs = rdp->mcs;
 	WINPR_ASSERT(mcs);
 
-	WINPR_ASSERT(rdp_get_state(rdp) == CONNECTION_STATE_MCS_CHANNEL_JOIN_REQUEST);
+	WINPR_ASSERT(rdp_is_reached_state(rdp, CONNECTION_STATE_MCS_CHANNEL_JOIN_REQUEST));
 
 	if (!mcs_recv_channel_join_request(mcs, rdp->settings, s, &channelId))
 		return FALSE;
@@ -1970,6 +2115,38 @@ static BOOL rdp_is_active_client_state(CONNECTION_STATE state)
 	}
 }
 
+BOOL rdp_has_reached_state_impl(const rdpRdp* rdp, CONNECTION_STATE state, const char* file,
+                                size_t line, const char* fkt)
+{
+	WINPR_ASSERT(rdp);
+	const CONNECTION_STATE cur = rdp_get_state(rdp);
+	if (cur < state)
+	{
+		if (WLog_IsLevelActive(rdp->log, WLOG_WARN))
+			WLog_PrintTextMessage(rdp->log, WLOG_WARN, line, file, fkt,
+			                      "State %s (or higher) requested, but %s found. Aborting.",
+			                      rdp_state_string(state), rdp_state_string(cur));
+		return FALSE;
+	}
+	return TRUE;
+}
+
+BOOL rdp_is_reached_state_impl(const rdpRdp* rdp, CONNECTION_STATE state, const char* file,
+                               size_t line, const char* fkt)
+{
+	WINPR_ASSERT(rdp);
+	const CONNECTION_STATE cur = rdp_get_state(rdp);
+	if (cur != state)
+	{
+		if (WLog_IsLevelActive(rdp->log, WLOG_WARN))
+			WLog_PrintTextMessage(rdp->log, WLOG_WARN, line, file, fkt,
+			                      "State %s requested, but %s found. Aborting.",
+			                      rdp_state_string(state), rdp_state_string(cur));
+		return FALSE;
+	}
+	return TRUE;
+}
+
 BOOL rdp_is_active_state(const rdpRdp* rdp)
 {
 	WINPR_ASSERT(rdp);
@@ -2105,6 +2282,21 @@ CONNECTION_STATE rdp_get_state(const rdpRdp* rdp)
 BOOL rdp_set_state(rdpRdp* rdp, CONNECTION_STATE state)
 {
 	WINPR_ASSERT(rdp);
+
+	rdpContext* context = rdp->context;
+	WINPR_ASSERT(context);
+
+	if (context->pubSub)
+	{
+		StateChangedEventArgs e = WINPR_C_ARRAY_INIT;
+		EventArgsInit(&e, "freerdp");
+		e.oldState = rdp->state;
+		e.newState = state;
+
+		const int rc = PubSub_OnStateChanged(context->pubSub, context, &e);
+		if (rc < 0)
+			WLog_WARN(TAG, "PubSub_OnStateChanged() failed");
+	}
 	rdp->state = state;
 	return TRUE;
 }
@@ -2181,12 +2373,34 @@ state_run_t rdp_client_connect_confirm_active(rdpRdp* rdp, WINPR_ATTR_UNUSED wSt
 		WLog_DBG(TAG, "new size %" PRIu32 "x%" PRIu32, rdp->settings->DesktopWidth,
 		         rdp->settings->DesktopHeight);
 
+		rdp_update_internal* up = update_cast(rdp->update);
+		up->stats.base[RDP_STATS_RESIZE]++;
+
+		/* Keep the lock order of BeginPaint/EndPaint: update lock first, client locks second */
+		rdp_update_lock(rdp->update);
 		IFCALLRET(rdp->update->DesktopResize, status, rdp->update->context);
+		rdp_update_unlock(rdp->update);
 
 		if (!status)
 		{
 			WLog_ERR(TAG, "client desktop resize callback failed");
 			return STATE_RUN_FAILED;
+		}
+
+		/* The codecs for bitmap updates and surface bits were sized for the
+		 * old desktop when connecting. The GFX codecs are reset by the GFX
+		 * channel on ResetGraphics instead. */
+		rdpCodecs* codecs = rdp->context->codecs;
+		if (codecs)
+		{
+			const UINT32 flags = FREERDP_CODEC_INTERLEAVED | FREERDP_CODEC_PLANAR |
+			                     FREERDP_CODEC_NSCODEC | FREERDP_CODEC_REMOTEFX;
+			if (!freerdp_client_codecs_reset(codecs, flags, rdp->settings->DesktopWidth,
+			                                 rdp->settings->DesktopHeight))
+			{
+				WLog_ERR(TAG, "failed to reset codecs to the new desktop size");
+				return STATE_RUN_FAILED;
+			}
 		}
 	}
 
@@ -2194,10 +2408,12 @@ state_run_t rdp_client_connect_confirm_active(rdpRdp* rdp, WINPR_ATTR_UNUSED wSt
 	if (freerdp_shall_disconnect_context(rdp->context))
 		return STATE_RUN_SUCCESS;
 
-	state_run_t status = STATE_RUN_SUCCESS;
-	if (!rdp->settings->SupportMonitorLayoutPdu)
-		status = rdp_client_connect_finalize(rdp);
-	else
+	if (!cache_resize(rdp->context))
+		return STATE_RUN_FAILED;
+
+	state_run_t status = rdp_client_connect_finalize(rdp);
+	if (state_run_success(status) &&
+	    freerdp_settings_get_bool(rdp->settings, FreeRDP_SupportMonitorLayoutPdu))
 	{
 		if (!rdp_client_transition_to_state(rdp,
 		                                    CONNECTION_STATE_CAPABILITIES_EXCHANGE_MONITOR_LAYOUT))

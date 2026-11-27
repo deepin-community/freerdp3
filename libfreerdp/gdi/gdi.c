@@ -623,8 +623,13 @@ static BOOL gdi_patblt(rdpContext* context, PATBLT_ORDER* patblt)
 
 		case GDI_BS_HATCHED:
 		{
-			const BYTE* hatched = nullptr;
-			hatched = GDI_BS_HATCHED_PATTERNS + (8ULL * brush->hatch);
+			if (brush->hatch >= ARRAYSIZE(GDI_BS_HATCHED_PATTERNS) / 8)
+			{
+				WLog_ERR(TAG, "invalid brush hatch:%" PRIu32 "", brush->hatch);
+				goto out_error;
+			}
+
+			const BYTE* hatched = &GDI_BS_HATCHED_PATTERNS[8ULL * brush->hatch];
 
 			if (!freerdp_image_copy_from_monochrome(data, gdi->drawing->hdc->format, 0, 0, 0, 8, 8,
 			                                        hatched, backColor, foreColor, &gdi->palette))
@@ -812,7 +817,8 @@ static BOOL gdi_line_to(rdpContext* context, const LINE_TO_ORDER* lineTo)
 
 	WINPR_ASSERT(gdi->drawing);
 
-	gdi_SelectObject(gdi->drawing->hdc, (HGDIOBJECT)hPen);
+	HGDI_PEN originalPen = gdi->drawing->hdc->pen;
+	gdi->drawing->hdc->pen = hPen;
 	gdi_SetROP2(gdi->drawing->hdc, WINPR_ASSERTING_INT_CAST(int32_t, lineTo->bRop2));
 	if (!gdi_MoveToEx(gdi->drawing->hdc, lineTo->nXStart, lineTo->nYStart, nullptr))
 		goto fail;
@@ -821,6 +827,7 @@ static BOOL gdi_line_to(rdpContext* context, const LINE_TO_ORDER* lineTo)
 
 	rc = TRUE;
 fail:
+	gdi->drawing->hdc->pen = originalPen;
 	gdi_DeleteObject((HGDIOBJECT)hPen);
 	return rc;
 }
@@ -846,7 +853,8 @@ static BOOL gdi_polyline(rdpContext* context, const POLYLINE_ORDER* polyline)
 	if (!hPen)
 		return FALSE;
 
-	gdi_SelectObject(gdi->drawing->hdc, (HGDIOBJECT)hPen);
+	HGDI_PEN originalPen = gdi->drawing->hdc->pen;
+	gdi->drawing->hdc->pen = hPen;
 	gdi_SetROP2(gdi->drawing->hdc, WINPR_ASSERTING_INT_CAST(int32_t, polyline->bRop2));
 	INT32 x = polyline->xStart;
 	INT32 y = polyline->yStart;
@@ -866,6 +874,7 @@ static BOOL gdi_polyline(rdpContext* context, const POLYLINE_ORDER* polyline)
 
 	rc = TRUE;
 fail:
+	gdi->drawing->hdc->pen = originalPen;
 	gdi_DeleteObject((HGDIOBJECT)hPen);
 	return rc;
 }
@@ -932,8 +941,8 @@ static BOOL gdi_mem3blt(rdpContext* context, MEM3BLT_ORDER* mem3blt)
 		{
 			HGDI_BITMAP hBmp = nullptr;
 			UINT32 brushFormat = 0;
-			BYTE* data = (BYTE*)winpr_aligned_malloc(
-			    8ULL * 8ULL * FreeRDPGetBytesPerPixel(gdi->drawing->hdc->format), 16);
+			BYTE* data = (BYTE*)winpr_aligned_calloc(
+			    8ULL * 8ULL, FreeRDPGetBytesPerPixel(gdi->drawing->hdc->format), 16);
 
 			if (!data)
 			{
@@ -1386,10 +1395,15 @@ BOOL gdi_resize_ex(rdpGdi* gdi, UINT32 width, UINT32 height, UINT32 stride, UINT
 	WINPR_ASSERT(gdi->context);
 	WINPR_ASSERT(gdi->context->update);
 
-	/* EndPaint might not have been called, ensure the update lock is released */
-	if (!update_end_paint(gdi->context->update))
-		return FALSE;
+	/* Take the (recursive) update lock first, this waits for a paint in progress on another
+	 * thread. A paint still open afterwards belongs to this thread: EndPaint might not have
+	 * been called, ensure its update lock is released */
 	rdp_update_lock(gdi->context->update);
+	if (!update_end_paint(gdi->context->update))
+	{
+		rdp_update_unlock(gdi->context->update);
+		return FALSE;
+	}
 
 	if (gdi->drawing == gdi->primary)
 		gdi->drawing = nullptr;
@@ -1408,6 +1422,10 @@ BOOL gdi_resize_ex(rdpGdi* gdi, UINT32 width, UINT32 height, UINT32 stride, UINT
  * @param instance A pointer to the instance to use
  * @param format The color format for the local framebuffer
  * @return \b TRUE for success, \b FALSE for failure
+ *
+ * @note Must be called after the connect sequence has completed, e.g. from the
+ * \b PostConnect callback: GDI requires the \b rdpCache created by the
+ * core during connection, after capability negotiation.
  */
 BOOL gdi_init(freerdp* instance, UINT32 format)
 {
@@ -1424,6 +1442,10 @@ BOOL gdi_init(freerdp* instance, UINT32 format)
  * @param pfree A custom function pointer to use to free the framebuffer
  *
  * @return \b TRUE for success, \b FALSE for failure
+ *
+ * @note Must be called after the connect sequence has completed, e.g. from the
+ * \b PostConnect callback: GDI requires the \b rdpCache created by the
+ * core during connection, after capability negotiation.
  */
 BOOL gdi_init_ex(freerdp* instance, UINT32 format, UINT32 stride, BYTE* buffer,
                  void (*pfree)(void*))
@@ -1471,9 +1493,6 @@ BOOL gdi_init_ex(freerdp* instance, UINT32 format, UINT32 stride, BYTE* buffer,
 	if (!gdi_init_primary(gdi, stride, gdi->dstFormat, buffer, pfree, FALSE))
 		goto fail;
 
-	if (!(context->cache = cache_new(context)))
-		goto fail;
-
 	gdi_register_update_callbacks(context->update);
 	brush_cache_register_callbacks(context->update);
 	glyph_cache_register_callbacks(context->update);
@@ -1493,13 +1512,10 @@ fail:
 
 void gdi_free(freerdp* instance)
 {
-	rdpGdi* gdi = nullptr;
-	rdpContext* context = nullptr;
-
 	if (!instance || !instance->context)
 		return;
 
-	gdi = instance->context->gdi;
+	rdpGdi* gdi = instance->context->gdi;
 
 	if (gdi)
 	{
@@ -1508,9 +1524,6 @@ void gdi_free(freerdp* instance)
 		free(gdi);
 	}
 
-	context = instance->context;
-	cache_free(context->cache);
-	context->cache = nullptr;
 	instance->context->gdi = (rdpGdi*)nullptr;
 }
 

@@ -8,12 +8,14 @@
 #include <winpr/collections.h>
 #include <winpr/windows.h>
 
+#define TEST_MAX_PATH 4096
+
 static const CHAR testFile1A[] = "TestFile1A";
 
 static BOOL create_fileA(const char* FilePath)
 {
-	HANDLE hdl = CreateFileA(FilePath, GENERIC_ALL, 0, nullptr, CREATE_ALWAYS,
-	                         FILE_ATTRIBUTE_NORMAL, nullptr);
+	HANDLE hdl = winpr_CreateFile(FilePath, GENERIC_ALL, 0, nullptr, CREATE_ALWAYS,
+	                              FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (hdl == INVALID_HANDLE_VALUE)
 		return FALSE;
 	(void)CloseHandle(hdl);
@@ -32,19 +34,24 @@ static BOOL create_fileW(const WCHAR* FilePath)
 
 static BOOL create_layout_files(size_t level, const char* BasePath, wArrayList* files)
 {
+	BOOL rc = TRUE;
 	for (size_t x = 0; x < 10; x++)
 	{
-		CHAR FilePath[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
+		CHAR FilePath[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
 		strncpy(FilePath, BasePath, ARRAYSIZE(FilePath));
 
 		CHAR name[64] = WINPR_C_ARRAY_INIT;
 		(void)_snprintf(name, ARRAYSIZE(name), "%zd-TestFile%zd", level, x);
-		NativePathCchAppendA(FilePath, PATHCCH_MAX_CCH, name);
+		if (FAILED(NativePathCchAppendA(FilePath, TEST_MAX_PATH, name)))
+			rc = FALSE;
 
 		if (create_fileA(FilePath))
-			ArrayList_Append(files, FilePath);
+		{
+			if (!ArrayList_Append(files, FilePath))
+				rc = FALSE;
+		}
 	}
-	return TRUE;
+	return rc;
 }
 
 static BOOL create_layout_directories(size_t level, size_t max_level, const char* BasePath,
@@ -53,9 +60,10 @@ static BOOL create_layout_directories(size_t level, size_t max_level, const char
 	if (level >= max_level)
 		return TRUE;
 
-	CHAR FilePath[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
+	CHAR FilePath[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
 	strncpy(FilePath, BasePath, ARRAYSIZE(FilePath));
-	PathCchConvertStyleA(FilePath, ARRAYSIZE(FilePath), PATH_STYLE_NATIVE);
+	if (FAILED(PathCchConvertStyleA(FilePath, ARRAYSIZE(FilePath), PATH_STYLE_NATIVE)))
+		return FALSE;
 	if (!winpr_PathMakePath(FilePath, nullptr))
 		return FALSE;
 	ArrayList_Append(files, FilePath);
@@ -65,14 +73,16 @@ static BOOL create_layout_directories(size_t level, size_t max_level, const char
 
 	for (size_t x = 0; x < 10; x++)
 	{
-		CHAR CurFilePath[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
+		CHAR CurFilePath[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
 		strncpy(CurFilePath, FilePath, ARRAYSIZE(CurFilePath));
 
-		PathCchConvertStyleA(CurFilePath, ARRAYSIZE(CurFilePath), PATH_STYLE_NATIVE);
+		if (FAILED(PathCchConvertStyleA(CurFilePath, ARRAYSIZE(CurFilePath), PATH_STYLE_NATIVE)))
+			return FALSE;
 
 		CHAR name[64] = WINPR_C_ARRAY_INIT;
 		(void)_snprintf(name, ARRAYSIZE(name), "%zd-TestPath%zd", level, x);
-		NativePathCchAppendA(CurFilePath, PATHCCH_MAX_CCH, name);
+		if (FAILED(NativePathCchAppendA(CurFilePath, TEST_MAX_PATH, name)))
+			return FALSE;
 
 		if (!create_layout_directories(level + 1, max_level, CurFilePath, files))
 			return FALSE;
@@ -82,9 +92,10 @@ static BOOL create_layout_directories(size_t level, size_t max_level, const char
 
 static BOOL create_layout(const char* BasePath, wArrayList* files)
 {
-	CHAR BasePathNative[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
+	CHAR BasePathNative[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
 	memcpy(BasePathNative, BasePath, sizeof(BasePathNative));
-	PathCchConvertStyleA(BasePathNative, ARRAYSIZE(BasePathNative), PATH_STYLE_NATIVE);
+	if (FAILED(PathCchConvertStyleA(BasePathNative, ARRAYSIZE(BasePathNative), PATH_STYLE_NATIVE)))
+		return FALSE;
 
 	return create_layout_directories(0, 3, BasePathNative, files);
 }
@@ -122,10 +133,12 @@ fail:
 static BOOL list_directory_dot(const char* BasePath, wArrayList* files)
 {
 	BOOL rc = FALSE;
-	CHAR BasePathDot[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
+	CHAR BasePathDot[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
 	memcpy(BasePathDot, BasePath, ARRAYSIZE(BasePathDot));
-	PathCchConvertStyleA(BasePathDot, ARRAYSIZE(BasePathDot), PATH_STYLE_NATIVE);
-	NativePathCchAppendA(BasePathDot, PATHCCH_MAX_CCH, ".");
+	if (FAILED(PathCchConvertStyleA(BasePathDot, ARRAYSIZE(BasePathDot), PATH_STYLE_NATIVE)))
+		return FALSE;
+	if (FAILED(NativePathCchAppendA(BasePathDot, TEST_MAX_PATH, ".")))
+		return FALSE;
 	WIN32_FIND_DATAA FindData = WINPR_C_ARRAY_INIT;
 	HANDLE hFind = FindFirstFileA(BasePathDot, &FindData);
 	if (hFind == INVALID_HANDLE_VALUE)
@@ -149,10 +162,15 @@ fail:
 
 static BOOL list_directory_star(const char* BasePath, wArrayList* files)
 {
-	CHAR BasePathDot[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
+	CHAR BasePathDot[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
 	memcpy(BasePathDot, BasePath, ARRAYSIZE(BasePathDot));
-	PathCchConvertStyleA(BasePathDot, ARRAYSIZE(BasePathDot), PATH_STYLE_NATIVE);
-	NativePathCchAppendA(BasePathDot, PATHCCH_MAX_CCH, "*");
+
+	if (FAILED(PathCchConvertStyleA(BasePathDot, ARRAYSIZE(BasePathDot), PATH_STYLE_NATIVE)))
+		return FALSE;
+
+	if (FAILED(NativePathCchAppendA(BasePathDot, TEST_MAX_PATH, "*")))
+		return FALSE;
+
 	WIN32_FIND_DATAA FindData = WINPR_C_ARRAY_INIT;
 	HANDLE hFind = FindFirstFileA(BasePathDot, &FindData);
 	if (hFind == INVALID_HANDLE_VALUE)
@@ -212,16 +230,17 @@ static int TestFileFindFirstFileA(const char* str)
 	if (!str)
 		return -1;
 
-	CHAR BasePath[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
+	CHAR BasePath[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
 
 	strncpy(BasePath, str, ARRAYSIZE(BasePath));
 
-	const size_t length = strnlen(BasePath, PATHCCH_MAX_CCH - 1);
+	const size_t length = strnlen(BasePath, TEST_MAX_PATH - 1);
 
-	CHAR FilePath[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
+	CHAR FilePath[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
 	CopyMemory(FilePath, BasePath, length * sizeof(CHAR));
 
-	PathCchConvertStyleA(BasePath, length, PATH_STYLE_WINDOWS);
+	if (FAILED(PathCchConvertStyleA(BasePath, length, PATH_STYLE_WINDOWS)))
+		return -2;
 
 	wArrayList* files = ArrayList_New(FALSE);
 	if (!files)
@@ -233,7 +252,8 @@ static int TestFileFindFirstFileA(const char* str)
 	if (!create_layout(BasePath, files))
 		goto fail;
 
-	NativePathCchAppendA(FilePath, PATHCCH_MAX_CCH, testFile1A);
+	if (FAILED(NativePathCchAppendA(FilePath, TEST_MAX_PATH, testFile1A)))
+		goto fail;
 
 	printf("Finding file: %s\n", FilePath);
 
@@ -246,9 +266,8 @@ static int TestFileFindFirstFileA(const char* str)
 	if (!find_first_file_success(FilePath))
 		goto fail;
 
-	CHAR BasePathInvalid[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
-	memcpy(BasePathInvalid, BasePath, ARRAYSIZE(BasePathInvalid));
-	PathCchAddBackslashA(BasePathInvalid, PATHCCH_MAX_CCH);
+	CHAR BasePathInvalid[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
+	(void)_snprintf(BasePathInvalid, ARRAYSIZE(BasePathInvalid), "%s\\", BasePath);
 
 	if (!find_first_file_fail(BasePathInvalid))
 		goto fail;
@@ -295,20 +314,22 @@ static int TestFileFindFirstFileW(const char* str)
 	if (!str)
 		return -1;
 
-	WCHAR BasePath[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
+	WCHAR BasePath[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
 
 	printf("[%s] basepath: '%s'\n", __func__, str);
 	(void)ConvertUtf8ToWChar(str, BasePath, ARRAYSIZE(BasePath));
 
-	const size_t length = _wcsnlen(BasePath, PATHCCH_MAX_CCH - 1);
+	const size_t length = _wcsnlen(BasePath, TEST_MAX_PATH - 1);
 
-	WCHAR FilePath[PATHCCH_MAX_CCH] = WINPR_C_ARRAY_INIT;
+	WCHAR FilePath[TEST_MAX_PATH] = WINPR_C_ARRAY_INIT;
 	CopyMemory(FilePath, BasePath, length * sizeof(WCHAR));
 
-	PathCchConvertStyleW(BasePath, length, PATH_STYLE_WINDOWS);
-	NativePathCchAppendW(FilePath, PATHCCH_MAX_CCH, testFile1W);
-
 	HANDLE hFind = INVALID_HANDLE_VALUE;
+	if (FAILED(PathCchConvertStyleW(BasePath, length, PATH_STYLE_WINDOWS)))
+		goto fail;
+	if (FAILED(NativePathCchAppendW(FilePath, TEST_MAX_PATH, testFile1W)))
+		goto fail;
+
 	if (!create_fileW(FilePath))
 		goto fail;
 
@@ -334,7 +355,8 @@ static int TestFileFindFirstFileW(const char* str)
 
 	rc = 0;
 fail:
-	DeleteFileW(FilePath);
+	if (!DeleteFileW(FilePath))
+		rc = -1;
 	FindClose(hFind);
 	return rc;
 }

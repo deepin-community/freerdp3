@@ -24,6 +24,9 @@
 #include <freerdp/client/rail.h>
 #include <freerdp/client/cliprdr.h>
 #include <freerdp/client/disp.h>
+#include <freerdp/client/rdpgfx.h>
+#include <freerdp/channels/rdpgfx.h>
+#include <freerdp/channels/rdpewa.h>
 
 #include "sdl_channels.hpp"
 #include "sdl_context.hpp"
@@ -38,6 +41,11 @@ void sdl_OnChannelConnectedEventHandler(void* context, const ChannelConnectedEve
 
 	if (strcmp(e->name, RAIL_SVC_CHANNEL_NAME) == 0)
 	{
+		auto rail = reinterpret_cast<RailClientContext*>(e->pInterface);
+		WINPR_ASSERT(rail);
+
+		if (!sdl->getRailChannelContext().init(rail))
+			WLog_Print(sdl->getWLog(), WLOG_WARN, "Failed to initialize RAIL channel");
 	}
 	else if (strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0)
 	{
@@ -55,6 +63,16 @@ void sdl_OnChannelConnectedEventHandler(void* context, const ChannelConnectedEve
 		if (!sdl->getDisplayChannelContext().init(disp))
 			WLog_Print(sdl->getWLog(), WLOG_WARN, "Failed to initialize display channel");
 	}
+	else if (strcmp(e->name, RDPGFX_DVC_CHANNEL_NAME) == 0)
+	{
+		/* After the common handler wires the GFX pipeline, override UpdateWindowFromSurface
+		 * to route window-mapped surfaces to RAIL. */
+		freerdp_client_OnChannelConnectedEventHandler(context, e);
+		auto gfx = reinterpret_cast<RdpgfxClientContext*>(e->pInterface);
+		auto ctx = static_cast<rdpContext*>(context);
+		if (gfx && freerdp_settings_get_bool(ctx->settings, FreeRDP_RemoteApplicationMode))
+			gfx->UpdateWindowFromSurface = SdlRail::UpdateWindowFromSurface;
+	}
 	else
 		freerdp_client_OnChannelConnectedEventHandler(context, e);
 }
@@ -69,6 +87,10 @@ void sdl_OnChannelDisconnectedEventHandler(void* context, const ChannelDisconnec
 	// TODO: Set resizeable depending on disp channel and /dynamic-resolution
 	if (strcmp(e->name, RAIL_SVC_CHANNEL_NAME) == 0)
 	{
+		auto rail = reinterpret_cast<RailClientContext*>(e->pInterface);
+		WINPR_ASSERT(rail);
+		sdl->getRailChannelContext().uninit(rail);
+		rail->custom = nullptr;
 	}
 	else if (strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0)
 	{
@@ -98,12 +120,37 @@ void sdl_OnUserNotificationEventHandler(void* context, const UserNotificationEve
 	WINPR_ASSERT(e);
 	WINPR_ASSERT(e->e.Sender);
 
+	if (strcmp(e->e.Sender, RDPEWA_CHANNEL_NAME) != 0)
+		return;
+
 	if (e->cancelPreviousNotification)
 		return;
 
-	WINPR_ASSERT(e->message);
-	auto parent = SDL_GetMouseFocus();
-	if (!parent)
-		parent = SDL_GetKeyboardFocus();
-	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, e->e.Sender, e->message, parent);
+	struct userdata
+	{
+		std::string sender;
+		std::string message;
+		uint32_t timeoutMS = 0;
+	};
+
+	auto ud = new struct userdata;
+	if (e->message)
+		ud->message = e->message;
+	if (e->e.Sender)
+		ud->sender = e->e.Sender;
+	ud->timeoutMS = e->timeoutMS;
+
+	SDL_RunOnMainThread(
+	    [](void* userdata)
+	    {
+		    auto ed = static_cast<struct userdata*>(userdata);
+		    assert(ed);
+		    auto parent = SDL_GetMouseFocus();
+		    if (!parent)
+			    parent = SDL_GetKeyboardFocus();
+		    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, ed->sender.c_str(),
+		                             ed->message.c_str(), parent);
+		    delete ed;
+	    },
+	    ud, false);
 }

@@ -31,9 +31,6 @@
 #include <winpr/stream.h>
 #include <winpr/sysinfo.h>
 
-#include "../../log.h"
-#define TAG WINPR_TAG("utils.wlog")
-
 static BOOL Pcap_Read_Header(wPcap* pcap, wPcapHeader* header)
 {
 	return (pcap && pcap->fp && fread((void*)header, sizeof(wPcapHeader), 1, pcap->fp) == 1);
@@ -61,24 +58,22 @@ static BOOL Pcap_Write_Record(wPcap* pcap, wPcapRecord* record)
 
 wPcap* Pcap_Open(char* name, BOOL write)
 {
-	wPcap* pcap = nullptr;
-	FILE* pcap_fp = winpr_fopen(name, write ? "w+b" : "rb");
-
-	if (!pcap_fp)
-	{
-		WLog_ERR(TAG, "opening pcap file");
+	if (!name)
 		return nullptr;
-	}
 
-	pcap = (wPcap*)calloc(1, sizeof(wPcap));
+	wPcap* pcap = (wPcap*)calloc(1, sizeof(wPcap));
 
 	if (!pcap)
+		goto out_fail;
+
+	pcap->fp = winpr_fopen(name, write ? "w+b" : "rb");
+
+	if (!pcap->fp)
 		goto out_fail;
 
 	pcap->name = name;
 	pcap->write = write;
 	pcap->record_count = 0;
-	pcap->fp = pcap_fp;
 
 	if (write)
 	{
@@ -108,9 +103,7 @@ wPcap* Pcap_Open(char* name, BOOL write)
 	return pcap;
 
 out_fail:
-	if (pcap_fp)
-		(void)fclose(pcap_fp);
-	free(pcap);
+	Pcap_Close(pcap);
 	return nullptr;
 }
 
@@ -131,11 +124,12 @@ void Pcap_Flush(wPcap* pcap)
 
 void Pcap_Close(wPcap* pcap)
 {
-	if (!pcap || !pcap->fp)
+	if (!pcap)
 		return;
 
 	Pcap_Flush(pcap);
-	(void)fclose(pcap->fp);
+	if (pcap->fp)
+		(void)fclose(pcap->fp);
 	free(pcap);
 }
 
@@ -167,7 +161,7 @@ static UINT16 IPv4Checksum(const BYTE* ipv4, int length)
 
 	while (length > 1)
 	{
-		const UINT16 tmp16 = *((const UINT16*)ipv4);
+		const UINT16 tmp16 = *(WINPR_PACKED_ALIGN_CAST(const UINT16*, ipv4));
 		checksum += tmp16;
 		length -= 2;
 		ipv4 += 2;

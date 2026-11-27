@@ -155,6 +155,11 @@ static UINT rail_read_server_get_appid_resp_order(wStream* s,
 	        s, getAppidResp->applicationId,
 	        ARRAYSIZE(getAppidResp->applicationId))) /* applicationId (260 UNICODE chars) */
 		return ERROR_INVALID_DATA;
+
+	if (_wcsnlen(getAppidResp->applicationId, ARRAYSIZE(getAppidResp->applicationId)) >=
+	    ARRAYSIZE(getAppidResp->applicationId))
+		return ERROR_INVALID_DATA;
+
 	return CHANNEL_RC_OK;
 }
 
@@ -364,16 +369,6 @@ static UINT rail_recv_handshake_order(railPlugin* rail, wStream* s)
 
 	rail->channelBuildNumber = serverHandshake.buildNumber;
 
-	if (rail->sendHandshake)
-	{
-		RAIL_HANDSHAKE_ORDER clientHandshake = WINPR_C_ARRAY_INIT;
-		clientHandshake.buildNumber = 0x00001DB0;
-		error = context->ClientHandshake(context, &clientHandshake);
-	}
-
-	if (error != CHANNEL_RC_OK)
-		return error;
-
 	if (context->custom)
 	{
 		IFCALLRET(context->ServerHandshake, error, context, &serverHandshake);
@@ -486,18 +481,6 @@ static UINT rail_recv_handshake_ex_order(railPlugin* rail, wStream* s)
 		         rail->channelBuildNumber);
 	}
 
-	if (rail->sendHandshake)
-	{
-		RAIL_HANDSHAKE_ORDER clientHandshake = WINPR_C_ARRAY_INIT;
-		clientHandshake.buildNumber = 0x00001DB0;
-		/* 2.2.2.2.3 HandshakeEx PDU (TS_RAIL_ORDER_HANDSHAKE_EX)
-		 * Client response is really a Handshake PDU */
-		error = context->ClientHandshake(context, &clientHandshake);
-	}
-
-	if (error != CHANNEL_RC_OK)
-		return error;
-
 	if (context->custom)
 	{
 		IFCALLRET(context->ServerHandshakeEx, error, context, &serverHandshake);
@@ -538,7 +521,7 @@ static UINT rail_recv_exec_result_order(railPlugin* rail, wStream* s)
 	}
 
 fail:
-	free(execResult.exeOrFile.string);
+	rail_unicode_string_free(&execResult.exeOrFile);
 	return error;
 }
 
@@ -550,18 +533,17 @@ fail:
 static UINT rail_recv_server_sysparam_order(railPlugin* rail, wStream* s)
 {
 	RailClientContext* context = rail_get_client_interface(rail);
-	RAIL_SYSPARAM_ORDER sysparam;
-	UINT error = 0;
-	BOOL extendedSpiSupported = 0;
 
 	if (!context || !s)
 		return ERROR_INVALID_PARAMETER;
 
-	extendedSpiSupported = rail_is_extended_spi_supported(rail->channelFlags);
-	if ((error = rail_read_sysparam_order(s, &sysparam, extendedSpiSupported)))
+	const BOOL extendedSpiSupported = rail_is_extended_spi_supported(rail->channelFlags);
+	RAIL_SYSPARAM_ORDER sysparam = WINPR_C_ARRAY_INIT;
+	UINT error = rail_read_sysparam_order(s, &sysparam, extendedSpiSupported);
+	if (error)
 	{
 		WLog_ERR(TAG, "rail_read_sysparam_order failed with error %" PRIu32 "!", error);
-		return error;
+		goto fail;
 	}
 
 	if (context->custom)
@@ -571,6 +553,8 @@ static UINT rail_recv_server_sysparam_order(railPlugin* rail, wStream* s)
 		if (error)
 			WLog_ERR(TAG, "context.ServerSystemParam failed with error %" PRIu32 "", error);
 	}
+fail:
+	rail_unicode_string_free(&sysparam.highContrast.colorScheme);
 
 	return error;
 }
@@ -770,7 +754,7 @@ static UINT rail_recv_zorder_sync_order(railPlugin* rail, wStream* s)
 		return ERROR_INVALID_PARAMETER;
 
 	if ((rail->clientStatus.flags & TS_RAIL_CLIENTSTATUS_ZORDER_SYNC) == 0)
-		return ERROR_INVALID_DATA;
+		return ERROR_BAD_CONFIGURATION;
 
 	if ((error = rail_read_zorder_sync_order(s, &zorder)))
 	{
@@ -860,7 +844,7 @@ static UINT rail_recv_power_display_request_order(railPlugin* rail, wStream* s)
 	/* 2.2.2.13.1 Power Display Request PDU(TS_RAIL_ORDER_POWER_DISPLAY_REQUEST)
 	 */
 	if ((rail->clientStatus.flags & TS_RAIL_CLIENTSTATUS_POWER_DISPLAY_REQUEST_SUPPORTED) == 0)
-		return ERROR_INVALID_DATA;
+		return ERROR_BAD_CONFIGURATION;
 
 	if ((error = rail_read_power_display_request_order(s, &power)))
 	{
@@ -904,7 +888,7 @@ static UINT rail_read_get_application_id_extended_response_order(wStream* s,
 	if (!Stream_Read_UTF16_String(s, id->processImageName, ARRAYSIZE(id->processImageName)))
 		return ERROR_INVALID_DATA;
 
-	if (_wcsnlen(id->applicationID, ARRAYSIZE(id->processImageName)) >=
+	if (_wcsnlen(id->processImageName, ARRAYSIZE(id->processImageName)) >=
 	    ARRAYSIZE(id->processImageName))
 		return ERROR_INVALID_DATA;
 
@@ -1022,12 +1006,16 @@ UINT rail_order_recv(LPVOID userdata, wStream* s)
 	UINT error = CHANNEL_RC_OK;
 
 	if (!rail || !s)
-		return ERROR_INVALID_PARAMETER;
+	{
+		error = ERROR_INVALID_PARAMETER;
+		goto fail;
+	}
 
 	if ((error = rail_read_pdu_header(s, &orderType, &orderLength)))
 	{
 		WLog_ERR(TAG, "rail_read_pdu_header failed with error %" PRIu32 "!", error);
-		return error;
+		error = ERROR_INVALID_DATA;
+		goto fail;
 	}
 
 	WLog_Print(rail->log, WLOG_DEBUG, "Received %s PDU, length:%" PRIu16 "",
@@ -1105,6 +1093,17 @@ UINT rail_order_recv(LPVOID userdata, wStream* s)
 			return ERROR_INVALID_DATA;
 	}
 
+	if (error == ERROR_BAD_CONFIGURATION)
+	{
+		char ebuffer[128] = WINPR_C_ARRAY_INIT;
+		WLog_Print(rail->log, WLOG_WARN,
+		           "%s - SERVER BUG: The support for this feature was not announced!",
+		           rail_get_order_type_string_full(orderType, ebuffer, sizeof(ebuffer)));
+
+		if (freerdp_settings_get_bool(rail->rdpcontext->settings,
+		                              FreeRDP_AllowUnanouncedOrdersFromServer))
+			error = CHANNEL_RC_OK;
+	}
 	if (error != CHANNEL_RC_OK)
 	{
 		char ebuffer[128] = WINPR_C_ARRAY_INIT;
@@ -1113,6 +1112,7 @@ UINT rail_order_recv(LPVOID userdata, wStream* s)
 		           orderLength);
 	}
 
+fail:
 	Stream_Free(s, TRUE);
 	return error;
 }

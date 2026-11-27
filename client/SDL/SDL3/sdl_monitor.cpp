@@ -57,9 +57,14 @@ typedef struct
 /* See MSDN Section on Multiple Display Monitors: http://msdn.microsoft.com/en-us/library/dd145071
  */
 
-int sdl_list_monitors([[maybe_unused]] SdlContext* sdl)
+int sdl_list_monitors(SdlContext* sdl)
 {
-	SDL_Init(SDL_INIT_VIDEO);
+	WINPR_ASSERT(sdl);
+	if (!SDL_Init(SDL_INIT_VIDEO))
+	{
+		WLog_Print(sdl->getWLog(), WLOG_ERROR, "SDL_Init failed: %s", SDL_GetError());
+		return -1;
+	}
 
 	int nmonitors = 0;
 	auto ids = SDL_GetDisplays(&nmonitors);
@@ -132,7 +137,18 @@ int sdl_list_monitors([[maybe_unused]] SdlContext* sdl)
 		auto monitor = static_cast<const rdpMonitor*>(
 		    freerdp_settings_get_pointer_array(settings, FreeRDP_MonitorDefArray, x));
 
-		if (freerdp_settings_get_bool(settings, FreeRDP_Fullscreen))
+		if (freerdp_settings_get_bool(settings, FreeRDP_RemoteApplicationMode))
+		{
+			/* RAIL requires full display coverage for 1:1 coordinates. Work area insets
+			 * are reported via SPI_SET_WORK_AREA instead of clipping session size. */
+			SDL_Rect rect = {};
+			if (SDL_GetDisplayBounds(monitor->orig_screen, &rect))
+			{
+				*pMaxWidth = WINPR_ASSERTING_INT_CAST(uint32_t, rect.w);
+				*pMaxHeight = WINPR_ASSERTING_INT_CAST(uint32_t, rect.h);
+			}
+		}
+		else if (freerdp_settings_get_bool(settings, FreeRDP_Fullscreen))
 		{
 			*pMaxWidth = WINPR_ASSERTING_INT_CAST(uint32_t, monitor->width);
 			*pMaxHeight = WINPR_ASSERTING_INT_CAST(uint32_t, monitor->height);
@@ -203,6 +219,14 @@ int sdl_list_monitors([[maybe_unused]] SdlContext* sdl)
 		const auto monitor = sdl->getDisplay(id);
 		monitors.emplace_back(monitor);
 	}
+	// With an explicit /monitors: list the first entry is the primary (like xfreerdp),
+	// not whatever the local desktop considers primary.
+	if (!monitors.empty() && (freerdp_settings_get_uint32(settings, FreeRDP_NumMonitorIds) > 0))
+	{
+		for (auto& monitor : monitors)
+			monitor.is_primary = FALSE;
+		monitors.at(0).is_primary = TRUE;
+	}
 	// /monitors: may select a subset that excludes the SDL primary. The
 	// library rejects arrays without a primary, so promote the first entry
 	// when none is marked.
@@ -259,6 +283,13 @@ BOOL sdl_detect_monitors(SdlContext* sdl, UINT32* pMaxWidth, UINT32* pMaxHeight)
 
 	const auto& ids = sdl->getDisplayIds();
 	auto nr = freerdp_settings_get_uint32(settings, FreeRDP_NumMonitorIds);
+	/* Announce all monitors in RemoteApp mode so windows can maximize on secondary displays. */
+	if ((nr == 0) && freerdp_settings_get_bool(settings, FreeRDP_RemoteApplicationMode) &&
+	    !freerdp_settings_get_bool(settings, FreeRDP_UseMultimon))
+	{
+		if (!freerdp_settings_set_bool(settings, FreeRDP_UseMultimon, TRUE))
+			return FALSE;
+	}
 	if (nr == 0)
 	{
 		if (freerdp_settings_get_bool(settings, FreeRDP_UseMultimon))

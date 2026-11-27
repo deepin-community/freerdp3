@@ -32,6 +32,8 @@ set(SRCS
     shadow_surface.h
     shadow_encoder.c
     shadow_encoder.h
+    shadow_rfx_dirty.c
+    shadow_rfx_dirty.h
     shadow_capture.c
     shadow_capture.h
     shadow_channels.c
@@ -71,7 +73,11 @@ if(WITH_RDTK)
   list(APPEND LIBS rdtk)
 endif()
 
-list(APPEND LIBS freerdp freerdp-server winpr winpr-tools)
+list(APPEND LIBS freerdp-server)
+if(WITH_WINPR_TOOLS)
+  target_compile_definitions(${MODULE_NAME} PRIVATE WITH_WINPR_TOOLS)
+  list(APPEND LIBS winpr-tools)
+endif()
 
 target_include_directories(${MODULE_NAME} INTERFACE $<INSTALL_INTERFACE:include/freerdp${FREERDP_VERSION_MAJOR}>)
 target_link_libraries(${MODULE_NAME} PRIVATE ${LIBS})
@@ -155,12 +161,18 @@ if(WITH_SERVER_SHADOW_CLI)
   add_subdirectory(cli)
 endif()
 
+if(BUILD_TESTING)
+  add_subdirectory(test)
+endif()
+
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "Server/shadow")
 
 # Do not set Requires.Private if not a static build
 if(NOT BUILD_SHARED_LIBS)
   set(FREERDP_SHADOW_PC_REQUIRES_PRIVATE "freerdp${FREERDP_API_VERSION}")
-  set(FREERDP_SHADOW_PC_LIBRARY_PRIVATE "-ldl -lpthread")
+
+  include(PkgConfigAddThreads)
+  pkg_config_add_threads(FREERDP_SHADOW_PC_LIBRARY_PRIVATE)
 endif()
 set(FREERDP_SHADOW_PC_REQUIRES freerdp-server${FREERDP_API_VERSION})
 

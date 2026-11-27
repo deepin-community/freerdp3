@@ -22,6 +22,7 @@
 #include <cassert>
 
 #include <freerdp/log.h>
+#include <freerdp/utils/passphrase.h>
 #include <freerdp/utils/smartcardlogon.h>
 
 #include <SDL3/SDL.h>
@@ -130,6 +131,31 @@ BOOL sdl_authenticate_ex(freerdp* instance, char** username, char** password, ch
 	u = *username;
 	d = *domain;
 	p = *password;
+
+	auto sdl = get_context(instance);
+	if (!p && !sdl->credentialsRead())
+	{
+		std::string line;
+		line.reserve(1024);
+
+		const BOOL fromStdin =
+		    freerdp_settings_get_bool(instance->context->settings, FreeRDP_CredentialsFromStdin);
+		auto env =
+		    freerdp_passphrase_from_env(instance->context, title, line.data(), line.capacity());
+		if (!env && fromStdin)
+			env = freerdp_passphrase_read(instance->context, title, line.data(), line.capacity(),
+			                              fromStdin);
+		if (env)
+			p = _strdup(env);
+
+		*password = p;
+		if (p)
+		{
+			sdl->setCredentialsRead();
+			if (u)
+				return TRUE;
+		}
+	}
 
 	if (!sdl_push_user_event(SDL_EVENT_USER_AUTH_DIALOG, title, u, d, p, reason))
 		return res;
@@ -277,30 +303,25 @@ BOOL sdl_present_gateway_message(freerdp* instance, [[maybe_unused]] UINT32 type
 
 int sdl_logon_error_info(freerdp* instance, UINT32 data, UINT32 type)
 {
-	int rc = -1;
-	const char* str_data = freerdp_get_logon_error_info_data(data);
-	const char* str_type = freerdp_get_logon_error_info_type(type);
-
 	if (!instance || !instance->context)
 		return -1;
 
 	/* ignore LOGON_MSG_SESSION_CONTINUE message */
-	if (type == LOGON_MSG_SESSION_CONTINUE)
-		return 0;
+	switch (type)
+	{
+		case LOGON_MSG_SESSION_CONTINUE:
+			return 0;
+		default:
+			break;
+	}
 
-	char* title = nullptr;
-	size_t tlen = 0;
-	winpr_asprintf(&title, &tlen, "[%s] info",
-	               freerdp_settings_get_server_name(instance->context->settings));
-
-	char* message = nullptr;
-	size_t mlen = 0;
-	winpr_asprintf(&message, &mlen, "Logon Error Info %s [%s]", str_data, str_type);
-
-	rc = sdl_show_dialog(instance->context, title, message, SHOW_DIALOG_ACCEPT_REJECT);
-	free(title);
-	free(message);
-	return rc;
+	const char* str_data = freerdp_get_logon_error_info_data(data);
+	const char* str_type = freerdp_get_logon_error_info_type(type);
+	/* The server shows its own logon UI: show the desktop, a local dialog would block it. */
+	auto sdl = get_context(instance);
+	sdl->getRailChannelContext().noteLogonPrompt();
+	WLog_Print(sdl->getWLog(), WLOG_INFO, "Logon Error Info %s [%s]", str_data, str_type);
+	return 1;
 }
 
 static DWORD sdl_show_ceritifcate_dialog(rdpContext* context, const char* title,
@@ -587,17 +608,9 @@ BOOL sdl_auth_dialog_show(const SDL_UserAuthArg* args)
 		}
 		else if (args->result != AUTH_SMARTCARD_PIN)
 		{
-			if (args->result == AUTH_RDSTLS)
-			{
-				initial = { args->user ? args->user : "", args->password ? args->password : "" };
-				flags = { 0, SdlInputWidgetPair::SDL_INPUT_MASK };
-			}
-			else
-			{
-				initial = { args->user ? args->user : "", args->domain ? args->domain : "",
-					        args->password ? args->password : "" };
-				flags = { 0, 0, SdlInputWidgetPair::SDL_INPUT_MASK };
-			}
+			initial = { args->user ? args->user : "", args->domain ? args->domain : "",
+				        args->password ? args->password : "" };
+			flags = { 0, 0, SdlInputWidgetPair::SDL_INPUT_MASK };
 		}
 
 		ssize_t selected = -1;
@@ -605,6 +618,7 @@ BOOL sdl_auth_dialog_show(const SDL_UserAuthArg* args)
 		{
 			case AUTH_SMARTCARD_PIN:
 			case AUTH_RDSTLS:
+			case AUTH_FIDO_PIN:
 				break;
 			default:
 				if (args->user)

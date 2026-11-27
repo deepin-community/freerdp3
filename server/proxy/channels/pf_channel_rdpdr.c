@@ -25,6 +25,8 @@
 #include <winpr/string.h>
 #include <winpr/print.h>
 
+#include "../pf_client.h"
+#include "../pf_server.h"
 #include "pf_channel_rdpdr.h"
 #include "pf_channel_smartcard.h"
 
@@ -55,6 +57,7 @@ typedef struct
 	} computerName;
 	UINT32 SpecialDeviceCount;
 	UINT32 capabilityVersions[6];
+	size_t totalLength;
 } pf_channel_common_context;
 
 typedef enum
@@ -232,7 +235,7 @@ static UINT rdpdr_client_send(wLog* log, pClientContext* pc, wStream* s)
 	WINPR_ASSERT(log);
 	WINPR_ASSERT(pc);
 	WINPR_ASSERT(s);
-	WINPR_ASSERT(pc->context.instance);
+	WINPR_ASSERT(pc->cctx.context.instance);
 
 	if (!pc->connected)
 	{
@@ -241,7 +244,7 @@ static UINT rdpdr_client_send(wLog* log, pClientContext* pc, wStream* s)
 		return CHANNEL_RC_OK;
 	}
 
-	channelId = freerdp_channels_get_id_by_name(pc->context.instance, RDPDR_SVC_CHANNEL_NAME);
+	channelId = freerdp_channels_get_id_by_name(pc->cctx.context.instance, RDPDR_SVC_CHANNEL_NAME);
 	/* Ignore unmappable channels. Might happen when the channel was already down and
 	 * some delayed message is tried to be sent. */
 	if ((channelId == 0) || (channelId == UINT16_MAX))
@@ -249,9 +252,9 @@ static UINT rdpdr_client_send(wLog* log, pClientContext* pc, wStream* s)
 
 	Stream_SealLength(s);
 	rdpdr_dump_send_packet(log, WLOG_TRACE, s, proxy_server_tx);
-	WINPR_ASSERT(pc->context.instance->SendChannelData);
-	if (!pc->context.instance->SendChannelData(pc->context.instance, channelId, Stream_Buffer(s),
-	                                           Stream_Length(s)))
+	WINPR_ASSERT(pc->cctx.context.instance->SendChannelData);
+	if (!pc->cctx.context.instance->SendChannelData(pc->cctx.context.instance, channelId,
+	                                                Stream_Buffer(s), Stream_Length(s)))
 		return ERROR_EVT_CHANNEL_NOT_FOUND;
 	return CHANNEL_RC_OK;
 }
@@ -1110,7 +1113,12 @@ static BOOL pf_channel_rdpdr_rewrite_device_list_to(wStream* s, UINT32 fromVersi
 					Stream_Write_UINT32(s, 0); /* No unicode name */
 				else
 				{
-					const size_t datalen = charCount * sizeof(WCHAR);
+					const SSIZE_T devNameWLen = ConvertUtf8NToWChar(
+					    device.PreferredDosName, ARRAYSIZE(device.PreferredDosName), nullptr, 0);
+					if (devNameWLen < 0)
+						goto fail;
+					const size_t datalen =
+					    WINPR_ASSERTING_INT_CAST(size_t, devNameWLen) * sizeof(WCHAR);
 					if (!Stream_EnsureRemainingCapacity(s, datalen + sizeof(UINT32)))
 						goto fail;
 					Stream_Write_UINT32(s, WINPR_ASSERTING_INT_CAST(uint32_t, datalen));
@@ -1310,7 +1318,7 @@ BOOL pf_channel_send_client_queue(pClientContext* pc, pf_channel_client_context*
 	}
 
 	const UINT16 channelId =
-	    freerdp_channels_get_id_by_name(pc->context.instance, RDPDR_SVC_CHANNEL_NAME);
+	    freerdp_channels_get_id_by_name(pc->cctx.context.instance, RDPDR_SVC_CHANNEL_NAME);
 	if ((channelId == 0) || (channelId == UINT16_MAX))
 	{
 		CLIENT_TX_LOG(rdpdr->log, WLOG_WARN,
@@ -1333,9 +1341,9 @@ BOOL pf_channel_send_client_queue(pClientContext* pc, pf_channel_client_context*
 		}
 
 		rdpdr_dump_send_packet(rdpdr->log, WLOG_TRACE, s, proxy_server_tx " (queue) ");
-		WINPR_ASSERT(pc->context.instance->SendChannelData);
-		if (!pc->context.instance->SendChannelData(pc->context.instance, channelId,
-		                                           Stream_Buffer(s), len))
+		WINPR_ASSERT(pc->cctx.context.instance->SendChannelData);
+		if (!pc->cctx.context.instance->SendChannelData(pc->cctx.context.instance, channelId,
+		                                                Stream_Buffer(s), len))
 		{
 			CLIENT_TX_LOG(rdpdr->log, WLOG_ERROR, "xxxxxx TODO: Failed to send data!");
 		}
@@ -1366,9 +1374,6 @@ static BOOL rdpdr_handle_server_announce_request(pClientContext* pc,
 BOOL pf_channel_rdpdr_client_handle(pClientContext* pc, UINT16 channelId, const char* channel_name,
                                     const BYTE* xdata, size_t xsize, UINT32 flags, size_t totalSize)
 {
-	pf_channel_client_context* rdpdr = nullptr;
-	pServerContext* ps = nullptr;
-	wStream* s = nullptr;
 #if defined(WITH_PROXY_EMULATE_SMARTCARD)
 	UINT16 packetid = 0;
 #endif
@@ -1379,9 +1384,10 @@ BOOL pf_channel_rdpdr_client_handle(pClientContext* pc, UINT16 channelId, const 
 	WINPR_ASSERT(channel_name);
 	WINPR_ASSERT(xdata);
 
-	ps = pc->pdata->ps;
+	pServerContext* ps = proxy_data_get_server_context(pc->pdata);
 
-	rdpdr = HashTable_GetItemValue(pc->interceptContextMap, channel_name);
+	pf_channel_client_context* rdpdr =
+	    HashTable_GetItemValue(pc->interceptContextMap, channel_name);
 	if (!rdpdr)
 	{
 		CLIENT_RX_LOG(WLog_Get(RTAG), WLOG_ERROR,
@@ -1389,9 +1395,14 @@ BOOL pf_channel_rdpdr_client_handle(pClientContext* pc, UINT16 channelId, const 
 		              channel_name, channelId);
 		return FALSE;
 	}
-	s = rdpdr->common.buffer;
+
+	wStream* s = rdpdr->common.buffer;
 	if (flags & CHANNEL_FLAG_FIRST)
+	{
 		Stream_ResetPosition(s);
+		rdpdr->common.totalLength = totalSize;
+	}
+
 	if (!Stream_EnsureRemainingCapacity(s, xsize))
 	{
 		CLIENT_RX_LOG(rdpdr->log, WLOG_ERROR,
@@ -1400,11 +1411,22 @@ BOOL pf_channel_rdpdr_client_handle(pClientContext* pc, UINT16 channelId, const 
 		return FALSE;
 	}
 	Stream_Write(s, xdata, xsize);
+
+	if ((Stream_GetPosition(s) > totalSize) || (totalSize != rdpdr->common.totalLength))
+	{
+		CLIENT_RX_LOG(rdpdr->log, WLOG_ERROR,
+		              "Channel %s [0x%04" PRIx16 "] total size mismatch [got %" PRIuz
+		              ", expected %" PRIuz "]",
+		              channel_name, channelId, totalSize, rdpdr->common.totalLength);
+		return FALSE;
+	}
+
 	if ((flags & CHANNEL_FLAG_LAST) == 0)
 		return TRUE;
 
 	Stream_SealLength(s);
 	Stream_ResetPosition(s);
+	rdpdr->common.totalLength = 0;
 	if (Stream_Length(s) != totalSize)
 	{
 		CLIENT_RX_LOG(rdpdr->log, WLOG_WARN,
@@ -1752,11 +1774,14 @@ WINPR_ATTR_NODISCARD
 static void* stream_copy(const void* obj)
 {
 	const wStream* src = obj;
-	wStream* dst = Stream_New(nullptr, Stream_Capacity(src));
+	/* src is the (reused, never shrinking) reassembly buffer of the session,
+	 * only copy the data of the current PDU and not the whole capacity */
+	const size_t len = Stream_Length(src);
+	wStream* dst = Stream_New(nullptr, len);
 	if (!dst)
 		return nullptr;
-	memcpy(Stream_Buffer(dst), Stream_ConstBuffer(src), Stream_Capacity(dst));
-	if (!Stream_SetLength(dst, Stream_Length(src)))
+	memcpy(Stream_Buffer(dst), Stream_ConstBuffer(src), len);
+	if (!Stream_SetLength(dst, len))
 		goto fail;
 	if (!Stream_SetPosition(dst, Stream_GetPosition(src)))
 		goto fail;
@@ -1864,6 +1889,16 @@ BOOL pf_channel_rdpdr_server_new(pServerContext* ps)
 	WINPR_ASSERT(ps);
 	WINPR_ASSERT(ps->interceptContextMap);
 
+	/* WTSVirtualChannelOpenEx returns the same handle for every open of a static channel and
+	 * pf_channel_rdpdr_server_context_free closes it, so replacing an existing context in
+	 * interceptContextMap would leave the new one with a dangling handle. */
+	if (HashTable_Contains(ps->interceptContextMap, RDPDR_SVC_CHANNEL_NAME))
+	{
+		WLog_Print(WLog_Get(RTAG), WLOG_ERROR, "Channel %s already set up in interceptContextMap",
+		           RDPDR_SVC_CHANNEL_NAME);
+		return FALSE;
+	}
+
 	rdpdr = calloc(1, sizeof(pf_channel_server_context));
 	if (!rdpdr)
 		return FALSE;
@@ -1932,29 +1967,34 @@ static pf_channel_server_context* get_channel(pServerContext* ps, BOOL send)
 BOOL pf_channel_rdpdr_server_handle(pServerContext* ps, UINT16 channelId, const char* channel_name,
                                     const BYTE* xdata, size_t xsize, UINT32 flags, size_t totalSize)
 {
-	wStream* s = nullptr;
-	pClientContext* pc = nullptr;
 	pf_channel_server_context* rdpdr = get_channel(ps, FALSE);
 	if (!rdpdr)
 		return FALSE;
 
 	WINPR_ASSERT(ps->pdata);
-	pc = ps->pdata->pc;
+	pClientContext* pc = proxy_data_get_client_context(ps->pdata);
 
-	s = rdpdr->common.buffer;
+	wStream* s = rdpdr->common.buffer;
 
 	if (flags & CHANNEL_FLAG_FIRST)
+	{
+		rdpdr->common.totalLength = totalSize;
 		Stream_ResetPosition(s);
+	}
 
 	if (!Stream_EnsureRemainingCapacity(s, xsize))
 		return FALSE;
 	Stream_Write(s, xdata, xsize);
+
+	if ((Stream_GetPosition(s) > totalSize) || (totalSize != rdpdr->common.totalLength))
+		return FALSE;
 
 	if ((flags & CHANNEL_FLAG_LAST) == 0)
 		return TRUE;
 
 	Stream_SealLength(s);
 	Stream_ResetPosition(s);
+	rdpdr->common.totalLength = 0;
 
 	if (Stream_Length(s) != totalSize)
 	{
@@ -2053,13 +2093,14 @@ static PfChannelResult pf_rdpdr_back_data(proxyData* pdata,
 	WINPR_ASSERT(pdata);
 	WINPR_ASSERT(channel);
 
-	if (!pf_channel_rdpdr_client_handle(pdata->pc,
+	pClientContext* pc = proxy_data_get_client_context(pdata);
+	if (!pf_channel_rdpdr_client_handle(pc,
 	                                    WINPR_ASSERTING_INT_CAST(UINT16, channel->back_channel_id),
 	                                    channel->channel_name, xdata, xsize, flags, totalSize))
 		return PF_CHANNEL_RESULT_ERROR;
 
 #if defined(WITH_PROXY_EMULATE_SMARTCARD)
-	if (pf_channel_smartcard_client_emulate(pdata->pc))
+	if (pf_channel_smartcard_client_emulate((pClientContext*)pdata->pc))
 		return PF_CHANNEL_RESULT_DROP;
 #endif
 	return PF_CHANNEL_RESULT_DROP;
@@ -2074,13 +2115,14 @@ static PfChannelResult pf_rdpdr_front_data(proxyData* pdata,
 	WINPR_ASSERT(pdata);
 	WINPR_ASSERT(channel);
 
-	if (!pf_channel_rdpdr_server_handle(pdata->ps,
+	pServerContext* ps = proxy_data_get_server_context(pdata);
+	if (!pf_channel_rdpdr_server_handle(ps,
 	                                    WINPR_ASSERTING_INT_CAST(UINT16, channel->front_channel_id),
 	                                    channel->channel_name, xdata, xsize, flags, totalSize))
 		return PF_CHANNEL_RESULT_ERROR;
 
 #if defined(WITH_PROXY_EMULATE_SMARTCARD)
-	if (pf_channel_smartcard_client_emulate(pdata->pc))
+	if (pf_channel_smartcard_client_emulate((pClientContext*)pdata->pc))
 		return PF_CHANNEL_RESULT_DROP;
 #endif
 	return PF_CHANNEL_RESULT_DROP;

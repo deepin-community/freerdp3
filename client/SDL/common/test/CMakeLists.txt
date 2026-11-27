@@ -3,20 +3,23 @@ set(MODULE_PREFIX "TEST_SDL")
 
 set(${MODULE_PREFIX}_DRIVER ${MODULE_NAME}.cpp)
 
-set(${MODULE_PREFIX}_TESTS TestSDLPrefs.cpp TestSDLWebview.cpp)
+set(${MODULE_PREFIX}_TESTS TestSDLPrefs.cpp TestSDLAadHelper.cpp)
+if(WITH_CLIENT_SDL3)
+  list(APPEND ${MODULE_PREFIX}_TESTS TestSDLRailWindowStyle.cpp TestSDLWebClipOffers.cpp)
+endif()
 
 disable_warnings_for_directory(${CMAKE_CURRENT_BINARY_DIR})
 
 create_test_sourcelist(${MODULE_PREFIX}_SRCS ${${MODULE_PREFIX}_DRIVER} ${${MODULE_PREFIX}_TESTS})
 
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../aad")
-include_directories("${CMAKE_CURRENT_BINARY_DIR}/../aad")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/..")
+include_directories("${CMAKE_CURRENT_BINARY_DIR}/..")
 
 add_executable(${MODULE_NAME} ${${MODULE_PREFIX}_SRCS})
 
-set(${MODULE_PREFIX}_LIBS freerdp freerdp-client winpr sdl-common-prefs sdl-common-aad-view)
+set(${MODULE_PREFIX}_LIBS freerdp-client sdl-common-prefs freerdp-cxx-filesystem)
 
-target_link_libraries(${MODULE_NAME} ${${MODULE_PREFIX}_LIBS})
+target_link_libraries(${MODULE_NAME} PRIVATE ${${MODULE_PREFIX}_LIBS})
 
 set_target_properties(${MODULE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TESTING_OUTPUT_DIRECTORY}")
 
@@ -33,7 +36,7 @@ add_compile_definitions(TEST_BIN_AREA="${TEST_BIN_AREA}")
 
 foreach(test ${${MODULE_PREFIX}_TESTS})
   get_filename_component(TestName ${test} NAME_WE)
-  add_test(${TestName} ${TESTING_OUTPUT_DIRECTORY}/${MODULE_NAME} ${TestName})
+  add_test(NAME ${TestName} COMMAND ${MODULE_NAME} ${TestName})
 endforeach()
 
 set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "FreeRDP/Client/Test")

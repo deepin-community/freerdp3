@@ -1,6 +1,9 @@
 # codec
 
 option(WITH_CURSOR_DUMP "Dump mouse cursor data to binary directory" OFF)
+set(YUV_TILE_SIZE "512" CACHE STRING "YUV decoder per thread tile width/height")
+add_compile_definitions(YUV_TILE_SIZE=${YUV_TILE_SIZE})
+
 if(WITH_CURSOR_DUMP)
   add_compile_definitions(WITH_CURSOR_DUMP)
   add_compile_definitions(CURSOR_DUMP_DIR="${CMAKE_CURRENT_BINARY_DIR}")
@@ -52,6 +55,26 @@ if(WITH_GFX_AV1)
   include(WarnExperimental)
   warn_experimental("AV1 codec support for GFX channel" "-DWITH_GFX_AV1=OFF")
   list(APPEND CODEC_SRCS av1.c)
+  if(EMSCRIPTEN)
+    # in the browser, decode AV1 with WebCodecs (dav1d stays as the fallback)
+    option(WITH_AV1_WEBCODECS "Decode AV1 with the browser's WebCodecs API" ON)
+    if(WITH_AV1_WEBCODECS)
+      add_compile_definitions(WITH_AV1_WEBCODECS)
+      list(APPEND CODEC_SRCS av1_webcodecs.c av1_webcodecs.h)
+      # The JavaScript side, for the executable's link: a link item, so that it also reaches the
+      # executable through static libraries (link options of their private dependencies don't).
+      freerdp_library_add_public(
+        "--js-library=$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${FREERDP_PLUGIN_PATH}>/av1_webcodecs.js"
+      )
+      # so that editing the JavaScript recompiles this file, and so relinks the executables
+      set_source_files_properties(
+        av1_webcodecs.c PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/av1_webcodecs.js
+      )
+      if(NOT BUILD_SHARED_LIBS)
+        install(FILES av1_webcodecs.js DESTINATION ${FREERDP_PLUGIN_PATH})
+      endif()
+    endif()
+  endif()
 endif()
 
 set(CODEC_SSE3_SRCS sse/rfx_sse2.c sse/rfx_sse2.h sse/nsc_sse2.c sse/nsc_sse2.h)
@@ -115,16 +138,55 @@ endif()
 
 if(WITH_AOM AND AOM_FOUND)
   add_compile_definitions(WITH_LIBAOM)
-  list(APPEND CODEC_LIBS ${AOM_LIBRARIES})
-  include_directories(SYSTEM ${AOM_INCLUDE_DIRS})
+  list(APPEND CODEC_LIBS aom)
   freerdp_pc_add_requires_private("aom")
+endif()
+
+if(WITH_DAV1D AND DAV1D_FOUND)
+  add_compile_definitions(WITH_DAV1D)
+  list(APPEND CODEC_LIBS dav1d)
+  freerdp_pc_add_requires_private("dav1d")
+endif()
+
+if(WITH_GFX_AV1)
+  if(WITH_DAV1D AND DAV1D_FOUND)
+    message(STATUS "AV1 decoder: dav1d")
+  elseif(WITH_AOM AND AOM_FOUND)
+    message(STATUS "AV1 decoder: libaom")
+  else()
+    message(STATUS "AV1 decoder: none (need -DWITH_DAV1D=ON or -DWITH_AOM=ON)")
+  endif()
 endif()
 
 if(WITH_YUV AND YUV_FOUND)
   add_compile_definitions(WITH_LIBYUV)
-  list(APPEND CODEC_LIBS ${YUV_LIBRARIES})
-  include_directories(SYSTEM ${YUV_INCLUDE_DIRS})
+  list(APPEND CODEC_LIBS yuv)
   freerdp_pc_add_requires_private("yuv")
+endif()
+
+if(WITH_APPLE_VIDEOTOOLBOX)
+  list(APPEND CODEC_SRCS h264_videotoolbox.m)
+  find_library(VIDEOTOOLBOX_FRAMEWORK VideoToolbox REQUIRED)
+  find_library(COREMEDIA_FRAMEWORK CoreMedia REQUIRED)
+  find_library(COREVIDEO_FRAMEWORK CoreVideo REQUIRED)
+  find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+  list(APPEND CODEC_LIBS ${VIDEOTOOLBOX_FRAMEWORK} ${COREMEDIA_FRAMEWORK} ${COREVIDEO_FRAMEWORK}
+       ${COREFOUNDATION_FRAMEWORK}
+  )
+endif()
+
+if(WITH_H264_WEBCODECS)
+  list(APPEND CODEC_SRCS h264_webcodecs.c)
+  # The JavaScript side, for the executable's link: a link item, so that it also reaches the
+  # executable through static libraries (link options of their private dependencies don't).
+  freerdp_library_add_public(
+    "--js-library=$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${FREERDP_PLUGIN_PATH}>/h264_webcodecs.js"
+  )
+  # so that editing the JavaScript recompiles this file, and so relinks the executables
+  set_source_files_properties(h264_webcodecs.c PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/h264_webcodecs.js)
+  if(NOT BUILD_SHARED_LIBS)
+    install(FILES h264_webcodecs.js DESTINATION ${FREERDP_PLUGIN_PATH})
+  endif()
 endif()
 
 if(WITH_OPENH264)
@@ -150,14 +212,9 @@ if(WITH_DSP_EXPERIMENTAL)
 endif()
 
 if(WITH_VIDEO_FFMPEG)
-  if(WITH_VAAPI)
+  if(WITH_FFMPEG_HWACCEL)
     include(WarnExperimental)
-    warn_experimental("VAAPI encoder/decoder support for FFMPEG" "-DWITH_VAAPI=OFF")
-  endif()
-
-  if(WITH_VIDEOTOOLBOX)
-    include(WarnExperimental)
-    warn_experimental("VideoToolbox H264 decoding support for FFMPEG" "-DWITH_VIDEOTOOLBOX=OFF")
+    warn_experimental("Hardware encoder/decoder support for FFMPEG" "-DWITH_FFMPEG_HWACCEL=OFF")
   endif()
 
   set(CODEC_SRCS ${CODEC_SRCS} h264_ffmpeg.c)
@@ -174,8 +231,8 @@ endif()
 
 if(ANDROID AND WITH_MEDIACODEC)
   include(WarnExperimental)
-  warn_experimental("Experimental encoders/decoders for H264" "-DWITH_MEDIACODEC=OFF")
-  list(APPEND CODEC_SRCS h264_mediacodec.c)
+  warn_experimental("Experimental encoders/decoders for H264 and AAC" "-DWITH_MEDIACODEC=OFF")
+  list(APPEND CODEC_SRCS h264_mediacodec.c dsp_mediacodec.c)
 
   find_library(MEDIACODEC mediandk REQUIRED)
   list(APPEND CODEC_LIBS ${MEDIACODEC})
@@ -185,6 +242,6 @@ add_library(freerdp-codecs OBJECT ${CODEC_SRCS})
 freerdp_library_add(${CODEC_LIBS})
 freerdp_object_library_add(freerdp-codecs)
 
-if(BUILD_TESTING_INTERNAL OR BUILD_TESTING)
+if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
